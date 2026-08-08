@@ -1,0 +1,35 @@
+name: CI
+
+# Har bir PR va master'ga push'da: tiplar, testlar va build tekshiriladi.
+# Testlar haqiqiy AWS'siz ishlaydi (scripts/fake-dynamo.mjs), shuning uchun
+# hech qanday maxfiy kalit yoki muhit o'zgaruvchisi kerak emas.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  tekshiruv:
+    name: Tiplar, testlar, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22: testlar `--experimental-strip-types` bilan .ts fayllarni
+      # to'g'ridan-to'g'ri import qiladi, bu 22.6+ dan ishlaydi.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tiplar
+        run: npm run typecheck
+
+      - name: Testlar
+        run: npm test
+
+      - name: Build
+        run: npm run build

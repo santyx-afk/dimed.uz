@@ -22,13 +22,24 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     const doctor = await getDoctor(doctorId);
     if (!doctor || doctor.active === false) return error('Shifokor topilmadi', 404);
 
+    /*
+      `workdays` har bir javobda qaytadi: vidjetdagi kun tugmalari
+      statik `doctors.ts` dan qurilardi, shifokor jadvalini kabinetidan
+      o'zgartirsa ular haqiqatdan chetlashardi.
+    */
     if (!doctor.workdays.includes(weekdayOf(date))) {
-      return json({ doctor: doctorId, date, slots: [], reason: 'dam olish kuni' });
+      return json({ doctor: doctorId, date, workdays: doctor.workdays, slots: [], reason: 'dam olish kuni' });
     }
 
     const shifts = await shiftsFor(doctor.doctor_id, date, doctor.shifts);
     if (shifts.length === 0) {
-      return json({ doctor: doctorId, date, slots: [], reason: 'shifokor bu kuni qabul qilmaydi' });
+      return json({
+        doctor: doctorId,
+        date,
+        workdays: doctor.workdays,
+        slots: [],
+        reason: 'shifokor bu kuni qabul qilmaydi',
+      });
     }
 
     const now = new Date();
@@ -41,7 +52,14 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     });
 
     return json(
-      { doctor: doctorId, date, slotMinutes: doctor.slot_minutes, price: doctor.price, slots },
+      {
+        doctor: doctorId,
+        date,
+        workdays: doctor.workdays,
+        slotMinutes: doctor.slot_minutes,
+        price: doctor.price,
+        slots,
+      },
       200,
       /*
         Keshlanmaydi: bron qilingandan keyin bemor orqaga qaytsa,

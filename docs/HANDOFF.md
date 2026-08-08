@@ -127,6 +127,16 @@ Cron funksiyalari ham shu yerda sinaladi: 1 soat qoidasi sababli bron API'si
 «30 daqiqadan keyingi» yozuvni yarata olmaydi, shuning uchun eslatma testi
 yozuvni `seed()` bilan to'g'ridan-to'g'ri qo'yadi.
 
+**Sanalar Toshkent kalendari bo'yicha olinadi.** `BOOK_DATE` — bugundan
+ikki kun keyin: eslatma testining «30 daqiqadan keyingi» yozuvi Toshkentda
+yarim tunga yaqin ertangi kunga tushib, «shifokor chiqmadi» testi bilan
+kesishardi. Avval sana UTC bo'yicha hisoblanardi va testlar sutkasiga
+330 daqiqa yiqilardi.
+
+**CI:** `.github/workflows/ci.yml` har PR va master'ga push'da
+`typecheck → test → build` ni yurgizadi. Kalit kerak emas — testlar
+soxta DynamoDB bilan ishlaydi.
+
 TypeScript fayllar testlarda `node --experimental-strip-types` bilan
 to'g'ridan-to'g'ri import qilinadi — shuning uchun `lib/` ichidagi importlar
 `.ts` kengaytmasi bilan yozilgan (`allowImportingTsExtensions: true`).
@@ -181,11 +191,12 @@ Holatlar bilan ishlash `lib/appointments.ts` da markazlashgan:
 5. **`/api/slots` keshlanmaydi** (`no-store`). Avval 20 soniya keshlangan edi:
    bron qilgan bemor orqaga qaytsa o'z slotini yana bo'sh ko'rib 409 olardi.
 
-6. **Vidjetdagi kun tugmalari** statik `doctors.ts` dagi `workdays` dan
-   quriladi, slotlar esa bazadan keladi. Agar shifokor kunini o'zgartirsa,
-   tugma faol ko'rinib, slot qaytmasligi mumkin — vidjet buni chiroyli hal
-   qiladi (keyingi ish kuniga o'tadi), lekin API'dan `workdays` qaytarish
-   yaxshiroq bo'lardi. **Hali qilingani yo'q.**
+6. **Vidjetdagi kun tugmalari endi serverdan tuzatiladi.** `/api/slots`
+   har bir javobda `workdays` ni qaytaradi. Statik `doctors.ts` faqat
+   birinchi chizishga ishlatiladi (sahifa darhol ko'rinsin), birinchi
+   javob kelishi bilan server ro'yxati ustun bo'ladi va tugmalar qayta
+   chiziladi. Shifokor kabinetidan kun qo'shsa ham, olib tashlasa ham
+   bemor to'g'ri kunlarni ko'radi.
 
 7. **Cron eslatmalari takror yubormaydi.** `remind-patients` avval yozuvni
    `reminded_at` bilan shartli belgilaydi, keyin xabar yuboradi — ishga

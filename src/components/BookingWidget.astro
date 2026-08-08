@@ -58,13 +58,24 @@ import DeptIcon from './DeptIcon.astro';
     });
 
   const docById = (id) => doctors.find((d) => d.id === id);
+
+  /*
+    Ish kunlari: shifokor jadvalini kabinetidan o'zgartirishi mumkin,
+    shuning uchun statik ro'yxat faqat birinchi chizishga ishlatiladi —
+    /api/slots javobi kelishi bilan server ma'lumoti ustun bo'ladi.
+  */
+  const serverWorkdays = {};
+  const workdaysOf = (doc) => serverWorkdays[doc.id] ?? doc.workdays;
+  const sameDays = (a, b) => [...a].sort().join() === [...b].sort().join();
+
   const nextDays = (doc) => {
     const out = [];
+    const wd = workdaysOf(doc);
     const now = new Date();
     for (let i = 0; i < 7; i++) {
       const d = new Date(now);
       d.setDate(now.getDate() + i);
-      out.push({ date: d, ok: doc.workdays.includes(d.getDay()) });
+      out.push({ date: d, ok: wd.includes(d.getDay()) });
     }
     return out;
   };
@@ -95,8 +106,7 @@ import DeptIcon from './DeptIcon.astro';
   async function fetchSlots(doctorId, dateKey) {
     const res = await fetch(`/api/slots?doctor=${encodeURIComponent(doctorId)}&date=${dateKey}`);
     if (!res.ok) throw new Error(`slots ${res.status}`);
-    const data = await res.json();
-    return data.slots ?? [];
+    return res.json();
   }
 
   function slotsHtml(slots) {
@@ -163,6 +173,7 @@ import DeptIcon from './DeptIcon.astro';
 
   function renderDatesAndSlots() {
     const doc = state.doc;
+    const usedWorkdays = workdaysOf(doc);
     const days = nextDays(doc);
     const workdays = days.filter((x) => x.ok);
     if (!state.date && workdays.length) state.date = dstr(workdays[0].date);
@@ -191,13 +202,27 @@ import DeptIcon from './DeptIcon.astro';
 
     const paint = async (dateKey, { autoAdvance = false } = {}) => {
       grid.innerHTML = '<p class="slot-empty">Yuklanmoqda…</p>';
-      let slots;
+      let data;
       try {
-        slots = await fetchSlots(doc.id, dateKey);
+        data = await fetchSlots(doc.id, dateKey);
       } catch {
         grid.innerHTML = '<p class="slot-empty">Slotlarni yuklab boʻlmadi. Qayta urinib koʻring.</p>';
         return;
       }
+
+      /*
+        Serverdagi ish kunlari statik ro'yxatdan farq qilsa, kun
+        tugmalari qaytadan chiziladi. Takrorlanmaydi: qayta chizishda
+        `usedWorkdays` server ro'yxatiga teng bo'lib qoladi.
+      */
+      if (Array.isArray(data.workdays) && !sameDays(usedWorkdays, data.workdays)) {
+        serverWorkdays[doc.id] = data.workdays;
+        state.date = null;
+        renderDatesAndSlots();
+        return;
+      }
+
+      const slots = data.slots ?? [];
 
       /*
         Bugungi kunning slotlari o'tib ketgan bo'lishi mumkin —
