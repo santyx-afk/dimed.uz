@@ -4,9 +4,10 @@ import { doctors } from '../data/doctors';
 import DeptIcon from './DeptIcon.astro';
 
 /*
-  Navbat vidjeti. Hozircha slotlar brauzerda shifokor jadvalidan
-  hisoblanadi; 2-haftada bu `GET /api/slots` ga almashtiriladi va
-  band slotlar DynamoDB dan keladi.
+  Navbat vidjeti. Bo'sh slotlar `GET /api/slots` dan keladi — band
+  vaqtlar DynamoDB dagi navbatlarga qarab chiqarib tashlanadi.
+  Kun tugmalari esa hozircha statik `doctors.ts` dagi `workdays` dan
+  quriladi (qarang: docs/HANDOFF.md, «Muhim qarorlar», 6-band).
 */
 ---
 
