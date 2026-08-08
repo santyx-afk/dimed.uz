@@ -64,6 +64,13 @@ const tables = [
         KeySchema: [HASH('phone'), RANGE('starts_at')],
         Projection: { ProjectionType: 'ALL' },
       },
+      {
+        // date-index: eslatma va kunlik xulosa cron'lari uchun — ular
+        // butun klinika bo'yicha "shu kundagi navbatlar" ni so'raydi
+        IndexName: 'date-index',
+        KeySchema: [HASH('date'), RANGE('starts_at')],
+        Projection: { ProjectionType: 'ALL' },
+      },
     ],
   },
   {

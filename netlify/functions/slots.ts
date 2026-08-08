@@ -1,10 +1,9 @@
 import type { Context } from '@netlify/functions';
-import { GetCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLES } from './lib/db.ts';
 import { getDoctor } from './lib/auth.ts';
-import { availability, type Shift } from './lib/slots.ts';
+import { availability } from './lib/slots.ts';
+import { shiftsFor } from './lib/schedule.ts';
 import { dayAppointments, takenTimes } from './lib/appointments.ts';
-import { isDateKey, weekdayOf, type DateKey } from './lib/time.ts';
+import { isDateKey, weekdayOf } from './lib/time.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
@@ -56,21 +55,3 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     return error('Slotlarni olishda xatolik', 500);
   }
 };
-
-/**
- * Kunning smenalari: shifokor shu kun uchun alohida jadval kiritgan
- * bo'lsa o'sha, aks holda doimiy jadvali.
- */
-async function shiftsFor(
-  doctorId: string,
-  date: DateKey,
-  fallback: Shift[],
-): Promise<Shift[]> {
-  const override = await db.send(
-    new GetCommand({ TableName: TABLES.schedules, Key: { doctor_id: doctorId, date } }),
-  );
-  const item = override.Item as { shifts?: Shift[]; day_off?: boolean } | undefined;
-
-  if (item?.day_off) return [];
-  return item?.shifts ?? fallback;
-}

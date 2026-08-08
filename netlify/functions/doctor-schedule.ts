@@ -4,7 +4,7 @@ import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, doctorFor } from './lib/auth.ts';
 import { slotTimes, type Shift } from './lib/slots.ts';
 import { isDateKey, toTashkent, addDays } from './lib/time.ts';
-import { dayAppointments } from './lib/appointments.ts';
+import { dayAppointments, holdsSlot } from './lib/appointments.ts';
 import {
   checkShifts,
   isAllowedSlotMinutes,
@@ -28,7 +28,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     if (!doctor) return error('Bu bo‘lim faqat shifokorlar uchun', 403);
 
     if (request.method === 'GET') {
-      const today = toTashkent(new Date()).dateKey;
+      const now = new Date();
+      const today = toTashkent(now).dateKey;
       const appointments = await dayAppointments(doctor.doctor_id, today);
 
       return json(
@@ -44,8 +45,10 @@ export default async (request: Request, _context: Context): Promise<Response> =>
           },
           today,
           slots: slotTimes(doctor.shifts, doctor.slot_minutes),
+          // Navbatda faqat kuchdagi yozuvlar: bekor qilingan va
+          // ko'chirilganlar slotni bo'shatgan.
           appointments: appointments
-            .filter((a) => a.status !== 'cancelled')
+            .filter((a) => holdsSlot(a, now))
             .map((a) => ({ time: a.time, phone: maskPhone(a.phone), status: a.status }))
             .sort((a, b) => a.time.localeCompare(b.time)),
         },

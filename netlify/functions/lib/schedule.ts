@@ -1,5 +1,7 @@
+import { GetCommand } from '@aws-sdk/lib-dynamodb';
+import { db, TABLES } from './db.ts';
 import { toMinutes, type Shift } from './slots.ts';
-import { isTime } from './time.ts';
+import { isTime, type DateKey } from './time.ts';
 
 export const ALLOWED_SLOT_MINUTES = [10, 15, 20, 30];
 const MAX_SHIFTS_PER_DAY = 4;
@@ -38,6 +40,24 @@ export function checkShifts(shifts: unknown): ShiftsCheck {
   }
 
   return { ok: true, shifts: sorted };
+}
+
+/**
+ * Kunning smenalari: shifokor shu kun uchun alohida jadval kiritgan
+ * bo'lsa o'sha, aks holda doimiy jadvali. Dam olish kunida — bo'sh.
+ */
+export async function shiftsFor(
+  doctorId: string,
+  date: DateKey,
+  fallback: Shift[],
+): Promise<Shift[]> {
+  const override = await db.send(
+    new GetCommand({ TableName: TABLES.schedules, Key: { doctor_id: doctorId, date } }),
+  );
+  const item = override.Item as { shifts?: Shift[]; day_off?: boolean } | undefined;
+
+  if (item?.day_off) return [];
+  return item?.shifts ?? fallback;
 }
 
 export const isAllowedSlotMinutes = (value: unknown): boolean =>

@@ -54,6 +54,13 @@ const book = await load('book.ts');
 const me = await load('me.ts');
 const doctorSchedule = await load('doctor-schedule.ts');
 const lcResults = await load('lc-results.ts');
+const reschedule = await load('reschedule.ts');
+const doctorOff = await load('doctor-off.ts');
+const remindPatients = await load('remind-patients.ts');
+const doctorDaily = await load('doctor-daily.ts');
+
+const { toTashkent, toInstant } = await import(pathToFileURL(join(fnDir, 'lib', 'time.ts')).href);
+const { toHHMM } = await import(pathToFileURL(join(fnDir, 'lib', 'slots.ts')).href);
 
 const ctx = {};
 const call = (fn, url, init) => fn(new Request(url, init), ctx);
@@ -321,6 +328,196 @@ await test('band qilingan navbat jadval o\'zgarsa ham saqlanadi', async () => {
   const res = await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${TOMORROW}`);
   const data = await res.json();
   assert.equal(data.slots.find((s) => s.time === '09:00').free, false, 'band navbat band qolishi kerak');
+});
+
+console.log('\nVaqtni ko\'chirish:');
+const move = (obj) => ({ ...jsonBody(obj), headers: { 'content-type': 'application/json', cookie: sessionCookie } });
+
+await test('kirmagan foydalanuvchi ko\'chira olmaydi', async () => {
+  const res = await call(reschedule, 'https://dimed.uz/api/reschedule', jsonBody({
+    doctor: 'ashurov', date: TOMORROW, time: '09:00', toDate: TOMORROW, toTime: '10:00',
+  }));
+  assert.equal(res.status, 401);
+});
+
+await test('begona qabulni ko\'chirib bo\'lmaydi', async () => {
+  const other = createSessionCookie({ phone: '+998911111111', userId: '9001' }).split(';')[0];
+  const res = await call(reschedule, 'https://dimed.uz/api/reschedule', {
+    ...jsonBody({ doctor: 'ashurov', date: TOMORROW, time: '09:00', toDate: TOMORROW, toTime: '10:00' }),
+    headers: { 'content-type': 'application/json', cookie: other },
+  });
+  assert.equal(res.status, 403);
+});
+
+await test('o\'sha vaqtning o\'ziga ko\'chirib bo\'lmaydi', async () => {
+  const res = await call(reschedule, 'https://dimed.uz/api/reschedule', move({
+    doctor: 'ashurov', date: TOMORROW, time: '09:00', toDate: TOMORROW, toTime: '09:00',
+  }));
+  assert.equal(res.status, 400);
+});
+
+await test('jadvalda yo\'q vaqtga ko\'chirib bo\'lmaydi', async () => {
+  const res = await call(reschedule, 'https://dimed.uz/api/reschedule', move({
+    doctor: 'ashurov', date: TOMORROW, time: '09:00', toDate: TOMORROW, toTime: '12:30',
+  }));
+  assert.equal(res.status, 400);
+});
+
+await test('qabul boshqa vaqtga ko\'chadi va botga xabar ketadi', async () => {
+  telegramCalls.length = 0;
+  const res = await call(reschedule, 'https://dimed.uz/api/reschedule', move({
+    doctor: 'ashurov', date: TOMORROW, time: '09:00', toDate: TOMORROW, toTime: '10:00',
+  }));
+  assert.equal(res.status, 200);
+
+  const table = tableOf('test_appointments');
+  assert.equal(table.get(`ashurov#${TOMORROW}|09:00`).status, 'moved', 'eski yozuv moved bo\'lishi kerak');
+
+  const moved = table.get(`ashurov#${TOMORROW}|10:00`);
+  assert.equal(moved.status, 'booked');
+  assert.equal(moved.phone, '+998901234567');
+  assert.equal(moved.moved_from, `${TOMORROW} 09:00`);
+  assert.equal(moved.reminded_at, undefined, 'yangi vaqt uchun eslatma qaytadan yuborilishi kerak');
+  assert.ok(telegramCalls.some((c) => c.body.text.includes('o\'zgartirildi')));
+});
+
+await test('eski slot bo\'shaydi, yangisi band bo\'ladi', async () => {
+  const data = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${TOMORROW}`)).json();
+  assert.equal(data.slots.find((s) => s.time === '09:00').free, true);
+  assert.equal(data.slots.find((s) => s.time === '10:00').free, false);
+});
+
+await test('ko\'chirilgan yozuvni qayta ko\'chirib bo\'lmaydi', async () => {
+  const res = await call(reschedule, 'https://dimed.uz/api/reschedule', move({
+    doctor: 'ashurov', date: TOMORROW, time: '09:00', toDate: TOMORROW, toTime: '11:00',
+  }));
+  assert.equal(res.status, 400);
+});
+
+await test('kabinetda faqat yangi vaqt ko\'rinadi', async () => {
+  const data = await (await call(me, 'https://dimed.uz/api/me', { headers: { cookie: sessionCookie } })).json();
+  assert.equal(data.appointments.length, 1);
+  assert.equal(data.appointments[0].time, '10:00');
+  assert.equal(data.appointments[0].canMove, true);
+});
+
+console.log('\nEslatmalar:');
+// Bron API'si 1 soat qoidasi sababli bunday yozuvni yarata olmaydi,
+// shuning uchun eslatma uchun yozuvni to'g'ridan-to'g'ri qo'yamiz.
+const soon = toTashkent(new Date(Date.now() + 30 * 60_000));
+const SOON_DATE = soon.dateKey;
+const SOON_TIME = toHHMM(soon.minutes);
+const TODAY = toTashkent(new Date()).dateKey;
+
+seed('test_appointments', `ashurov#${SOON_DATE}|${SOON_TIME}`, {
+  doctor_day: `ashurov#${SOON_DATE}`,
+  time: SOON_TIME,
+  doctor_id: 'ashurov',
+  date: SOON_DATE,
+  phone: '+998901234567',
+  telegram_id: '777',
+  starts_at: toInstant(SOON_DATE, SOON_TIME).toISOString(),
+  status: 'booked',
+  price: 70000,
+  created_at: new Date().toISOString(),
+});
+
+await test('bir soat qolganda bemorga eslatma ketadi', async () => {
+  telegramCalls.length = 0;
+  const res = await call(remindPatients, 'https://dimed.uz/api/remind-patients', { method: 'POST' });
+  assert.equal(res.status, 200);
+
+  assert.ok(
+    telegramCalls.some((c) => c.body.chat_id === '777' && c.body.text.includes(SOON_TIME)),
+    'eslatma xabari yuborilishi kerak',
+  );
+  assert.ok(tableOf('test_appointments').get(`ashurov#${SOON_DATE}|${SOON_TIME}`).reminded_at);
+});
+
+await test('eslatma ikkinchi marta yuborilmaydi', async () => {
+  telegramCalls.length = 0;
+  await call(remindPatients, 'https://dimed.uz/api/remind-patients', { method: 'POST' });
+  assert.equal(telegramCalls.length, 0, 'takroriy eslatma bo\'lmasligi kerak');
+});
+
+await test('ertaga bo\'ladigan qabulga hozir eslatma yuborilmaydi', async () => {
+  assert.equal(tableOf('test_appointments').get(`ashurov#${TOMORROW}|10:00`).reminded_at, undefined);
+});
+
+console.log('\nShifokorga kunlik xulosa:');
+// Bugungi kunda albatta bitta navbat bo'lishi uchun (yuqoridagi
+// yozuv yarim tundan keyinga tushib qolishi mumkin).
+seed('test_appointments', `ashurov#${TODAY}|06:00`, {
+  doctor_day: `ashurov#${TODAY}`,
+  time: '06:00',
+  doctor_id: 'ashurov',
+  date: TODAY,
+  phone: '+998901234567',
+  telegram_id: '777',
+  starts_at: toInstant(TODAY, '06:00').toISOString(),
+  status: 'booked',
+  price: 70000,
+  created_at: new Date().toISOString(),
+});
+
+await test('shifokor bugungi navbatlari ro\'yxatini oladi', async () => {
+  telegramCalls.length = 0;
+  const res = await call(doctorDaily, 'https://dimed.uz/api/doctor-daily', { method: 'POST' });
+  assert.equal(res.status, 200);
+
+  const message = telegramCalls.find((c) => c.body.chat_id === '555');
+  assert.ok(message, 'shifokorga xabar ketishi kerak');
+  assert.ok(message.body.text.includes('Bugungi navbatlaringiz'));
+  assert.ok(message.body.text.includes('06:00'));
+  assert.ok(!message.body.text.includes('+998901234567'), 'raqam to\'liq ko\'rsatilmasligi kerak');
+});
+
+await test('kunlik xulosa bir kunda bir marta ketadi', async () => {
+  telegramCalls.length = 0;
+  await call(doctorDaily, 'https://dimed.uz/api/doctor-daily', { method: 'POST' });
+  assert.equal(telegramCalls.length, 0, 'takroriy xulosa bo\'lmasligi kerak');
+});
+
+console.log('\nShifokor ishga chiqolmadi:');
+await test('bemor bu tugmani bosa olmaydi', async () => {
+  const res = await call(doctorOff, 'https://dimed.uz/api/doctor-off', move({ date: TOMORROW }));
+  assert.equal(res.status, 403);
+});
+
+await test('o\'tgan kunni yopib bo\'lmaydi', async () => {
+  const res = await call(doctorOff, 'https://dimed.uz/api/doctor-off', {
+    ...jsonBody({ date: '2020-01-01' }),
+    headers: { 'content-type': 'application/json', cookie: doctorCookie },
+  });
+  assert.equal(res.status, 400);
+});
+
+await test('kun yopiladi va bemorlarga xabar boradi', async () => {
+  telegramCalls.length = 0;
+  const res = await call(doctorOff, 'https://dimed.uz/api/doctor-off', {
+    ...jsonBody({ date: TOMORROW, reason: 'Kasal bo\'lib qoldim' }),
+    headers: { 'content-type': 'application/json', cookie: doctorCookie },
+  });
+  assert.equal(res.status, 200);
+
+  const data = await res.json();
+  assert.equal(data.cancelled, 1, 'o\'sha kundagi bitta navbat bekor qilinishi kerak');
+  assert.equal(data.notified, 1);
+
+  assert.equal(tableOf('test_appointments').get(`ashurov#${TOMORROW}|10:00`).status, 'cancelled_by_clinic');
+  assert.ok(telegramCalls.some((c) => c.body.text.includes('Kasal bo\'lib qoldim')));
+});
+
+await test('bemor kabinetda bekor qilinganini ko\'radi', async () => {
+  const data = await (await call(me, 'https://dimed.uz/api/me', { headers: { cookie: sessionCookie } })).json();
+  const cancelled = data.appointments.find((a) => a.date === TOMORROW);
+  assert.equal(cancelled.status, 'cancelled_by_clinic');
+  assert.equal(cancelled.canMove, false, 'bekor qilinganini ko\'chirib bo\'lmaydi');
+});
+
+await test('yopilgan kunda slot qolmaydi', async () => {
+  const data = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${TOMORROW}`)).json();
+  assert.equal(data.slots.length, 0);
 });
 
 await test('dam olish kuni belgilansa slot qolmaydi', async () => {
