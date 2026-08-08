@@ -1,0 +1,828 @@
+---
+import { departments } from '../data/departments';
+import { doctors } from '../data/doctors';
+import DeptIcon from './DeptIcon.astro';
+
+/*
+  Navbat vidjeti. Hozircha slotlar brauzerda shifokor jadvalidan
+  hisoblanadi; 2-haftada bu `GET /api/slots` ga almashtiriladi va
+  band slotlar DynamoDB dan keladi.
+*/
+---
+
+<div class="widget glass" id="navbat-widget" aria-live="polite">
+  <div class="widget-head">
+    <div class="widget-title">Onlayn navbat</div>
+    <div class="live-dot"><i></i> jonli slotlar</div>
+  </div>
+  <div class="steps" id="wSteps">
+    <button class="step-pill on" data-step="1"><span class="n">1</span><span class="lbl">Boʻlim</span></button>
+    <button class="step-pill" data-step="2" disabled><span class="n">2</span><span class="lbl">Shifokor</span></button>
+    <button class="step-pill" data-step="3" disabled><span class="n">3</span><span class="lbl">Vaqt</span></button>
+    <button class="step-pill" data-step="4" disabled><span class="n">4</span><span class="lbl">Toʻlov</span></button>
+  </div>
+  <div id="wBody"></div>
+
+  {/* Ikonkalar HTML sifatida saqlanadi — vidjet ularni klonlab ishlatadi */}
+  <template id="deptIcons">
+    {
+      departments.map((d) => (
+        <span data-icon={d.id}>
+          <DeptIcon icon={d.icon} />
+        </span>
+      ))
+    }
+  </template>
+</div>
+<script is:inline define:vars={{ departments, doctors }}>
+  const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
+  const MONTHS = [
+    'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+    'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
+  ];
+  const fmtPrice = (n) => n.toLocaleString('ru-RU').replace(/,/g, ' ') + ' soʻm';
+  const pad = (n) => String(n).padStart(2, '0');
+  // Server YYYY-MM-DD kutadi.
+  const dstr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const dlabel = (d) => `${WD[d.getDay()]}, ${d.getDate()}-${MONTHS[d.getMonth()]}`;
+
+  // <template> ichidagi tugunlar DocumentFragment'da yashaydi —
+  // ularni faqat template.content orqali olish mumkin.
+  const iconHtml = {};
+  document
+    .getElementById('deptIcons')
+    .content.querySelectorAll('[data-icon]')
+    .forEach((el) => {
+      iconHtml[el.dataset.icon] = el.innerHTML;
+    });
+
+  const docById = (id) => doctors.find((d) => d.id === id);
+  const nextDays = (doc) => {
+    const out = [];
+    const now = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() + i);
+      out.push({ date: d, ok: doc.workdays.includes(d.getDay()) });
+    }
+    return out;
+  };
+
+  const state = { step: 1, deptId: null, doc: null, date: null, dateLabel: null, time: null, booked: null };
+  const wBody = document.getElementById('wBody');
+  const stepPills = [...document.querySelectorAll('#wSteps .step-pill')];
+
+  function setStep(n) {
+    state.step = n;
+    stepPills.forEach((p, i) => {
+      p.classList.toggle('on', i + 1 === n);
+      p.classList.toggle('done', i + 1 < n);
+      p.disabled = i + 1 > n;
+    });
+    render();
+  }
+  stepPills.forEach((p, i) =>
+    p.addEventListener('click', () => {
+      if (i + 1 < state.step) {
+        state.booked = null;
+        setStep(i + 1);
+      }
+    }),
+  );
+
+  /** Bo'sh slotlar serverdan olinadi — band vaqtlar bazadan keladi. */
+  async function fetchSlots(doctorId, dateKey) {
+    const res = await fetch(`/api/slots?doctor=${encodeURIComponent(doctorId)}&date=${dateKey}`);
+    if (!res.ok) throw new Error(`slots ${res.status}`);
+    const data = await res.json();
+    return data.slots ?? [];
+  }
+
+  function slotsHtml(slots) {
+    if (!slots.length) {
+      return '<p class="slot-empty">Bu kunga slot yoʻq — boshqa sanani tanlang.</p>';
+    }
+    return slots
+      .map(
+        (s) =>
+          `<button class="slot-btn${s.free ? '' : ' busy'}" data-t="${s.time}"${s.free ? '' : ' disabled'}>${s.time}</button>`,
+      )
+      .join('');
+  }
+
+  function render() {
+    if (state.step === 1) {
+      wBody.innerHTML =
+        '<div class="pane-label">Boʻlimni tanlang</div><div class="dept-grid">' +
+        departments
+          .map(
+            (d) => `<button class="dept-btn" data-id="${d.id}">
+              <span class="ic">${iconHtml[d.id] ?? ''}</span>
+              <span>${d.name}<small>${doctors.filter((x) => x.deptId === d.id).length} shifokor</small></span>
+            </button>`,
+          )
+          .join('') +
+        '</div>';
+      wBody.querySelectorAll('.dept-btn').forEach((b) =>
+        b.addEventListener('click', () => {
+          state.deptId = b.dataset.id;
+          state.doc = null;
+          setStep(2);
+        }),
+      );
+    } else if (state.step === 2) {
+      const list = doctors.filter((d) => d.deptId === state.deptId);
+      wBody.innerHTML =
+        '<div class="pane-label">Shifokorni tanlang</div><div class="doc-list">' +
+        list
+          .map(
+            (d) => `<button class="doc-btn" data-id="${d.id}">
+              <img src="${d.photo}" alt="" width="42" height="42" loading="lazy">
+              <span><span class="nm">${d.name}</span><br><span class="jb">${d.job}</span></span>
+              <span class="slot-tag">${d.slotMinutes} daq</span>
+            </button>`,
+          )
+          .join('') +
+        '</div><button class="back-link">← boʻlimlarga qaytish</button>';
+      wBody.querySelectorAll('.doc-btn').forEach((b) =>
+        b.addEventListener('click', () => {
+          state.doc = docById(b.dataset.id);
+          state.date = null;
+          state.time = null;
+          setStep(3);
+        }),
+      );
+      wBody.querySelector('.back-link').addEventListener('click', () => setStep(1));
+    } else if (state.step === 3) {
+      renderDatesAndSlots();
+    } else if (state.step === 4) {
+      renderCheckout();
+    }
+  }
+
+  function renderDatesAndSlots() {
+    const doc = state.doc;
+    const days = nextDays(doc);
+    const workdays = days.filter((x) => x.ok);
+    if (!state.date && workdays.length) state.date = dstr(workdays[0].date);
+
+    wBody.innerHTML =
+      `<div class="pane-label">${doc.name} · sana va vaqt</div><div class="date-row">` +
+      days
+        .map(
+          (x) => `<button class="date-pill${dstr(x.date) === state.date ? ' on' : ''}"
+            data-d="${dstr(x.date)}" data-l="${dlabel(x.date)}"${x.ok ? '' : ' disabled'}>
+            ${WD[x.date.getDay()]}<b>${x.date.getDate()}</b></button>`,
+        )
+        .join('') +
+      `</div><div class="slot-grid" id="slotGrid"></div>
+       <div class="slot-legend"><span class="free"><i></i>boʻsh</span><span class="busy"><i></i>band</span></div>
+       <button class="back-link">← shifokorni almashtirish</button>`;
+
+    const grid = wBody.querySelector('#slotGrid');
+
+    const selectDate = (dateKey) => {
+      state.date = dateKey;
+      wBody
+        .querySelectorAll('.date-pill')
+        .forEach((p) => p.classList.toggle('on', p.dataset.d === dateKey));
+    };
+
+    const paint = async (dateKey, { autoAdvance = false } = {}) => {
+      grid.innerHTML = '<p class="slot-empty">Yuklanmoqda…</p>';
+      let slots;
+      try {
+        slots = await fetchSlots(doc.id, dateKey);
+      } catch {
+        grid.innerHTML = '<p class="slot-empty">Slotlarni yuklab boʻlmadi. Qayta urinib koʻring.</p>';
+        return;
+      }
+
+      /*
+        Bugungi kunning slotlari o'tib ketgan bo'lishi mumkin —
+        bunda foydalanuvchini keyingi ish kuniga o'tkazamiz.
+      */
+      if (autoAdvance && !slots.some((s) => s.free)) {
+        const next = workdays.find((x) => dstr(x.date) > dateKey);
+        if (next) {
+          selectDate(dstr(next.date));
+          await paint(dstr(next.date), { autoAdvance: true });
+          return;
+        }
+      }
+
+      grid.innerHTML = slotsHtml(slots);
+      const firstFree = grid.querySelector('.slot-btn:not(.busy)');
+      if (firstFree) grid.scrollTop = Math.max(0, firstFree.offsetTop - grid.offsetTop - 8);
+
+      grid.querySelectorAll('.slot-btn:not(.busy)').forEach((s) =>
+        s.addEventListener('click', () => {
+          state.time = s.dataset.t;
+          const pill = wBody.querySelector('.date-pill.on');
+          state.dateLabel = pill ? pill.dataset.l : state.date;
+          setStep(4);
+        }),
+      );
+    };
+
+    wBody.querySelectorAll('.date-pill:not([disabled])').forEach((p) =>
+      p.addEventListener('click', () => {
+        selectDate(p.dataset.d);
+        paint(p.dataset.d);
+      }),
+    );
+
+    if (state.date) paint(state.date, { autoAdvance: true });
+    else grid.innerHTML = '<p class="slot-empty">Bu shifokorning yaqin kunlarda qabuli yoʻq.</p>';
+  }
+
+  function renderCheckout() {
+    const d = state.doc;
+
+    if (state.booked) {
+      const b = state.booked;
+      wBody.innerHTML = `<div class="success">
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></div>
+        <h4>Navbatingiz band qilindi!</h4>
+        <p>${b.mode === 'at_clinic' ? 'Toʻlov qabulxonada amalga oshiriladi.' : 'Toʻlov qabul qilindi.'}</p>
+        <div class="sum-card" style="margin-top:14px;text-align:left">
+          <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
+          <div class="sum-row"><span class="k">Sana · vaqt</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
+          <div class="sum-row total"><span class="k">Narx</span><span class="v">${fmtPrice(d.price)}</span></div>
+        </div>
+        <p class="pay-note">Tasdiq Telegram botga yuborildi. Qabulga 1 soat qolganda eslatma keladi.</p>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap">
+          <a class="btn sm" href="/kabinet">Kabinetda koʻrish</a>
+          <button class="btn btn-ghost btn-sm" id="resetBtn">Yana navbat olish</button>
+        </div>
+      </div>`;
+      wBody.querySelector('#resetBtn').addEventListener('click', () => {
+        Object.assign(state, { step: 1, deptId: null, doc: null, date: null, time: null, booked: null });
+        setStep(1);
+      });
+      return;
+    }
+
+    wBody.innerHTML = `<div class="pane-label">Bron maʼlumotlari</div>
+      <div class="sum-card">
+        <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
+        <div class="sum-row"><span class="k">Yoʻnalish</span><span class="v">${d.job}</span></div>
+        <div class="sum-row"><span class="k">Sana</span><span class="v">${state.dateLabel}</span></div>
+        <div class="sum-row"><span class="k">Vaqt</span><span class="v">${state.time} · ${d.slotMinutes} daqiqa</span></div>
+        <div class="sum-row total"><span class="k">Qabul narxi</span><span class="v">${fmtPrice(d.price)}</span></div>
+      </div>
+      <p class="book-msg" id="bookMsg" role="status" aria-live="polite"></p>
+      <button class="btn w-full" id="wBook">Navbatni band qilish</button>
+      <p class="pay-note">Band qilish uchun Telegram orqali kirgan boʻlishingiz kerak. Bekor qilish yoʻq — qabuldan 1 soat oldingacha vaqtni koʻchirish mumkin.</p>
+      <button class="back-link">← vaqtni oʻzgartirish</button>`;
+
+    wBody.querySelector('.back-link').addEventListener('click', () => {
+      state.time = null;
+      setStep(3);
+    });
+
+    const msg = wBody.querySelector('#bookMsg');
+    const btn = wBody.querySelector('#wBook');
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      msg.textContent = 'Band qilinmoqda…';
+      msg.className = 'book-msg';
+
+      try {
+        const res = await fetch('/api/book', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ doctor: d.id, date: state.date, time: state.time }),
+        });
+        const data = await res.json();
+
+        if (res.status === 401) {
+          // Kirmagan bo'lsa — kirish sahifasiga, keyin shu yerga qaytadi.
+          window.location.href = `/kirish?next=${encodeURIComponent(location.pathname + '#navbat-widget')}`;
+          return;
+        }
+
+        if (res.status === 409) {
+          msg.textContent = data.error ?? 'Bu vaqt band qilindi.';
+          msg.className = 'book-msg error';
+          btn.disabled = false;
+          setTimeout(() => {
+            state.time = null;
+            setStep(3);
+          }, 1600);
+          return;
+        }
+
+        if (!res.ok) {
+          msg.textContent = data.error ?? 'Bron qilib boʻlmadi.';
+          msg.className = 'book-msg error';
+          btn.disabled = false;
+          return;
+        }
+
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+          return;
+        }
+
+        state.booked = data;
+        render();
+      } catch {
+        msg.textContent = 'Internetga ulanishda muammo. Qayta urinib koʻring.';
+        msg.className = 'book-msg error';
+        btn.disabled = false;
+      }
+    });
+  }
+
+  render();
+
+  /*
+    Bo'lim/shifokor kartalaridagi "Navbat olish" tugmalari. Bu skript
+    (define:vars tufayli) inline bo'lgani uchun kartalar DOM'ga tushishidan
+    oldin ishlaydi — shuning uchun delegatsiya ishlatiladi.
+  */
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-book-dept]');
+    if (!b) return;
+    state.deptId = b.dataset.bookDept;
+    state.booked = null;
+    state.time = null;
+    state.date = null;
+    if (b.dataset.bookDoc) {
+      state.doc = docById(b.dataset.bookDoc);
+      setStep(3);
+    } else {
+      state.doc = null;
+      setStep(2);
+    }
+    document.getElementById('navbat-widget').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+</script>
+
+<style>
+  .widget {
+    border-radius: 22px;
+    padding: 22px;
+    position: relative;
+  }
+
+  #deptIcons {
+    display: none;
+  }
+
+  .widget-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .widget-title {
+    font-family: var(--font-display);
+    font-weight: 750;
+    font-size: 18px;
+  }
+
+  .live-dot {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--leaf);
+  }
+
+  .live-dot i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--leaf);
+    display: block;
+    animation: pulse 1.8s infinite;
+  }
+
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  .steps {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .step-pill {
+    flex: 1;
+    border: none;
+    background: var(--busy);
+    border-radius: 10px;
+    padding: 7px 4px;
+    font-size: 11.5px;
+    font-weight: 650;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition:
+      background 0.2s,
+      color 0.2s;
+  }
+
+  .step-pill .n {
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    background: var(--line);
+    color: var(--ink);
+    font-size: 10.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+  }
+
+  .step-pill.on {
+    background: var(--rose);
+    color: #fff;
+  }
+
+  .step-pill.on .n {
+    background: rgb(255 255 255 / 0.28);
+    color: #fff;
+  }
+
+  .step-pill.done {
+    background: var(--leaf-soft);
+    color: var(--leaf);
+  }
+
+  .step-pill.done .n {
+    background: var(--leaf);
+    color: #fff;
+  }
+
+  .step-pill:disabled {
+    cursor: default;
+  }
+
+  @media (max-width: 420px) {
+    .step-pill .lbl {
+      display: none;
+    }
+  }
+
+  /* --- vidjet ichidagi dinamik qismlar (global, chunki JS yaratadi) --- */
+  .widget :global(.pane-label) {
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .widget :global(.dept-grid) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .widget :global(.dept-btn) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 13px;
+    padding: 11px 13px;
+    font-size: 13.5px;
+    font-weight: 600;
+    transition:
+      border-color 0.15s,
+      transform 0.12s;
+  }
+
+  .widget :global(.dept-btn:hover) {
+    border-color: var(--rose);
+    transform: translateY(-1px);
+  }
+
+  .widget :global(.dept-btn:focus-visible),
+  .widget :global(.doc-btn:focus-visible) {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
+  }
+
+  .widget :global(.dept-btn .ic) {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: var(--rose-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--rose);
+  }
+
+  .widget :global(.dept-btn .ic svg) {
+    width: 17px;
+    height: 17px;
+  }
+
+  .widget :global(.dept-btn small) {
+    display: block;
+    font-weight: 500;
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+
+  .widget :global(.doc-list) {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .widget :global(.doc-btn) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 13px;
+    padding: 9px 12px;
+    transition: border-color 0.15s;
+  }
+
+  .widget :global(.doc-btn:hover) {
+    border-color: var(--rose);
+  }
+
+  .widget :global(.doc-btn img) {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--rose-soft);
+  }
+
+  .widget :global(.doc-btn .nm) {
+    font-weight: 650;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .widget :global(.doc-btn .jb) {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .widget :global(.doc-btn .slot-tag) {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--leaf);
+    background: var(--leaf-soft);
+    border-radius: 999px;
+    padding: 4px 9px;
+    white-space: nowrap;
+  }
+
+  .widget :global(.date-row) {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+  }
+
+  .widget :global(.date-pill) {
+    min-width: 56px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 12px;
+    padding: 7px 6px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    transition: border-color 0.15s;
+    flex-shrink: 0;
+  }
+
+  .widget :global(.date-pill b) {
+    display: block;
+    font-size: 15px;
+    color: var(--ink);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.date-pill.on) {
+    border-color: var(--rose);
+    background: var(--rose);
+    color: rgb(255 255 255 / 0.8);
+  }
+
+  .widget :global(.date-pill.on b) {
+    color: #fff;
+  }
+
+  .widget :global(.date-pill:disabled) {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .widget :global(.slot-grid) {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+    max-height: 210px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  .widget :global(.slot-empty) {
+    grid-column: 1 / -1;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .widget :global(.slot-btn) {
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 10px;
+    padding: 8px 4px;
+    font-size: 13px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    transition: border-color 0.12s;
+  }
+
+  .widget :global(.slot-btn:hover) {
+    border-color: var(--leaf);
+  }
+
+  .widget :global(.slot-btn:focus-visible) {
+    outline: 2px solid var(--leaf);
+    outline-offset: 2px;
+  }
+
+  .widget :global(.slot-btn.busy) {
+    background: var(--busy);
+    color: var(--muted);
+    border-color: transparent;
+    text-decoration: line-through;
+    cursor: not-allowed;
+  }
+
+  .widget :global(.slot-legend) {
+    display: flex;
+    gap: 16px;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 12px;
+  }
+
+  .widget :global(.slot-legend i) {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    margin-right: 5px;
+    vertical-align: -1px;
+  }
+
+  .widget :global(.slot-legend .free i) {
+    background: var(--leaf-soft);
+    border: 1px solid var(--leaf);
+  }
+
+  .widget :global(.slot-legend .busy i) {
+    background: var(--busy);
+  }
+
+  .widget :global(.sum-card) {
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+
+  .widget :global(.sum-row) {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    padding: 5px 0;
+    gap: 12px;
+  }
+
+  .widget :global(.sum-row .k) {
+    color: var(--muted);
+  }
+
+  .widget :global(.sum-row .v) {
+    font-weight: 650;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.sum-row.total) {
+    border-top: 1px dashed var(--line);
+    margin-top: 6px;
+    padding-top: 11px;
+  }
+
+  .widget :global(.sum-row.total .v) {
+    color: var(--rose);
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 800;
+  }
+
+  .widget :global(.w-full) {
+    width: 100%;
+  }
+
+  .widget :global(.pay-note) {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 11px;
+    line-height: 1.5;
+  }
+
+  .widget :global(.book-msg) {
+    min-height: 20px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .widget :global(.book-msg.error) {
+    color: var(--rose);
+  }
+
+  .widget :global(.back-link) {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 0;
+    margin-top: 14px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .widget :global(.back-link:hover) {
+    color: var(--ink);
+  }
+
+  .widget :global(.success) {
+    text-align: center;
+    padding: 10px 4px;
+  }
+
+  .widget :global(.success .badge) {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--leaf);
+    color: #fff;
+    margin: 0 auto 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 24px -6px rgb(87 155 71 / 0.55);
+  }
+
+  .widget :global(.success .badge svg) {
+    width: 26px;
+    height: 26px;
+  }
+
+  .widget :global(.success h4) {
+    font-size: 19px;
+    font-weight: 750;
+    margin-bottom: 6px;
+  }
+
+  .widget :global(.success p) {
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+</style>

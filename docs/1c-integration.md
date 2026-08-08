@@ -1,0 +1,99 @@
+# 1C → dimed.uz: tahlil natijalarini yuborish
+
+Bu hujjat 1C tomonidagi dasturchi uchun. Laboratoriya natijasi tayyor
+bo'lganda 1C bitta HTTP so'rov yuboradi — natija bemorning shaxsiy
+kabinetida darhol paydo bo'ladi va unga Telegram orqali xabar boradi.
+
+## Endpoint
+
+```
+POST https://dimed.uz/api/lc-results
+Content-Type: application/json
+X-API-Key: <klinikaga berilgan kalit>
+```
+
+API kalitni saytni ishlab chiquvchi beradi. Kalit faqat 1C serverida
+saqlanadi va hech qayerda ochiq ko'rsatilmaydi.
+
+## So'rov tanasi
+
+```json
+{
+  "phone": "+998901234567",
+  "order_id": "4127",
+  "date": "2026-08-05T09:32:00+05:00",
+  "results": [
+    {
+      "code": "96",
+      "title": "Gemoglobin",
+      "value": "132 g/L",
+      "reference": "120 – 160"
+    },
+    {
+      "code": "19",
+      "title": "Umumiy qon tahlili (14 ko'rsatkich)",
+      "pdf_base64": "JVBERi0xLjQKJcfs..."
+    }
+  ]
+}
+```
+
+| Maydon | Majburiy | Izoh |
+| --- | --- | --- |
+| `phone` | ha | Bemor telefoni. Istalgan formatda — tizim o'zi `+998XXXXXXXXX` ga keltiradi |
+| `order_id` | yo'q | 1C dagi buyurtma raqami |
+| `date` | yo'q | Natija sanasi (ISO 8601). Berilmasa — hozirgi vaqt |
+| `results[].code` | ha | Tahlil kodi (price.csv dagi kod bilan bir xil) |
+| `results[].title` | ha | Tahlil nomi |
+| `results[].value` | yo'q | Matn natija, masalan `5,2 mmol/L` |
+| `results[].reference` | yo'q | Norma oralig'i |
+| `results[].pdf_base64` | yo'q | PDF blank, base64 ko'rinishida |
+
+Bitta so'rovda bir nechta natija yuborish mumkin. `value` ham,
+`pdf_base64` ham bo'lishi mumkin — ikkalasi ham ixtiyoriy, lekin
+kamida bittasi bo'lgani ma'qul.
+
+## Javob
+
+Muvaffaqiyatli:
+
+```json
+{ "ok": true, "saved": 2 }
+```
+
+Xato holatlar:
+
+| Kod | Sabab |
+| --- | --- |
+| 401 | `X-API-Key` noto'g'ri |
+| 400 | `phone` yo'q yoki `results` bo'sh |
+| 500 | Server tomonda xatolik (dasturchiga avtomatik xabar boradi) |
+
+## 1C 8.x da namuna
+
+```bsl
+Соединение = Новый HTTPСоединение("dimed.uz", 443, , , , , Новый ЗащищенноеСоединениеOpenSSL);
+
+Запрос = Новый HTTPЗапрос("/api/lc-results");
+Запрос.Заголовки.Вставить("Content-Type", "application/json");
+Запрос.Заголовки.Вставить("X-API-Key", КлючAPI);
+Запрос.УстановитьТелоИзСтроки(ТелоJSON, КодировкаТекста.UTF8);
+
+Ответ = Соединение.ОтправитьДляОбработки(Запрос);
+Если Ответ.КодСостояния <> 200 Тогда
+    ЗаписьЖурналаРегистрации("Dimed", УровеньЖурналаРегистрации.Ошибка, , , Ответ.ПолучитьТелоКакСтроку());
+КонецЕсли;
+```
+
+## Sinov
+
+Ishga tushirishdan oldin test so'rov bilan tekshiring:
+
+```bash
+curl -X POST https://dimed.uz/api/lc-results \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $LC_API_KEY" \
+  -d '{"phone":"+998901234567","results":[{"code":"96","title":"Gemoglobin","value":"132 g/L","reference":"120 – 160"}]}'
+```
+
+Javobda `{"ok":true,"saved":1}` kelsa — integratsiya ishlayapti.

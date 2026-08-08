@@ -1,0 +1,302 @@
+---
+import Base from '../layouts/Base.astro';
+import { site } from '../data/site';
+---
+
+<Base
+  title="Kirish — Dimed klinikasi"
+  description="Telegram bot orqali shaxsiy kabinetga kirish. SMS ham, parol ham kerak emas."
+>
+  <section class="wrap page">
+    <div class="card glass">
+      <div class="eyebrow">Shaxsiy kabinet</div>
+      <h1>Saytga kirish</h1>
+      <p class="lede">Telegram bot orqali — SMS ham, parol ham kerak emas.</p>
+
+      <ol class="steps">
+        <li>
+          <b>Botga o‘ting va kontaktingizni ulashing</b>
+          <a class="btn btn-sm tg" href={site.telegramBot} target="_blank" rel="noopener">
+            @dimedklinika botini ochish
+          </a>
+        </li>
+        <li>
+          <b>Telefon raqamingizni kiriting</b>
+          <input
+            id="phone"
+            type="tel"
+            inputmode="tel"
+            autocomplete="tel"
+            placeholder="+998 90 123 45 67"
+            aria-label="Telefon raqami"
+          />
+        </li>
+        <li>
+          <b>Bot yuborgan 6 xonali kodni kiriting</b>
+          <div class="otp-row" id="otpRow">
+            {
+              [1, 2, 3, 4, 5, 6].map((n) => (
+                <input
+                  class="otp"
+                  type="text"
+                  inputmode="numeric"
+                  maxlength="1"
+                  aria-label={`${n}-raqam`}
+                />
+              ))
+            }
+          </div>
+        </li>
+      </ol>
+
+      <p class="msg" id="msg" role="status" aria-live="polite"></p>
+      <button class="btn" id="submit">Kirish</button>
+
+      <p class="help">
+        Kod kelmadimi? Botga <code>/start</code> yuboring — yangi kod olasiz.<br />
+        Savollar bo‘lsa: <a href={site.phoneHref}>{site.phone}</a>
+      </p>
+    </div>
+  </section>
+</Base>
+
+<script>
+  const phoneInput = document.getElementById('phone') as HTMLInputElement;
+  const otpInputs = [...document.querySelectorAll<HTMLInputElement>('#otpRow .otp')];
+  const submit = document.getElementById('submit') as HTMLButtonElement;
+  const msg = document.getElementById('msg') as HTMLParagraphElement;
+
+  const setMsg = (text: string, kind: 'error' | 'ok' | '' = '') => {
+    msg.textContent = text;
+    msg.className = `msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  /**
+   * Kirgandan keyin qaytadigan manzil. Faqat shu saytdagi yo'l
+   * qabul qilinadi — begona saytga yo'naltirishning oldini olamiz.
+   */
+  const safeNext = (): string => {
+    const next = new URLSearchParams(location.search).get('next');
+    return next && next.startsWith('/') && !next.startsWith('//') ? next : '/kabinet';
+  };
+
+  otpInputs.forEach((input, i) => {
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/\D/g, '').slice(0, 1);
+      if (input.value && i < otpInputs.length - 1) otpInputs[i + 1]?.focus();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !input.value && i > 0) otpInputs[i - 1]?.focus();
+      if (e.key === 'Enter') submit.click();
+    });
+    input.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const digits = (e.clipboardData?.getData('text') ?? '').replace(/\D/g, '').slice(0, 6);
+      digits.split('').forEach((c, j) => {
+        const box = otpInputs[j];
+        if (box) box.value = c;
+      });
+      if (digits.length === 6) submit.click();
+    });
+  });
+
+  phoneInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') otpInputs[0]?.focus();
+  });
+
+  submit.addEventListener('click', async () => {
+    const phone = phoneInput.value.trim();
+    const code = otpInputs.map((i) => i.value).join('');
+
+    if (phone.replace(/\D/g, '').length < 9) {
+      setMsg('Telefon raqamini to‘liq kiriting.', 'error');
+      phoneInput.focus();
+      return;
+    }
+    if (code.length !== 6) {
+      setMsg('6 xonali kodni to‘liq kiriting.', 'error');
+      otpInputs.find((i) => !i.value)?.focus();
+      return;
+    }
+
+    submit.disabled = true;
+    setMsg('Tekshirilmoqda…');
+
+    try {
+      const res = await fetch('/api/auth-verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ phone, code }),
+      });
+      const data = (await res.json()) as { error?: string };
+
+      if (res.ok) {
+        setMsg('Xush kelibsiz!', 'ok');
+        window.location.href = safeNext();
+        return;
+      }
+
+      setMsg(data.error ?? 'Kirishda xatolik.', 'error');
+      otpInputs.forEach((i) => (i.value = ''));
+      otpInputs[0]?.focus();
+    } catch {
+      setMsg('Internetga ulanishda muammo. Qayta urinib ko‘ring.', 'error');
+    } finally {
+      submit.disabled = false;
+    }
+  });
+</script>
+
+<style>
+  .page {
+    padding: 56px 0 72px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .card {
+    border-radius: 22px;
+    padding: 34px;
+    max-width: 520px;
+    width: 100%;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 750;
+  }
+
+  .lede {
+    color: var(--muted);
+    font-size: 15px;
+    margin-top: 8px;
+  }
+
+  .steps {
+    list-style: none;
+    counter-reset: step;
+    margin: 26px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .steps li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 42px;
+  }
+
+  .steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    background: var(--rose-soft);
+    color: var(--rose);
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .steps li b {
+    display: block;
+    font-size: 14.5px;
+    font-weight: 650;
+    margin-bottom: 10px;
+  }
+
+  .tg {
+    background: var(--color-tg);
+    box-shadow: 0 6px 20px -6px rgb(42 171 238 / 0.5);
+  }
+
+  #phone {
+    width: 100%;
+    border: 1.5px solid var(--line);
+    background: var(--chip-bg);
+    color: var(--ink);
+    border-radius: 12px;
+    padding: 12px 15px;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+    font-family: inherit;
+  }
+
+  #phone:focus {
+    border-color: var(--rose);
+    outline: none;
+  }
+
+  .otp-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .otp {
+    width: 100%;
+    max-width: 52px;
+    height: 56px;
+    text-align: center;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 22px;
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    background: var(--chip-bg);
+    color: var(--ink);
+  }
+
+  .otp:focus {
+    border-color: var(--rose);
+    outline: none;
+  }
+
+  .msg {
+    min-height: 22px;
+    margin: 20px 0 12px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .msg.error {
+    color: var(--rose);
+  }
+
+  .msg.ok {
+    color: var(--leaf);
+  }
+
+  #submit {
+    width: 100%;
+  }
+
+  .help {
+    margin-top: 18px;
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .help code {
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 12px;
+  }
+
+  .help a {
+    color: var(--rose);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+</style>

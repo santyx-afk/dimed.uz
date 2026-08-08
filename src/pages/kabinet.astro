@@ -1,0 +1,434 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Shaxsiy kabinet — Dimed klinikasi" description="Qabullaringiz va tahlil natijalaringiz.">
+  <section class="wrap page">
+    <div class="head">
+      <div>
+        <div class="eyebrow">Shaxsiy kabinet</div>
+        <h1>Qabullaringiz va tahlillar</h1>
+        <span class="phone-chip" id="phoneChip" hidden></span>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="logout" hidden>Chiqish</button>
+    </div>
+
+    <div id="loading" class="state">Yuklanmoqda…</div>
+
+    <div id="guest" class="state" hidden>
+      <p>Kabinetni ko‘rish uchun Telegram orqali kiring.</p>
+      <a class="btn" href="/kirish">Kirish</a>
+    </div>
+
+    <div id="content" class="grid" hidden>
+      <div class="card glass">
+        <h2>Kelgusi qabullar</h2>
+        <div id="upcoming"></div>
+      </div>
+
+      <div class="card glass">
+        <h2>Tahlil natijalari</h2>
+        <div id="results"></div>
+      </div>
+
+      <div class="card glass full">
+        <h2>O‘tgan qabullar</h2>
+        <div id="past"></div>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  type Appointment = {
+    doctorName: string;
+    doctorJob: string;
+    date: string;
+    time: string;
+    status: string;
+    price: number;
+    upcoming: boolean;
+  };
+
+  type LabResult = {
+    id: string;
+    title: string;
+    value: string | null;
+    reference: string | null;
+    type: 'pdf' | 'text';
+    date: string;
+    seen: boolean;
+  };
+
+  const MONTHS = [
+    'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+    'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
+  ];
+
+  const fmtDate = (key: string) => {
+    const [y, m, d] = key.split('-').map(Number);
+    return m && d ? `${d}-${MONTHS[m - 1]} ${y}` : key;
+  };
+
+  const fmtDateTime = (iso: string) => {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const fmtPrice = (n: number) => n.toLocaleString('ru-RU').replace(/,/g, ' ') + ' soʻm';
+
+  const statusLabel: Record<string, { text: string; cls: string }> = {
+    paid: { text: 'toʻlangan', cls: 'ok' },
+    booked: { text: 'band qilingan', cls: 'ok' },
+    done: { text: 'boʻlib oʻtgan', cls: 'muted' },
+    moved: { text: 'koʻchirilgan', cls: 'warn' },
+  };
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  async function load() {
+    let data: { phone: string; appointments: Appointment[]; results: LabResult[] };
+
+    try {
+      const res = await fetch('/api/me', { credentials: 'same-origin' });
+      if (res.status === 401) {
+        el('loading').hidden = true;
+        el('guest').hidden = false;
+        return;
+      }
+      if (!res.ok) throw new Error(String(res.status));
+      data = await res.json();
+    } catch {
+      el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
+      return;
+    }
+
+    el('loading').hidden = true;
+    el('content').hidden = false;
+    el('logout').hidden = false;
+
+    const chip = el('phoneChip');
+    chip.textContent = data.phone;
+    chip.hidden = false;
+
+    renderAppointments(data.appointments);
+    renderResults(data.results);
+  }
+
+  function renderAppointments(all: Appointment[]) {
+    const upcoming = all.filter((a) => a.upcoming);
+    const past = all.filter((a) => !a.upcoming).reverse();
+
+    el('upcoming').innerHTML = upcoming.length
+      ? upcoming.map(appointmentCard).join('')
+      : `<p class="empty">Hozircha kelgusi qabul yoʻq.<br><a class="btn btn-sm" href="/#navbat-widget">Navbat olish</a></p>`;
+
+    el('past').innerHTML = past.length
+      ? past
+          .map(
+            (a) =>
+              `<div class="row"><span>${a.doctorJob || a.doctorName} — ${a.doctorName}</span>
+               <span class="dt">${fmtDate(a.date)} · ${a.time}</span></div>`,
+          )
+          .join('')
+      : '<p class="empty">Oʻtgan qabullar yoʻq.</p>';
+  }
+
+  function appointmentCard(a: Appointment) {
+    const s = statusLabel[a.status] ?? { text: a.status, cls: 'muted' };
+    return `<div class="appt">
+      <div>
+        <div class="nm">${a.doctorName}</div>
+        <div class="dt">${a.doctorJob}</div>
+        <div class="dt">${fmtDate(a.date)} · soat ${a.time}</div>
+      </div>
+      <div class="appt-foot">
+        <span class="pill ${s.cls}">${s.text}</span>
+        <span class="dt">${fmtPrice(a.price)}</span>
+      </div>
+    </div>`;
+  }
+
+  function renderResults(results: LabResult[]) {
+    el('results').innerHTML = results.length
+      ? results
+          .map((r) => {
+            const badge = r.type === 'pdf' ? 'PDF' : 'TXT';
+            const value = r.value
+              ? `<span class="val">${r.value}${r.reference ? ` <span class="ref">(norma: ${r.reference})</span>` : ''}</span>`
+              : '';
+            const tag = r.seen ? '' : '<span class="pill new">yangi</span>';
+            const open = r.type === 'pdf' ? ` data-pdf="${r.id}"` : '';
+            const Tag = r.type === 'pdf' ? 'button' : 'div';
+            return `<${Tag} class="lab"${open}>
+              <span class="fic ${r.type}">${badge}</span>
+              <span class="lab-body"><span class="nm">${r.title}</span>${value}
+                <span class="dt">${fmtDateTime(r.date)}</span></span>
+              ${tag}
+            </${Tag}>`;
+          })
+          .join('')
+      : '<p class="empty">Hozircha tahlil natijasi yoʻq. Natijalar tayyor boʻlishi bilan shu yerda paydo boʻladi.</p>';
+
+    el('results')
+      .querySelectorAll<HTMLButtonElement>('[data-pdf]')
+      .forEach((btn) =>
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            const res = await fetch(`/api/result-file?id=${encodeURIComponent(btn.dataset.pdf!)}`, {
+              credentials: 'same-origin',
+            });
+            const data = (await res.json()) as { url?: string; error?: string };
+            if (data.url) window.open(data.url, '_blank', 'noopener');
+            else alert(data.error ?? 'Faylni ochib boʻlmadi');
+          } finally {
+            btn.disabled = false;
+          }
+        }),
+      );
+  }
+
+  el('logout').addEventListener('click', async () => {
+    // Sessiya cookie'si HttpOnly — uni faqat server o'chira oladi.
+    await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+    window.location.href = '/';
+  });
+
+  load();
+</script>
+
+<style>
+  .page {
+    padding: 48px 0 64px;
+    min-height: 60vh;
+  }
+
+  .head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+
+  h1 {
+    font-size: clamp(24px, 3.2vw, 34px);
+    font-weight: 750;
+  }
+
+  .phone-chip {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .state {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 820px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .card {
+    border-radius: 18px;
+    padding: 22px;
+  }
+
+  .card.full {
+    grid-column: 1 / -1;
+  }
+
+  .card h2 {
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    font-family: var(--font-sans);
+    margin-bottom: 14px;
+  }
+
+  .card :global(.empty) {
+    color: var(--muted);
+    font-size: 14px;
+    text-align: center;
+    padding: 18px 0;
+    line-height: 1.8;
+  }
+
+  .card :global(.appt) {
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 14px;
+    padding: 15px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .card :global(.appt:last-child) {
+    margin-bottom: 0;
+  }
+
+  .card :global(.nm) {
+    font-weight: 700;
+    font-size: 14.5px;
+    line-height: 1.3;
+  }
+
+  .card :global(.dt) {
+    font-size: 12.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .card :global(.appt-foot) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .card :global(.pill) {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 3px 10px;
+  }
+
+  .card :global(.pill.ok) {
+    color: var(--ok);
+    background: var(--ok-bg);
+  }
+
+  .card :global(.pill.warn) {
+    color: var(--warn);
+    background: var(--warn-bg);
+  }
+
+  .card :global(.pill.muted) {
+    color: var(--muted);
+    background: var(--busy);
+  }
+
+  .card :global(.pill.new) {
+    color: var(--rose);
+    background: var(--rose-soft);
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .card :global(.row) {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px dashed var(--line);
+    font-size: 13.5px;
+  }
+
+  .card :global(.row:last-child) {
+    border-bottom: none;
+  }
+
+  .card :global(.lab) {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    text-align: left;
+    padding: 10px 6px;
+    border: none;
+    border-bottom: 1px dashed var(--line);
+    background: none;
+    color: inherit;
+    font: inherit;
+    border-radius: 10px;
+  }
+
+  .card :global(.lab:last-child) {
+    border-bottom: none;
+  }
+
+  .card :global(button.lab) {
+    cursor: pointer;
+  }
+
+  .card :global(button.lab:hover) {
+    background: var(--rose-soft);
+  }
+
+  .card :global(button.lab:focus-visible) {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
+  }
+
+  .card :global(.lab-body) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .card :global(.fic) {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+
+  .card :global(.fic.pdf) {
+    background: var(--rose-soft);
+    color: var(--rose);
+  }
+
+  .card :global(.fic.text) {
+    background: var(--leaf-soft);
+    color: var(--leaf);
+  }
+
+  .card :global(.val) {
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .card :global(.ref) {
+    font-weight: 500;
+    color: var(--muted);
+    font-size: 12px;
+  }
+</style>

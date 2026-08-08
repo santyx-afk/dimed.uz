@@ -1,0 +1,267 @@
+@import 'tailwindcss';
+@import './fonts.css';
+
+/*
+  Dimed dizayn tokenlari. Ranglar logotipdan olingan:
+  magenta #d5006f va yashil #579b47.
+*/
+@theme {
+  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+
+  --color-rose-brand: #d5006f;
+  --color-leaf-brand: #579b47;
+  --color-tg: #2aabee;
+}
+
+:root {
+  --bg: #f8f3f6;
+  --ink: #2a1622;
+  --muted: #7c6a75;
+  --rose: #d5006f;
+  --leaf: #4c8f3e;
+  --leaf-soft: rgb(87 155 71 / 0.14);
+  --rose-soft: rgb(213 0 111 / 0.1);
+  --card: rgb(255 255 255 / 0.62);
+  --card-solid: #ffffff;
+  --card-brd: rgb(255 255 255 / 0.75);
+  --line: rgb(42 22 34 / 0.1);
+  --shadow: 0 10px 40px -12px rgb(42 22 34 / 0.18);
+  --chip-bg: rgb(255 255 255 / 0.7);
+  --busy: rgb(42 22 34 / 0.06);
+  --ok: #3f8a33;
+  --ok-bg: rgb(87 155 71 / 0.16);
+  --warn: #a86a00;
+  --warn-bg: rgb(230 160 30 / 0.16);
+  --blob-rose: rgb(213 0 111 / 0.16);
+  --blob-leaf: rgb(87 155 71 / 0.17);
+  --scrim: rgb(30 12 22 / 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #180f15;
+    --ink: #f6edf2;
+    --muted: #a8929e;
+    --rose: #ff4f9e;
+    --leaf: #7cc465;
+    --leaf-soft: rgb(124 196 101 / 0.14);
+    --rose-soft: rgb(255 79 158 / 0.12);
+    --card: rgb(255 255 255 / 0.055);
+    --card-solid: #241721;
+    --card-brd: rgb(255 255 255 / 0.1);
+    --line: rgb(246 237 242 / 0.12);
+    --shadow: 0 10px 40px -12px rgb(0 0 0 / 0.5);
+    --chip-bg: rgb(255 255 255 / 0.07);
+    --busy: rgb(246 237 242 / 0.07);
+    --ok: #8ed07a;
+    --ok-bg: rgb(124 196 101 / 0.15);
+    --warn: #e6b45a;
+    --warn-bg: rgb(230 180 90 / 0.14);
+    --blob-rose: rgb(255 79 158 / 0.13);
+    --blob-leaf: rgb(124 196 101 / 0.11);
+    --scrim: rgb(0 0 0 / 0.6);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #180f15;
+  --ink: #f6edf2;
+  --muted: #a8929e;
+  --rose: #ff4f9e;
+  --leaf: #7cc465;
+  --leaf-soft: rgb(124 196 101 / 0.14);
+  --rose-soft: rgb(255 79 158 / 0.12);
+  --card: rgb(255 255 255 / 0.055);
+  --card-solid: #241721;
+  --card-brd: rgb(255 255 255 / 0.1);
+  --line: rgb(246 237 242 / 0.12);
+  --shadow: 0 10px 40px -12px rgb(0 0 0 / 0.5);
+  --chip-bg: rgb(255 255 255 / 0.07);
+  --busy: rgb(246 237 242 / 0.07);
+  --ok: #8ed07a;
+  --ok-bg: rgb(124 196 101 / 0.15);
+  --warn: #e6b45a;
+  --warn-bg: rgb(230 180 90 / 0.14);
+  --blob-rose: rgb(255 79 158 / 0.13);
+  --blob-leaf: rgb(124 196 101 / 0.11);
+  --scrim: rgb(0 0 0 / 0.6);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  line-height: 1.12;
+  margin: 0;
+  text-wrap: balance;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+}
+
+section,
+header {
+  scroll-margin-top: 86px;
+}
+
+/* ---- umumiy qismlar ---- */
+.wrap {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.glass {
+  background: var(--card);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  border: 1px solid var(--card-brd);
+  box-shadow: var(--shadow);
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--rose);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.eyebrow::before {
+  content: '';
+  width: 26px;
+  height: 2px;
+  background: var(--rose);
+  border-radius: 2px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  background: var(--rose);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 11px 22px;
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+  box-shadow: 0 6px 20px -6px rgb(213 0 111 / 0.5);
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px -6px rgb(213 0 111 / 0.55);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--rose);
+  outline-offset: 3px;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 13.5px;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--line);
+  box-shadow: none;
+}
+
+.btn-ghost:hover {
+  border-color: var(--rose);
+  color: var(--rose);
+}
+
+.sec-head {
+  max-width: 640px;
+  margin-bottom: 40px;
+}
+
+.sec-head h2 {
+  font-size: clamp(26px, 3.2vw, 38px);
+  font-weight: 750;
+}
+
+.sec-head p {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.rv {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+}
+
+.rv.on {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .rv {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

@@ -1,0 +1,303 @@
+[
+  {
+    "code": "76",
+    "title": "Erkaklar siydik chiqarish yo'lidan ajralma tahlili",
+    "group": "Ajralma Tahlili",
+    "duration": "24 soat",
+    "price": "65 000"
+  },
+  {
+    "code": "78",
+    "title": "Ginikologik surtma (1 nuqtadan)",
+    "group": "Ajralma Tahlili",
+    "duration": "24 soat",
+    "price": "50 000"
+  },
+  {
+    "code": "77",
+    "title": "Ginikologik surtma (3 nuqtadan)",
+    "group": "Ajralma Tahlili",
+    "duration": "24 soat",
+    "price": "120 000"
+  },
+  {
+    "code": "75",
+    "title": "Spermogramma",
+    "group": "Ajralma Tahlili",
+    "duration": "180 daqiqa",
+    "price": "150 000"
+  },
+  {
+    "code": "91",
+    "title": "Albumin",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "33",
+    "title": "ALT (alaninaminotrasferaza)",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "25 000"
+  },
+  {
+    "code": "34",
+    "title": "AST (aspartatamnotrasferaza)",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "25 000"
+  },
+  {
+    "code": "85",
+    "title": "Bilirubin umumiy",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "25 000"
+  },
+  {
+    "code": "687",
+    "title": "Biokimyoviy qon tahlillari",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "300 000"
+  },
+  {
+    "code": "92",
+    "title": "Bogʻlangan Bilirubin",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "25 000"
+  },
+  {
+    "code": "96",
+    "title": "Gemoglobin",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "20 000"
+  },
+  {
+    "code": "113",
+    "title": "Ishqoriy fosfataza",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "35 000"
+  },
+  {
+    "code": "94",
+    "title": "Kaliy",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "93",
+    "title": "Kalsiy",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "21",
+    "title": "Kreatinin",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "25 000"
+  },
+  {
+    "code": "20",
+    "title": "Mochevina",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "25 000"
+  },
+  {
+    "code": "23",
+    "title": "Qondagi Qand",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "25 000"
+  },
+  {
+    "code": "90",
+    "title": "Triglitserid",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "83",
+    "title": "Umumiy oqsil",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "95",
+    "title": "Xolesterin",
+    "group": "Biokimyoviy qon tahlillari",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "117",
+    "title": "Gepatit B ekspress test HBs Ag",
+    "group": "Ekspress test",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "118",
+    "title": "Gepatit C ekspress test HCV Ab",
+    "group": "Ekspress test",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "60",
+    "title": "SARS-COV-2 koronovirusiga antigenni aniqlash",
+    "group": "Ekspress test",
+    "duration": "30-60 daqiqa",
+    "price": "80 000"
+  },
+  {
+    "code": "657",
+    "title": "SARS-COV-2 koronovirusiga Antitana IgG/IgM",
+    "group": "Ekspress test",
+    "duration": "30-60 daqiqa",
+    "price": "60 000"
+  },
+  {
+    "code": "693",
+    "title": "Umumiy Tiroksin (T4)",
+    "group": "Gormon",
+    "duration": "24 soat",
+    "price": "90 000"
+  },
+  {
+    "code": "694",
+    "title": "Umumiy triyodtironin (T3)",
+    "group": "Gormon",
+    "duration": "24 soat",
+    "price": "90 000"
+  },
+  {
+    "code": "88",
+    "title": "Fibrinogen",
+    "group": "Koagulogramma",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "798",
+    "title": "Koagulogramma 4 ko'rsatkichda",
+    "group": "Koagulogramma",
+    "duration": "30-60 daqiqa",
+    "price": "120 000"
+  },
+  {
+    "code": "86",
+    "title": "Protrombin Indeksi (ПТИ)",
+    "group": "Koagulogramma",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "87",
+    "title": "Qisman tromboplastin faollanish vaqti (АЧТВ)",
+    "group": "Koagulogramma",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "413",
+    "title": "Trombin Vaqti Tahlili",
+    "group": "Koagulogramma",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "137",
+    "title": "CRP С-reaktiv oqsil",
+    "group": "Revmoproba",
+    "duration": "30-60 daqiqa",
+    "price": "25 000"
+  },
+  {
+    "code": "164",
+    "title": "Revmatoid Faktor",
+    "group": "Revmoproba",
+    "duration": "30-60 daqiqa",
+    "price": "25 000"
+  },
+  {
+    "code": "40",
+    "title": "Revmoproba Umumiy 3 ko'rsatkich",
+    "group": "Revmoproba",
+    "duration": "30-60 daqiqa",
+    "price": "60 000"
+  },
+  {
+    "code": "691",
+    "title": "TORCH 10 tasi 1 da IgG IgM",
+    "group": "Torch Infeksiyasi",
+    "duration": "30-60 daqiqa",
+    "price": "170 000"
+  },
+  {
+    "code": "141",
+    "title": "Najas tahlili",
+    "group": "Umumiy klinik tahlillar",
+    "duration": "30-60 daqiqa",
+    "price": "20 000"
+  },
+  {
+    "code": "84",
+    "title": "Najas tahlili Parazitlarga Mikroskopiya bilan",
+    "group": "Umumiy klinik tahlillar",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "97",
+    "title": "Qon Ivish Vaqti (VSK)",
+    "group": "Umumiy klinik tahlillar",
+    "duration": "30-60 daqiqa",
+    "price": "20 000"
+  },
+  {
+    "code": "29",
+    "title": "Siydik tahlili Milkrosopiya bilan",
+    "group": "Umumiy klinik tahlillar",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "662",
+    "title": "Siydik tahlili, Nechiporenko bo'yicha",
+    "group": "Umumiy klinik tahlillar",
+    "duration": "30-60 daqiqa",
+    "price": "30 000"
+  },
+  {
+    "code": "19",
+    "title": "Umumiy qon tahlili 14 ko'rsatkichli",
+    "group": "Umumiy klinik tahlillar",
+    "duration": "30-60 daqiqa",
+    "price": "45 000"
+  },
+  {
+    "code": "57",
+    "title": "Umumiy qon tahlili Leykoformula bilan",
+    "group": "Umumiy klinik tahlillar",
+    "duration": "30-60 daqiqa",
+    "price": "50 000"
+  },
+  {
+    "code": "74",
+    "title": "Sifilis (RW)",
+    "group": "ZPPP",
+    "duration": "30-60 daqiqa",
+    "price": "40 000"
+  }
+]
