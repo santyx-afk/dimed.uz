@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const libDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'netlify', 'functions', 'lib');
 const load = (file) => import(pathToFileURL(join(libDir, file)).href);
 
-const { takenTimes } = await load('appointments.ts');
+const { takenTimes, isConfirmed } = await load('appointments.ts');
 const { availability } = await load('slots.ts');
 
 let passed = 0;
@@ -57,6 +57,11 @@ test("bekor qilingan va ko'chirilgan yozuvlar slotni bo'shatadi", () => {
   assert.deepEqual(takenTimes(rows, now), ['11:00']);
 });
 
+test('klinika bekor qilgan navbat slotni bo\'shatadi', () => {
+  const rows = [appt('09:00', 'cancelled_by_clinic'), appt('10:00', 'booked')];
+  assert.deepEqual(takenTimes(rows, now), ['10:00']);
+});
+
 test('aralash holatlar to\'g\'ri ajratiladi', () => {
   const rows = [
     appt('08:00', 'paid'),
@@ -66,6 +71,18 @@ test('aralash holatlar to\'g\'ri ajratiladi', () => {
     appt('10:00', 'booked'),
   ];
   assert.deepEqual(takenTimes(rows, now).sort(), ['08:00', '08:30', '10:00']);
+});
+
+console.log('\nKuchdagi bron (eslatma va ko\'chirish uchun):');
+test("to'langan va klinikada to'lanadigan bronlar kuchda", () => {
+  assert.equal(isConfirmed({ status: 'paid' }), true);
+  assert.equal(isConfirmed({ status: 'booked' }), true);
+});
+
+test('hold, ko\'chirilgan va bekor qilinganlar kuchda emas', () => {
+  for (const status of ['hold', 'moved', 'cancelled', 'cancelled_by_clinic', 'done']) {
+    assert.equal(isConfirmed({ status }), false, `${status} kuchda bo'lmasligi kerak`);
+  }
 });
 
 console.log('\nSlot ro\'yxatiga ta\'siri:');

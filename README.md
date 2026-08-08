@@ -58,7 +58,20 @@ legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
 | `GET /api/me` | Bemor: qabullari va tahlillari | ✅ 2-hafta |
 | `GET /api/result-file` | Tahlil PDF'iga vaqtinchalik havola | ✅ 2-hafta |
 | `GET,POST /api/doctor-schedule` | Shifokor: smenalar, slot davomiyligi, navbat | ✅ 2-hafta |
-| `POST /api/reschedule` | Vaqtni ko'chirish (1 soat qoidasi) | 3-hafta |
+| `POST /api/reschedule` | Vaqtni ko'chirish (1 soat qoidasi) | ✅ 3-hafta |
+| `POST /api/doctor-off` | «Shifokor ishga chiqa olmadi»: kunni yopish | ✅ 3-hafta |
+
+### Rejalashtirilgan funksiyalar (cron)
+
+Netlify Scheduled Functions — tashqaridan chaqirilmaydi, faqat jadval bo'yicha:
+
+| Funksiya | Jadval (UTC) | Vazifa |
+| --- | --- | --- |
+| `remind-patients` | `*/10 * * * *` | Qabulga ~1 soat qolgan bemorlarga eslatma |
+| `doctor-daily` | `0 2 * * *` | Toshkentda 07:00 — shifokorga «bugungi navbatlaringiz» |
+
+Ikkalasi ham takror yubormaydi: eslatma yozuvdagi `reminded_at`, kunlik
+xulosa esa `schedules` dagi `summary_sent_at` bilan bir martaga bog'langan.
 
 ### Slot va bron qoidalari
 
@@ -71,6 +84,11 @@ legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
   avtomatik bo'shaydi. "Klinikada to'lash" rejimida bron darhol kuchga
   kiradi.
 - Klinika vaqti — Asia/Tashkent (UTC+5), server UTC'da ishlasa ham.
+- **Bekor qilish yo'q** — bemor faqat vaqtni ko'chira oladi, shifokor
+  o'zgarmaydi. Eski yozuv `moved` bo'ladi va sloti bo'shaydi.
+- Shifokor kunni yopsa (`/api/doctor-off`) o'sha kundagi navbatlar
+  `cancelled_by_clinic` bo'ladi, bemorlarga bot orqali xabar ketadi va
+  slotlar bo'shaydi.
 
 ### To'lov rejimi
 

@@ -1,9 +1,10 @@
 import type { Context } from '@netlify/functions';
-import { PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, getDoctor } from './lib/auth.ts';
-import { doctorDayKey, isValidSlot, isBookable, type Shift } from './lib/slots.ts';
+import { doctorDayKey, isValidSlot, isBookable } from './lib/slots.ts';
+import { shiftsFor } from './lib/schedule.ts';
 import { isDateKey, isTime, toInstant, weekdayOf, type DateKey } from './lib/time.ts';
 import { createPayment } from './lib/payment.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
@@ -133,15 +134,6 @@ export default async (request: Request, _context: Context): Promise<Response> =>
   }
 };
 
-async function shiftsFor(doctorId: string, date: DateKey, fallback: Shift[]): Promise<Shift[]> {
-  const override = await db.send(
-    new GetCommand({ TableName: TABLES.schedules, Key: { doctor_id: doctorId, date } }),
-  );
-  const item = override.Item as { shifts?: Shift[]; day_off?: boolean } | undefined;
-  if (item?.day_off) return [];
-  return item?.shifts ?? fallback;
-}
-
 /** Bot orqali tasdiq. Xabar ketmasa ham bron kuchda qoladi. */
 async function confirmAtClinic(
   telegramId: string,
@@ -158,7 +150,7 @@ async function confirmAtClinic(
         `Sana: ${date}, soat ${time}\n` +
         `Narx: ${price.toLocaleString('ru-RU')} so'm\n\n` +
         `To'lov qabulxonada amalga oshiriladi. Iltimos, 10 daqiqa oldin keling.\n` +
-        `Vaqtni ko'chirish: qabulgacha 1 soat qolgunicha /reschedule`,
+        `Vaqtni ko'chirish — shaxsiy kabinetda, qabulgacha 1 soat qolgunicha.`,
     );
   } catch (err) {
     await logToAdmin('book/confirm-xabar', err);

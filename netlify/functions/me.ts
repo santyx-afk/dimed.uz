@@ -2,6 +2,8 @@ import type { Context } from '@netlify/functions';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, getDoctor } from './lib/auth.ts';
+import { isConfirmed } from './lib/appointments.ts';
+import { isBookable } from './lib/slots.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
@@ -49,8 +51,16 @@ async function loadAppointments(phone: string) {
   );
 
   const rows = ((found.Items ?? []) as AppointmentRow[]).filter(
-    // Tugallanmagan hold va bekor qilinganlar bemorga ko'rsatilmaydi.
-    (a) => a.status === 'paid' || a.status === 'booked' || a.status === 'done',
+    /*
+      Tugallanmagan hold va ko'chirilgan yozuvlar ko'rsatilmaydi
+      (ko'chirilganining o'rniga yangisi turadi), klinika bekor
+      qilgani esa ko'rinadi — bemor buni bilishi kerak.
+    */
+    (a) =>
+      a.status === 'paid' ||
+      a.status === 'booked' ||
+      a.status === 'done' ||
+      a.status === 'cancelled_by_clinic',
   );
 
   // Shifokor nomlarini bir marta yuklaymiz.
@@ -63,7 +73,8 @@ async function loadAppointments(phone: string) {
     }),
   );
 
-  const nowIso = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
   return rows
     .map((a) => ({
       doctorId: a.doctor_id,
@@ -75,6 +86,8 @@ async function loadAppointments(phone: string) {
       status: a.status,
       price: a.price,
       upcoming: a.starts_at >= nowIso,
+      // Ko'chirish faqat kuchdagi bronga va 1 soat qolgunicha.
+      canMove: isConfirmed(a) && isBookable(a.date, a.time, now),
     }))
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }
