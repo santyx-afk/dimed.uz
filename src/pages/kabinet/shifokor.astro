@@ -46,6 +46,18 @@ import Base from '../../layouts/Base.astro';
       <div class="card glass">
         <h2>Bugungi navbat · <span id="todayLabel"></span></h2>
         <div id="queue"></div>
+
+        <h2 class="mt">Ishga chiqa olmasangiz</h2>
+        <p class="note">
+          Kun yopiladi, oʻsha kundagi barcha navbatlar bekor qilinadi va har bir bemorga
+          Telegram orqali xabar boradi. Bu amalni qaytarib boʻlmaydi.
+        </p>
+        <label class="off-lab">
+          Sana
+          <input type="date" id="offDate">
+        </label>
+        <p class="msg" id="offMsg" role="status" aria-live="polite"></p>
+        <button class="btn btn-ghost danger" id="offBtn">Ishga chiqa olmayman</button>
       </div>
     </div>
   </section>
@@ -67,6 +79,12 @@ import Base from '../../layouts/Base.astro';
 
   const setMsg = (text: string, kind: 'error' | 'ok' | '' = '') => {
     const msg = el('msg');
+    msg.textContent = text;
+    msg.className = `msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  const setOffMsg = (text: string, kind: 'error' | 'ok' | '' = '') => {
+    const msg = el('offMsg');
     msg.textContent = text;
     msg.className = `msg${kind ? ` ${kind}` : ''}`;
   };
@@ -98,6 +116,10 @@ import Base from '../../layouts/Base.astro';
     el('title').textContent = data.doctor.name;
     el('subtitle').textContent = data.doctor.job;
     el('todayLabel').textContent = data.today;
+
+    const offDate = el<HTMLInputElement>('offDate');
+    offDate.value = data.today;
+    offDate.min = data.today;
 
     shifts = data.doctor.shifts.map((s) => ({ ...s }));
     slotMinutes = data.doctor.slotMinutes;
@@ -172,8 +194,8 @@ import Base from '../../layouts/Base.astro';
           .map((time) => {
             const a = byTime.get(time);
             const who = a
-              ? `<span class="who">${a.phone}</span><span class="pill ${a.status === 'moved' ? 'warn' : 'ok'}">${
-                  a.status === 'moved' ? 'koʻchirilgan' : a.status === 'hold' ? 'kutilmoqda' : 'band'
+              ? `<span class="who">${a.phone}</span><span class="pill ${a.status === 'hold' ? 'warn' : 'ok'}">${
+                  a.status === 'hold' ? 'kutilmoqda' : 'band'
                 }</span>`
               : '<span class="who empty">boʻsh</span>';
             return `<div class="q"><span class="tm">${time}</span>${who}</div>`;
@@ -205,6 +227,47 @@ import Base from '../../layouts/Base.astro';
       else setMsg(data.error ?? 'Saqlab boʻlmadi.', 'error');
     } catch {
       setMsg('Internetga ulanishda muammo.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  el('offBtn').addEventListener('click', async () => {
+    const btn = el<HTMLButtonElement>('offBtn');
+    const date = el<HTMLInputElement>('offDate').value;
+    if (!date) {
+      setOffMsg('Sanani tanlang.', 'error');
+      return;
+    }
+
+    // Bekor qilingan navbatlarni qaytarib bo'lmaydi — shuning uchun so'raymiz.
+    if (!confirm(`${date} kunidagi barcha navbatlar bekor qilinsinmi?\nBemorlarga xabar boradi.`)) {
+      return;
+    }
+
+    btn.disabled = true;
+    setOffMsg('Bajarilmoqda…');
+    try {
+      const res = await fetch('/api/doctor-off', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ date }),
+      });
+      const data = (await res.json()) as { cancelled?: number; notified?: number; error?: string };
+
+      if (!res.ok) {
+        setOffMsg(data.error ?? 'Bajarib boʻlmadi.', 'error');
+        return;
+      }
+
+      setOffMsg(
+        `Kun yopildi. Bekor qilingan navbatlar: ${data.cancelled ?? 0}, xabar berildi: ${data.notified ?? 0}.`,
+        'ok',
+      );
+      await load();
+    } catch {
+      setOffMsg('Internetga ulanishda muammo.', 'error');
     } finally {
       btn.disabled = false;
     }
@@ -410,6 +473,42 @@ import Base from '../../layouts/Base.astro';
 
   #save {
     width: 100%;
+  }
+
+  .off-lab {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--muted);
+    margin-top: 12px;
+  }
+
+  .off-lab input {
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 11px;
+    font: inherit;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .off-lab input:focus {
+    border-color: var(--leaf);
+    outline: none;
+  }
+
+  .btn.danger {
+    width: 100%;
+    color: var(--rose);
+    border-color: var(--rose);
+  }
+
+  .btn.danger:hover {
+    background: var(--rose-soft);
   }
 
   .card :global(.q) {

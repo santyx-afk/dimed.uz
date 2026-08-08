@@ -41,6 +41,7 @@ import Base from '../layouts/Base.astro';
 
 <script>
   type Appointment = {
+    doctorId: string;
     doctorName: string;
     doctorJob: string;
     date: string;
@@ -48,7 +49,10 @@ import Base from '../layouts/Base.astro';
     status: string;
     price: number;
     upcoming: boolean;
+    canMove: boolean;
   };
+
+  type Slot = { time: string; free: boolean };
 
   type LabResult = {
     id: string;
@@ -83,7 +87,11 @@ import Base from '../layouts/Base.astro';
     booked: { text: 'band qilingan', cls: 'ok' },
     done: { text: 'boʻlib oʻtgan', cls: 'muted' },
     moved: { text: 'koʻchirilgan', cls: 'warn' },
+    cancelled_by_clinic: { text: 'klinika bekor qildi', cls: 'warn' },
   };
+
+  /** Ko'chirish oynasi ochilgan qabul: "doctorId|sana|vaqt". */
+  let openMove = '';
 
   const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -133,10 +141,51 @@ import Base from '../layouts/Base.astro';
           )
           .join('')
       : '<p class="empty">Oʻtgan qabullar yoʻq.</p>';
+
+    // Qayta chizishdan keyin ochiq turgan ko'chirish oynasini tiklaymiz.
+    if (openMove && panelOf(openMove)) loadSlots(openMove);
+    else openMove = '';
   }
+
+  /** Qabulni bir qatorda aniqlaydigan kalit. */
+  const keyOf = (a: Appointment) => `${a.doctorId}|${a.date}|${a.time}`;
+  const partsOf = (key: string) => {
+    const [doctor = '', date = '', time = ''] = key.split('|');
+    return { doctor, date, time };
+  };
+
+  const dayKey = (offset = 0) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
+  const panelOf = (key: string) =>
+    document.querySelector<HTMLDivElement>(`[data-panel="${key}"]`);
+  const pick = <T extends HTMLElement>(attr: string, key: string) =>
+    document.querySelector<T>(`[data-${attr}="${key}"]`);
 
   function appointmentCard(a: Appointment) {
     const s = statusLabel[a.status] ?? { text: a.status, cls: 'muted' };
+    const key = keyOf(a);
+
+    /*
+      Ko'chirish tugmasi faqat kuchdagi bronda va qabulga 1 soatdan
+      ko'p qolganda chiqadi — bu qoidani server ham qayta tekshiradi.
+    */
+    const move = a.canMove
+      ? `<button class="mv-btn" data-move="${key}">Vaqtni koʻchirish</button>
+         <div class="mv" data-panel="${key}" hidden>
+           <label class="mv-lab">Yangi sana
+             <input type="date" data-date="${key}" value="${a.date}"
+                    min="${dayKey()}" max="${dayKey(90)}">
+           </label>
+           <div class="mv-slots" data-slots="${key}"></div>
+           <p class="mv-msg" data-msg="${key}" role="status" aria-live="polite"></p>
+         </div>`
+      : '';
+
     return `<div class="appt">
       <div>
         <div class="nm">${a.doctorName}</div>
@@ -147,8 +196,111 @@ import Base from '../layouts/Base.astro';
         <span class="pill ${s.cls}">${s.text}</span>
         <span class="dt">${fmtPrice(a.price)}</span>
       </div>
+      ${move}
     </div>`;
   }
+
+  /** Tanlangan kun uchun bo'sh slotlarni yuklaydi. */
+  async function loadSlots(key: string) {
+    const panel = panelOf(key);
+    const box = pick<HTMLDivElement>('slots', key);
+    const input = pick<HTMLInputElement>('date', key);
+    if (!panel || !box || !input) return;
+
+    panel.hidden = false;
+    box.innerHTML = '<span class="mv-hint">Yuklanmoqda…</span>';
+    setMoveMsg(key, '');
+
+    const { doctor } = partsOf(key);
+    try {
+      const res = await fetch(
+        `/api/slots?doctor=${encodeURIComponent(doctor)}&date=${encodeURIComponent(input.value)}`,
+      );
+      const data = (await res.json()) as { slots?: Slot[]; reason?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? String(res.status));
+
+      const free = (data.slots ?? []).filter((s) => s.free);
+      box.innerHTML = free.length
+        ? free
+            .map((s) => `<button class="mv-slot" data-slot="${key}" data-time="${s.time}">${s.time}</button>`)
+            .join('')
+        : `<span class="mv-hint">${data.reason ?? 'Bu kuni boʻsh vaqt yoʻq.'}</span>`;
+    } catch {
+      box.innerHTML = '<span class="mv-hint">Slotlarni yuklab boʻlmadi.</span>';
+    }
+  }
+
+  function setMoveMsg(key: string, text: string, kind: 'error' | 'ok' | '' = '') {
+    const msg = pick<HTMLParagraphElement>('msg', key);
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = `mv-msg${kind ? ` ${kind}` : ''}`;
+  }
+
+  async function moveTo(key: string, toTime: string) {
+    const input = pick<HTMLInputElement>('date', key);
+    if (!input) return;
+
+    const { doctor, date, time } = partsOf(key);
+    setMoveMsg(key, 'Koʻchirilmoqda…');
+
+    try {
+      const res = await fetch('/api/reschedule', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ doctor, date, time, toDate: input.value, toTime }),
+      });
+      const data = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        setMoveMsg(key, data.error ?? 'Koʻchirib boʻlmadi.', 'error');
+        // Slot band bo'lib qolgan bo'lsa ro'yxatni yangilaymiz.
+        if (res.status === 409) loadSlots(key);
+        return;
+      }
+
+      openMove = '';
+      await load();
+    } catch {
+      setMoveMsg(key, 'Internetga ulanishda muammo.', 'error');
+    }
+  }
+
+  /*
+    Kartochkalar har safar qaytadan chiziladi, shuning uchun hodisalar
+    o'zgarmas ota-elementda ushlanadi (event delegatsiya).
+  */
+  el('upcoming').addEventListener('click', (event) => {
+    const target = event.target as HTMLElement;
+
+    const move = target.closest<HTMLButtonElement>('[data-move]');
+    if (move) {
+      const key = move.dataset.move ?? '';
+      if (openMove === key) {
+        openMove = '';
+        const panel = panelOf(key);
+        if (panel) panel.hidden = true;
+      } else {
+        // Bir vaqtda bitta oyna ochiq turadi.
+        if (openMove) {
+          const previous = panelOf(openMove);
+          if (previous) previous.hidden = true;
+        }
+        openMove = key;
+        loadSlots(key);
+      }
+      return;
+    }
+
+    const slot = target.closest<HTMLButtonElement>('[data-slot]');
+    if (slot) moveTo(slot.dataset.slot ?? '', slot.dataset.time ?? '');
+  });
+
+  el('upcoming').addEventListener('change', (event) => {
+    const input = (event.target as HTMLElement).closest<HTMLInputElement>('[data-date]');
+    if (input) loadSlots(input.dataset.date ?? '');
+  });
 
   function renderResults(results: LabResult[]) {
     el('results').innerHTML = results.length
@@ -345,6 +497,111 @@ import Base from '../layouts/Base.astro';
     background: var(--rose-soft);
     margin-left: auto;
     flex-shrink: 0;
+  }
+
+  /* Vaqtni ko'chirish */
+  .card :global(.mv-btn) {
+    align-self: flex-start;
+    border: 1px solid var(--card-brd);
+    background: none;
+    color: var(--leaf);
+    border-radius: 10px;
+    padding: 7px 13px;
+    font-size: 12.5px;
+    font-weight: 650;
+  }
+
+  .card :global(.mv-btn:hover) {
+    border-color: var(--leaf);
+    background: var(--leaf-soft);
+  }
+
+  .card :global(.mv-btn:focus-visible) {
+    outline: 2px solid var(--leaf);
+    outline-offset: 2px;
+  }
+
+  .card :global(.mv) {
+    border-top: 1px dashed var(--line);
+    padding-top: 12px;
+  }
+
+  .card :global(.mv-lab) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .card :global(.mv-lab input) {
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .card :global(.mv-lab input:focus) {
+    border-color: var(--leaf);
+    outline: none;
+  }
+
+  .card :global(.mv-slots) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .card :global(.mv-slot) {
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    color: var(--ink);
+    border-radius: 9px;
+    padding: 7px 11px;
+    font-size: 12.5px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .card :global(.mv-slot:hover) {
+    border-color: var(--leaf);
+    background: var(--leaf-soft);
+    color: var(--leaf);
+  }
+
+  .card :global(.mv-slot:focus-visible) {
+    outline: 2px solid var(--leaf);
+    outline-offset: 2px;
+  }
+
+  .card :global(.mv-hint) {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .card :global(.mv-msg:empty) {
+    display: none;
+  }
+
+  .card :global(.mv-msg) {
+    margin-top: 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .card :global(.mv-msg.error) {
+    color: var(--rose);
+  }
+
+  .card :global(.mv-msg.ok) {
+    color: var(--leaf);
   }
 
   .card :global(.row) {
