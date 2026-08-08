@@ -1,8 +1,14 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { AWS_REGION, tableName } from './env.ts';
+import { AWS_REGION, optional, tableName } from './env.ts';
 
-const client = new DynamoDBClient({ region: AWS_REGION });
+// Testlarda lokal soxta DynamoDB ishlatiladi.
+const endpoint = optional('DIMED_DYNAMO_ENDPOINT');
+
+const client = new DynamoDBClient({
+  region: AWS_REGION,
+  ...(endpoint ? { endpoint } : {}),
+});
 
 export const db = DynamoDBDocumentClient.from(client, {
   marshallOptions: { removeUndefinedValues: true },

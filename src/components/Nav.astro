@@ -18,7 +18,10 @@ const links = [
     <div class="nav-links">
       {links.map((l) => <a href={l.href}>{l.label}</a>)}
     </div>
-    <a class="btn btn-sm nav-cta" href="/#navbat-widget">Navbat olish</a>
+    <div class="nav-cta">
+      <a class="btn btn-ghost btn-sm" href="/kabinet">Kabinet</a>
+      <a class="btn btn-sm" href="/#navbat-widget">Navbat olish</a>
+    </div>
   </div>
 </nav>
 
@@ -64,7 +67,15 @@ const links = [
   }
 
   .nav-cta {
+    display: flex;
+    gap: 9px;
     margin-left: auto;
+  }
+
+  @media (max-width: 460px) {
+    .nav-cta .btn-ghost {
+      display: none;
+    }
   }
 
   .nav-links + .nav-cta {

@@ -35,9 +35,17 @@ const tables = [
     ttlAttribute: 'expires_at',
   },
   {
+    // telegram-index: shifokor o'z kabinetiga Telegram orqali kiradi
     name: 'doctors',
-    attrs: [S('doctor_id')],
+    attrs: [S('doctor_id'), S('telegram_id')],
     keys: [HASH('doctor_id')],
+    indexes: [
+      {
+        IndexName: 'telegram-index',
+        KeySchema: [HASH('telegram_id')],
+        Projection: { ProjectionType: 'ALL' },
+      },
+    ],
   },
   {
     // PK: doctor_id, SK: sana — bir shifokorning kunlik smenalari

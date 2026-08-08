@@ -27,6 +27,10 @@ export function createSessionCookie(session: Omit<Session, 'exp'>): string {
   ].join('; ');
 }
 
+/** Sessiyani tugatadigan cookie (brauzer uni darhol o'chiradi). */
+export const clearSessionCookie = (): string =>
+  `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
+
 /** Cookie'dagi sessiyani tekshiradi. Yaroqsiz bo'lsa — null. */
 export function readSession(cookieHeader: string | undefined): Session | null {
   const raw = cookieHeader

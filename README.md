@@ -19,8 +19,13 @@ npm run dev             # http://localhost:4321
 | `npm run build` | Saytni `dist/` ga yig'ish |
 | `npm run preview` | Yig'ilgan saytni ko'rish |
 | `npm run typecheck` | Astro va funksiyalar tiplarini tekshirish |
+| `npm test` | Barcha tekshiruvlar (mantiq + API) |
 | `npm run create-tables` | DynamoDB jadvallarini yaratish (bir marta) |
+| `npm run seed-doctors` | Shifokorlarni bazaga yozish |
 | `npm run build-analyses` | `legacy/` dan tahlillar ro'yxatini yangilash |
+
+Testlar haqiqiy AWS'siz ishlaydi: `scripts/fake-dynamo.mjs` xotirada
+DynamoDB o'rnini bosadi, Telegram chaqiruvlari esa ushlab qolinadi.
 
 ## Loyiha tuzilishi
 
@@ -45,11 +50,35 @@ legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
 | --- | --- | --- |
 | `POST /api/telegram-webhook` | Bot: `/start`, kontakt qabul qilish, OTP yuborish | ✅ 1-hafta |
 | `POST /api/auth-verify` | OTP kodni tekshirish, sessiya ochish | ✅ 1-hafta |
+| `POST /api/logout` | Sessiyani tugatish | ✅ 2-hafta |
 | `POST /api/lc-results` | 1C dan tahlil natijalari | ✅ 1-hafta |
-| `GET /api/slots` | Bo'sh slotlar | 2-hafta |
-| `POST /api/book` | Slotni band qilish + RHMT to'lov | 2-hafta |
-| `POST /api/rhmt-webhook` | To'lov tasdig'i | 2-hafta |
+| `GET /api/slots` | Bo'sh slotlar (shifokor + sana) | ✅ 2-hafta |
+| `POST /api/book` | Slotni atomik band qilish + to'lov | ✅ 2-hafta |
+| `POST /api/payment-webhook` | To'lov tasdig'i → bron yoki bo'shatish | ✅ 2-hafta |
+| `GET /api/me` | Bemor: qabullari va tahlillari | ✅ 2-hafta |
+| `GET /api/result-file` | Tahlil PDF'iga vaqtinchalik havola | ✅ 2-hafta |
+| `GET,POST /api/doctor-schedule` | Shifokor: smenalar, slot davomiyligi, navbat | ✅ 2-hafta |
 | `POST /api/reschedule` | Vaqtni ko'chirish (1 soat qoidasi) | 3-hafta |
+
+### Slot va bron qoidalari
+
+- Slotlar shifokorning smenalaridan hisoblanadi; smenalar orasidagi
+  bo'shliq — tanaffus, unga slot tushmaydi.
+- Qabul boshlanishiga **kamida 1 soat** qolgan bo'lishi kerak.
+- Slot DynamoDB shartli yozuvi bilan band qilinadi — ikki bemor bitta
+  slotni ola olmaydi (ikkinchisiga 409 qaytadi).
+- Onlayn to'lovda slot 5 daqiqaga *hold* qilinadi; to'lov o'tmasa
+  avtomatik bo'shaydi. "Klinikada to'lash" rejimida bron darhol kuchga
+  kiradi.
+- Klinika vaqti — Asia/Tashkent (UTC+5), server UTC'da ishlasa ham.
+
+### To'lov rejimi
+
+RHMT kalitlari kelgunicha `RHMT_ENABLED` bo'sh qoldiriladi va sayt
+**"klinikada to'lash"** rejimida ishlaydi: bemor slotni band qiladi,
+to'lov qabulxonada amalga oshiriladi. Kalitlar sozlangach
+`netlify/functions/lib/payment.ts` dagi `createPayment` to'ldiriladi va
+`RHMT_ENABLED=1` qilinadi — bron mantig'i o'zgarmaydi.
 
 ## Sozlash (bir martalik)
 

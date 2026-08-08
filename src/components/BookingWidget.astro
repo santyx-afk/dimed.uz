@@ -34,7 +34,6 @@ import DeptIcon from './DeptIcon.astro';
     }
   </template>
 </div>
-
 <script is:inline define:vars={{ departments, doctors }}>
   const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
   const MONTHS = [
@@ -42,21 +41,10 @@ import DeptIcon from './DeptIcon.astro';
     'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
   ];
   const fmtPrice = (n) => n.toLocaleString('ru-RU').replace(/,/g, ' ') + ' soʻm';
-  const toMin = (s) => {
-    const [h, m] = s.split(':').map(Number);
-    return h * 60 + m;
-  };
-  const toHM = (m) =>
-    String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
-  const dstr = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const pad = (n) => String(n).padStart(2, '0');
+  // Server YYYY-MM-DD kutadi.
+  const dstr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const dlabel = (d) => `${WD[d.getDay()]}, ${d.getDate()}-${MONTHS[d.getMonth()]}`;
-
-  /* 2-haftagacha band slotlar shu yerda taqlid qilinadi. */
-  const seededBusy = (key) => {
-    let h = 0;
-    for (const c of key) h = (h * 31 + c.charCodeAt(0)) | 0;
-    return (h >>> 0) % 10 < 3;
-  };
 
   // <template> ichidagi tugunlar DocumentFragment'da yashaydi —
   // ularni faqat template.content orqali olish mumkin.
@@ -80,7 +68,7 @@ import DeptIcon from './DeptIcon.astro';
     return out;
   };
 
-  const state = { step: 1, deptId: null, doc: null, date: null, dateLabel: null, time: null, paid: false };
+  const state = { step: 1, deptId: null, doc: null, date: null, dateLabel: null, time: null, booked: null };
   const wBody = document.getElementById('wBody');
   const stepPills = [...document.querySelectorAll('#wSteps .step-pill')];
 
@@ -96,40 +84,30 @@ import DeptIcon from './DeptIcon.astro';
   stepPills.forEach((p, i) =>
     p.addEventListener('click', () => {
       if (i + 1 < state.step) {
-        state.paid = false;
+        state.booked = null;
         setStep(i + 1);
       }
     }),
   );
 
-  function slotsFor(doc, dateKey) {
-    const today = new Date();
-    const isToday = dateKey === dstr(today);
-    const nowMin = today.getHours() * 60 + today.getMinutes();
-    const out = [];
-    for (const shift of doc.shifts) {
-      let t = toMin(shift.start);
-      const end = toMin(shift.end);
-      while (t + doc.slotMinutes <= end) {
-        // Qabulga 1 soatdan kam qolgan slotlar band hisoblanadi.
-        const tooSoon = isToday && t < nowMin + 60;
-        out.push({ time: toHM(t), free: !seededBusy(doc.id + dateKey + t) && !tooSoon });
-        t += doc.slotMinutes;
-      }
-    }
-    return out;
+  /** Bo'sh slotlar serverdan olinadi — band vaqtlar bazadan keladi. */
+  async function fetchSlots(doctorId, dateKey) {
+    const res = await fetch(`/api/slots?doctor=${encodeURIComponent(doctorId)}&date=${dateKey}`);
+    if (!res.ok) throw new Error(`slots ${res.status}`);
+    const data = await res.json();
+    return data.slots ?? [];
   }
 
-  function renderSlots(grid, doc, dateKey) {
-    const slots = slotsFor(doc, dateKey);
-    grid.innerHTML =
-      slots
-        .map(
-          (s) =>
-            `<button class="slot-btn${s.free ? '' : ' busy'}" data-t="${s.time}"${s.free ? '' : ' disabled'}>${s.time}</button>`,
-        )
-        .join('') ||
-      '<p class="slot-empty">Bu kunga boʻsh slot qolmadi — boshqa sanani tanlang.</p>';
+  function slotsHtml(slots) {
+    if (!slots.length) {
+      return '<p class="slot-empty">Bu kunga slot yoʻq — boshqa sanani tanlang.</p>';
+    }
+    return slots
+      .map(
+        (s) =>
+          `<button class="slot-btn${s.free ? '' : ' busy'}" data-t="${s.time}"${s.free ? '' : ' disabled'}>${s.time}</button>`,
+      )
+      .join('');
   }
 
   function render() {
@@ -176,100 +154,187 @@ import DeptIcon from './DeptIcon.astro';
       );
       wBody.querySelector('.back-link').addEventListener('click', () => setStep(1));
     } else if (state.step === 3) {
-      const doc = state.doc;
-      const days = nextDays(doc);
-      if (!state.date) {
-        // Bo'sh slot bor birinchi kunni ochamiz — foydalanuvchi band
-        // slotlar ro'yxatiga qarab qolmasin.
-        const withFree = days.find((x) => x.ok && slotsFor(doc, dstr(x.date)).some((s) => s.free));
-        const fallback = days.find((x) => x.ok);
-        const chosen = withFree ?? fallback;
-        state.date = chosen ? dstr(chosen.date) : null;
-      }
-      wBody.innerHTML =
-        `<div class="pane-label">${doc.name} · sana va vaqt</div><div class="date-row">` +
-        days
-          .map(
-            (x) => `<button class="date-pill${dstr(x.date) === state.date ? ' on' : ''}"
-              data-d="${dstr(x.date)}" data-l="${dlabel(x.date)}"${x.ok ? '' : ' disabled'}>
-              ${WD[x.date.getDay()]}<b>${x.date.getDate()}</b></button>`,
-          )
-          .join('') +
-        `</div><div class="slot-grid" id="slotGrid"></div>
-         <div class="slot-legend"><span class="free"><i></i>boʻsh</span><span class="busy"><i></i>band</span></div>
-         <button class="back-link">← shifokorni almashtirish</button>`;
+      renderDatesAndSlots();
+    } else if (state.step === 4) {
+      renderCheckout();
+    }
+  }
 
-      const grid = wBody.querySelector('#slotGrid');
-      const paint = () => {
-        renderSlots(grid, doc, state.date);
-        // O'tib ketgan slotlar ro'yxati uzun bo'lsa, birinchi bo'sh
-        // slotni ko'rinadigan qilamiz.
-        const firstFree = grid.querySelector('.slot-btn:not(.busy)');
-        if (firstFree) grid.scrollTop = Math.max(0, firstFree.offsetTop - grid.offsetTop - 8);
-        grid.querySelectorAll('.slot-btn:not(.busy)').forEach((s) =>
-          s.addEventListener('click', () => {
-            state.time = s.dataset.t;
-            const pill = wBody.querySelector('.date-pill.on');
-            state.dateLabel = pill ? pill.dataset.l : state.date;
-            setStep(4);
-          }),
-        );
-      };
-      wBody.querySelectorAll('.date-pill:not([disabled])').forEach((p) =>
-        p.addEventListener('click', () => {
-          state.date = p.dataset.d;
-          wBody.querySelectorAll('.date-pill').forEach((x) => x.classList.toggle('on', x === p));
-          paint();
+  function renderDatesAndSlots() {
+    const doc = state.doc;
+    const days = nextDays(doc);
+    const workdays = days.filter((x) => x.ok);
+    if (!state.date && workdays.length) state.date = dstr(workdays[0].date);
+
+    wBody.innerHTML =
+      `<div class="pane-label">${doc.name} · sana va vaqt</div><div class="date-row">` +
+      days
+        .map(
+          (x) => `<button class="date-pill${dstr(x.date) === state.date ? ' on' : ''}"
+            data-d="${dstr(x.date)}" data-l="${dlabel(x.date)}"${x.ok ? '' : ' disabled'}>
+            ${WD[x.date.getDay()]}<b>${x.date.getDate()}</b></button>`,
+        )
+        .join('') +
+      `</div><div class="slot-grid" id="slotGrid"></div>
+       <div class="slot-legend"><span class="free"><i></i>boʻsh</span><span class="busy"><i></i>band</span></div>
+       <button class="back-link">← shifokorni almashtirish</button>`;
+
+    const grid = wBody.querySelector('#slotGrid');
+
+    const selectDate = (dateKey) => {
+      state.date = dateKey;
+      wBody
+        .querySelectorAll('.date-pill')
+        .forEach((p) => p.classList.toggle('on', p.dataset.d === dateKey));
+    };
+
+    const paint = async (dateKey, { autoAdvance = false } = {}) => {
+      grid.innerHTML = '<p class="slot-empty">Yuklanmoqda…</p>';
+      let slots;
+      try {
+        slots = await fetchSlots(doc.id, dateKey);
+      } catch {
+        grid.innerHTML = '<p class="slot-empty">Slotlarni yuklab boʻlmadi. Qayta urinib koʻring.</p>';
+        return;
+      }
+
+      /*
+        Bugungi kunning slotlari o'tib ketgan bo'lishi mumkin —
+        bunda foydalanuvchini keyingi ish kuniga o'tkazamiz.
+      */
+      if (autoAdvance && !slots.some((s) => s.free)) {
+        const next = workdays.find((x) => dstr(x.date) > dateKey);
+        if (next) {
+          selectDate(dstr(next.date));
+          await paint(dstr(next.date), { autoAdvance: true });
+          return;
+        }
+      }
+
+      grid.innerHTML = slotsHtml(slots);
+      const firstFree = grid.querySelector('.slot-btn:not(.busy)');
+      if (firstFree) grid.scrollTop = Math.max(0, firstFree.offsetTop - grid.offsetTop - 8);
+
+      grid.querySelectorAll('.slot-btn:not(.busy)').forEach((s) =>
+        s.addEventListener('click', () => {
+          state.time = s.dataset.t;
+          const pill = wBody.querySelector('.date-pill.on');
+          state.dateLabel = pill ? pill.dataset.l : state.date;
+          setStep(4);
         }),
       );
-      wBody.querySelector('.back-link').addEventListener('click', () => setStep(2));
-      paint();
-    } else if (state.step === 4) {
-      const d = state.doc;
-      if (!state.paid) {
-        wBody.innerHTML = `<div class="pane-label">Bron maʼlumotlari</div>
-          <div class="sum-card">
-            <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
-            <div class="sum-row"><span class="k">Yoʻnalish</span><span class="v">${d.job}</span></div>
-            <div class="sum-row"><span class="k">Sana</span><span class="v">${state.dateLabel}</span></div>
-            <div class="sum-row"><span class="k">Vaqt</span><span class="v">${state.time} · ${d.slotMinutes} daqiqa</span></div>
-            <div class="sum-row total"><span class="k">Qabul narxi</span><span class="v">${fmtPrice(d.price)}</span></div>
-          </div>
-          <button class="btn w-full" id="wPay">RHMT orqali toʻlash</button>
-          <p class="pay-note">Toʻlov oʻtishi bilan slot avtomatik band qilinadi va Telegram botga tasdiq keladi.</p>
-          <button class="back-link">← vaqtni oʻzgartirish</button>`;
-        wBody.querySelector('.back-link').addEventListener('click', () => {
-          state.time = null;
-          setStep(3);
-        });
-        wBody.querySelector('#wPay').addEventListener('click', (e) => {
-          // To'lov va bron 2-haftada ulanadi (POST /api/book -> RHMT).
-          const btn = e.currentTarget;
-          btn.disabled = true;
-          btn.textContent = 'Toʻlov tizimi ulanmoqda…';
-          setTimeout(() => {
-            state.paid = true;
-            render();
-          }, 800);
-        });
-      } else {
-        wBody.innerHTML = `<div class="success">
-          <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></div>
-          <h4>Deyarli tayyor</h4>
-          <p>Onlayn toʻlov 2-hafta oxirida ulanadi. Hozircha navbatni telefon orqali tasdiqlaymiz:</p>
-          <div class="sum-card" style="margin-top:14px;text-align:left">
-            <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
-            <div class="sum-row"><span class="k">Sana · vaqt</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
-          </div>
-          <a class="btn" href="tel:+998559009103" style="margin-top:14px">+998 55 9009 103 ga qoʻngʻiroq</a>
-          <button class="back-link" id="resetBtn">Boshqa vaqt tanlash</button>
-        </div>`;
-        wBody.querySelector('#resetBtn').addEventListener('click', () => {
-          Object.assign(state, { step: 1, deptId: null, doc: null, date: null, time: null, paid: false });
-          setStep(1);
-        });
-      }
+    };
+
+    wBody.querySelectorAll('.date-pill:not([disabled])').forEach((p) =>
+      p.addEventListener('click', () => {
+        selectDate(p.dataset.d);
+        paint(p.dataset.d);
+      }),
+    );
+
+    if (state.date) paint(state.date, { autoAdvance: true });
+    else grid.innerHTML = '<p class="slot-empty">Bu shifokorning yaqin kunlarda qabuli yoʻq.</p>';
+  }
+
+  function renderCheckout() {
+    const d = state.doc;
+
+    if (state.booked) {
+      const b = state.booked;
+      wBody.innerHTML = `<div class="success">
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></div>
+        <h4>Navbatingiz band qilindi!</h4>
+        <p>${b.mode === 'at_clinic' ? 'Toʻlov qabulxonada amalga oshiriladi.' : 'Toʻlov qabul qilindi.'}</p>
+        <div class="sum-card" style="margin-top:14px;text-align:left">
+          <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
+          <div class="sum-row"><span class="k">Sana · vaqt</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
+          <div class="sum-row total"><span class="k">Narx</span><span class="v">${fmtPrice(d.price)}</span></div>
+        </div>
+        <p class="pay-note">Tasdiq Telegram botga yuborildi. Qabulga 1 soat qolganda eslatma keladi.</p>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap">
+          <a class="btn sm" href="/kabinet">Kabinetda koʻrish</a>
+          <button class="btn btn-ghost btn-sm" id="resetBtn">Yana navbat olish</button>
+        </div>
+      </div>`;
+      wBody.querySelector('#resetBtn').addEventListener('click', () => {
+        Object.assign(state, { step: 1, deptId: null, doc: null, date: null, time: null, booked: null });
+        setStep(1);
+      });
+      return;
     }
+
+    wBody.innerHTML = `<div class="pane-label">Bron maʼlumotlari</div>
+      <div class="sum-card">
+        <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
+        <div class="sum-row"><span class="k">Yoʻnalish</span><span class="v">${d.job}</span></div>
+        <div class="sum-row"><span class="k">Sana</span><span class="v">${state.dateLabel}</span></div>
+        <div class="sum-row"><span class="k">Vaqt</span><span class="v">${state.time} · ${d.slotMinutes} daqiqa</span></div>
+        <div class="sum-row total"><span class="k">Qabul narxi</span><span class="v">${fmtPrice(d.price)}</span></div>
+      </div>
+      <p class="book-msg" id="bookMsg" role="status" aria-live="polite"></p>
+      <button class="btn w-full" id="wBook">Navbatni band qilish</button>
+      <p class="pay-note">Band qilish uchun Telegram orqali kirgan boʻlishingiz kerak. Bekor qilish yoʻq — qabuldan 1 soat oldingacha vaqtni koʻchirish mumkin.</p>
+      <button class="back-link">← vaqtni oʻzgartirish</button>`;
+
+    wBody.querySelector('.back-link').addEventListener('click', () => {
+      state.time = null;
+      setStep(3);
+    });
+
+    const msg = wBody.querySelector('#bookMsg');
+    const btn = wBody.querySelector('#wBook');
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      msg.textContent = 'Band qilinmoqda…';
+      msg.className = 'book-msg';
+
+      try {
+        const res = await fetch('/api/book', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ doctor: d.id, date: state.date, time: state.time }),
+        });
+        const data = await res.json();
+
+        if (res.status === 401) {
+          // Kirmagan bo'lsa — kirish sahifasiga, keyin shu yerga qaytadi.
+          window.location.href = `/kirish?next=${encodeURIComponent(location.pathname + '#navbat-widget')}`;
+          return;
+        }
+
+        if (res.status === 409) {
+          msg.textContent = data.error ?? 'Bu vaqt band qilindi.';
+          msg.className = 'book-msg error';
+          btn.disabled = false;
+          setTimeout(() => {
+            state.time = null;
+            setStep(3);
+          }, 1600);
+          return;
+        }
+
+        if (!res.ok) {
+          msg.textContent = data.error ?? 'Bron qilib boʻlmadi.';
+          msg.className = 'book-msg error';
+          btn.disabled = false;
+          return;
+        }
+
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+          return;
+        }
+
+        state.booked = data;
+        render();
+      } catch {
+        msg.textContent = 'Internetga ulanishda muammo. Qayta urinib koʻring.';
+        msg.className = 'book-msg error';
+        btn.disabled = false;
+      }
+    });
   }
 
   render();
@@ -283,7 +348,7 @@ import DeptIcon from './DeptIcon.astro';
     const b = e.target.closest('[data-book-dept]');
     if (!b) return;
     state.deptId = b.dataset.bookDept;
-    state.paid = false;
+    state.booked = null;
     state.time = null;
     state.date = null;
     if (b.dataset.bookDoc) {
@@ -697,6 +762,18 @@ import DeptIcon from './DeptIcon.astro';
     color: var(--muted);
     margin-top: 11px;
     line-height: 1.5;
+  }
+
+  .widget :global(.book-msg) {
+    min-height: 20px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .widget :global(.book-msg.error) {
+    color: var(--rose);
   }
 
   .widget :global(.back-link) {
