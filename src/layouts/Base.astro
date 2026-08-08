@@ -1,0 +1,88 @@
+---
+import '../styles/global.css';
+import { site } from '../data/site';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+const { title = site.title, description = site.description } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://dimed.uz').href;
+---
+
+<!doctype html>
+<html lang="uz">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon-32x32.svg" type="image/svg+xml" />
+    <link rel="preload" href="/fonts/bricolage-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/instrument-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content="uz_UZ" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div class="aurora" aria-hidden="true"></div>
+    <Nav />
+    <slot />
+    <Footer />
+
+    <script>
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting) {
+              e.target.classList.add('on');
+              io.unobserve(e.target);
+            }
+          }
+        },
+        { threshold: 0.12 },
+      );
+      document.querySelectorAll('.rv').forEach((el) => io.observe(el));
+    </script>
+
+    <style>
+      .aurora {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        overflow: hidden;
+      }
+
+      .aurora::before,
+      .aurora::after {
+        content: '';
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(90px);
+      }
+
+      .aurora::before {
+        width: 640px;
+        height: 640px;
+        top: -220px;
+        right: -140px;
+        background: var(--blob-rose);
+      }
+
+      .aurora::after {
+        width: 560px;
+        height: 560px;
+        top: 340px;
+        left: -220px;
+        background: var(--blob-leaf);
+      }
+    </style>
+  </body>
+</html>

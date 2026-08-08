@@ -1,0 +1,1021 @@
+---
+import Base from '../layouts/Base.astro';
+import BookingWidget from '../components/BookingWidget.astro';
+import DeptIcon from '../components/DeptIcon.astro';
+import { departments } from '../data/departments';
+import { doctors, doctorsByDept } from '../data/doctors';
+import { site } from '../data/site';
+import analyses from '../data/analyses.json';
+
+const featured = ['19', '57', '23', '29', '798', '693', '691'];
+const featuredAnalyses = featured
+  .map((code) => analyses.find((a) => a.code === code))
+  .filter((a): a is (typeof analyses)[number] => Boolean(a));
+---
+
+<Base>
+  <header class="hero wrap" id="navbat">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">Chinoz · Koʻp ixtisosli tibbiy markaz</div>
+        <h1>Shifokorga navbat — <span class="grad">endi telefoningizda</span></h1>
+        <p class="hero-sub">
+          Boʻlimni tanlang, boʻsh vaqtni band qiling, RHMT orqali toʻlang — bron Telegram botda darhol
+          tasdiqlanadi. Tahlil natijalari esa shaxsiy kabinetingizga avtomatik tushadi.
+        </p>
+        <div class="hero-cta">
+          <a class="btn" href="#navbat-widget">Navbat olish</a>
+          <a class="btn btn-ghost" href="#bolimlar">Boʻlimlar bilan tanishish</a>
+        </div>
+        <div class="hero-stats">
+          <div class="stat-chip"><b>{departments.length}</b> boʻlim</div>
+          <div class="stat-chip"><b class="g">{doctors.length}</b> shifokor</div>
+          <div class="stat-chip"><b>{analyses.length}</b> tahlil turi</div>
+          <div class="stat-chip"><b class="g">08:00–22:00</b> har kuni</div>
+        </div>
+      </div>
+      <BookingWidget />
+    </div>
+  </header>
+
+  <section class="wrap features">
+    <div class="feat-grid">
+      <div class="feat glass rv">
+        <div class="ic rose">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6l2.1 2.1M5.6 18.4l2.1-2.1m8.6-8.6l2.1-2.1"></path>
+            <circle cx="12" cy="12" r="3.2"></circle>
+          </svg>
+        </div>
+        <h3>Yangi texnologiyalar</h3>
+        <p>
+          Aniq va tez diagnostika uchun zamonaviy uskunalar: UTT, EEG, ekspress-laboratoriya. Natijalar
+          kabinetingizga avtomatik yetkaziladi.
+        </p>
+      </div>
+      <div class="feat glass rv">
+        <div class="ic leaf">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 21v-2a4 4 0 0 1 4-4 4 4 0 0 1 4 4v2"></path>
+            <circle cx="12" cy="9" r="3.4"></circle>
+            <path d="M17.8 8.2l1.4-1.4M4.8 6.8l1.4 1.4"></path>
+          </svg>
+        </div>
+        <h3>Malakali shifokorlar</h3>
+        <p>
+          Oliy toifali va 40 yilgacha tajribaga ega tor soha mutaxassislari. Har bir bemorga alohida
+          yondashuv.
+        </p>
+      </div>
+      <div class="feat glass rv">
+        <div class="ic rose">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5"></circle>
+            <path d="M12 7.5V12l3 2.5"></path>
+          </svg>
+        </div>
+        <h3>Navbatsiz xizmat</h3>
+        <p>
+          Onlayn bron — kutish zallarisiz. Qabulingizga 1 soat qolganda Telegram bot sizga eslatma
+          yuboradi.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="bolimlar">
+    <div class="sec-head rv">
+      <div class="eyebrow">Boʻlimlar</div>
+      <h2>{departments.length} yoʻnalish — bitta manzilda</h2>
+      <p>
+        Har bir boʻlimda oʻz sohasining mutaxassislari qabul qiladi. Boʻlimni tanlab, toʻgʻridan-toʻgʻri
+        navbat oling.
+      </p>
+    </div>
+    <div class="dept-cards">
+      {
+        departments.map((d) => (
+          <div class="dept-card glass rv">
+            <div class="top">
+              <div class="ic">
+                <DeptIcon icon={d.icon} />
+              </div>
+              <span class="cnt">{doctorsByDept(d.id).length} shifokor</span>
+            </div>
+            <h3>{d.name}</h3>
+            <p>{d.description}</p>
+            <button class="go" data-book-dept={d.id}>
+              Navbat olish
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12h14m-6-6 6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+
+  <section class="wrap" id="shifokorlar">
+    <div class="sec-head rv">
+      <div class="eyebrow">Jamoa</div>
+      <h2>Shifokorlarimiz</h2>
+      <p>
+        Qabul jadvali va davomiyligini har bir shifokorning oʻzi belgilaydi — siz esa faqat boʻsh vaqtni
+        tanlaysiz.
+      </p>
+    </div>
+    <div class="doc-cards">
+      {
+        doctors.map((d) => (
+          <div class="doc-card glass rv">
+            <div class="ph">
+              <img src={d.photo} alt={d.name} width="64" height="64" loading="lazy" />
+              <div>
+                <h3>{d.name}</h3>
+                <div class="jb">{d.job}</div>
+              </div>
+            </div>
+            <div class="meta">
+              {d.experience && <span class="m-chip exp">{d.experience} tajriba</span>}
+              <span class="m-chip">{d.hours}</span>
+            </div>
+            <div class="foot">
+              <span class="slotlen">
+                qabul: <b>{d.slotMinutes} daqiqa</b>
+              </span>
+              <button class="btn btn-sm" data-book-dept={d.deptId} data-book-doc={d.id}>
+                Navbat olish
+              </button>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+
+  <section class="wrap" id="qanday">
+    <div class="sec-head rv">
+      <div class="eyebrow">Qanday ishlaydi</div>
+      <h2>SMS yoʻq. Parol yoʻq. Faqat Telegram.</h2>
+      <p>Roʻyxatdan oʻtish, kirish, bron tasdigʻi va eslatmalar — hammasi bitta botda.</p>
+    </div>
+    <div class="how-grid">
+      <div class="how-steps">
+        <div class="how-step rv">
+          <div class="how-num">1</div>
+          <div>
+            <h3>Botga /start yuborasiz</h3>
+            <p>
+              Saytdagi tugma sizni <b>@dimedklinika</b> botiga olib oʻtadi. Kontaktni ulashasiz — telefon
+              raqami avtomatik bogʻlanadi.
+            </p>
+          </div>
+        </div>
+        <div class="how-step rv">
+          <div class="how-num">2</div>
+          <div>
+            <h3>6 xonali kod bilan kirasiz</h3>
+            <p>
+              Bot bir martalik kod yuboradi. Kodni saytga kiritasiz — shaxsiy kabinetingiz ochiladi. Hech
+              qanday parol eslab qolish shart emas.
+            </p>
+          </div>
+        </div>
+        <div class="how-step rv">
+          <div class="how-num">3</div>
+          <div>
+            <h3>Boʻsh slotni tanlaysiz</h3>
+            <p>Boʻlim → shifokor → sana → vaqt. Slotlar shifokorning real jadvalidan koʻrsatiladi.</p>
+          </div>
+        </div>
+        <div class="how-step rv">
+          <div class="how-num">4</div>
+          <div>
+            <h3>RHMT orqali toʻlaysiz — bron tayyor</h3>
+            <p>
+              Toʻlov oʻtishi bilan slot avtomatik band qilinadi va botga tasdiq keladi. Qabulga 1 soat
+              qolganda eslatma yuboriladi.
+            </p>
+            <span class="rule">Bekor qilish yoʻq — qabuldan 1 soat oldingacha boshqa vaqtga koʻchirish mumkin</span>
+          </div>
+        </div>
+      </div>
+      <div class="phone glass rv" aria-label="Telegram bot suhbati namunasi">
+        <div class="phone-top">
+          <div class="av">
+            <svg viewBox="0 0 24 24" aria-hidden="true"
+              ><path
+                d="M21.9 4.1c.3-1.2-.9-2.2-2-1.7L2.7 9.2c-1.2.5-1.1 2.2.1 2.6l4.4 1.4 1.7 5.3c.4 1.1 1.8 1.4 2.6.5l2.4-2.5 4.6 3.4c1 .7 2.4.2 2.6-1L21.9 4.1z"
+              ></path></svg
+            >
+          </div>
+          <div>
+            <div class="nm">Dimed Klinika Bot</div>
+            <div class="st">onlayn</div>
+          </div>
+        </div>
+        <div class="chat">
+          <div class="bub usr">/start<span class="t">08:41</span></div>
+          <div class="bub bot">
+            Assalomu alaykum! Dimed klinikasiga xush kelibsiz. Kirish uchun pastdagi tugma orqali
+            kontaktingizni ulashing.<span class="t">08:41</span>
+          </div>
+          <div class="bub bot">
+            Saytga kirish kodingiz:<span class="otp">4 8 2 9 1 7</span>Kod 5 daqiqa amal qiladi.<span
+              class="t">08:42</span
+            >
+          </div>
+          <div class="bub bot">
+            ✅ Broningiz tasdiqlandi!<br />Kardiolog — Ashurov T.A.<br />Seshanba, 12-avgust, 09:15<span
+              class="t">08:47</span
+            >
+          </div>
+          <div class="bub bot">⏰ Eslatma: qabulingizga 1 soat qoldi.<span class="t">08:15</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="tahlillar-preview">
+    <div class="sec-head rv">
+      <div class="eyebrow">Laboratoriya</div>
+      <h2>Tahlillar va narxlar</h2>
+      <p>
+        Koʻpchilik natijalar 30–60 daqiqada tayyor va shaxsiy kabinetingizga avtomatik tushadi — PDF va
+        matn koʻrinishida.
+      </p>
+    </div>
+    <div class="table-wrap glass rv">
+      <table>
+        <thead>
+          <tr><th>Tahlil</th><th>Guruh</th><th>Tayyor boʻlishi</th><th>Narx</th></tr>
+        </thead>
+        <tbody>
+          {
+            featuredAnalyses.map((a) => (
+              <tr>
+                <td>{a.title}</td>
+                <td>
+                  <span class="g-chip">{a.group}</span>
+                </td>
+                <td class="dur">{a.duration}</td>
+                <td class="price">{a.price} soʻm</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="tbl-note rv">
+      <a class="btn btn-ghost btn-sm" href="/tahlillar">Barcha {analyses.length} ta tahlilni koʻrish</a>
+      <span>Narxlar amaldagi pricelistdan olingan.</span>
+    </div>
+  </section>
+
+  <section class="wrap" id="kontakt">
+    <div class="contact-grid">
+      <div class="contact-card glass rv">
+        <div class="sec-head contact-head">
+          <div class="eyebrow">Bogʻlanish</div>
+          <h2>Bizni topish oson</h2>
+        </div>
+        <div class="c-row">
+          <div class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"></path>
+              <circle cx="12" cy="10" r="2.6"></circle>
+            </svg>
+          </div>
+          <div>
+            <div class="k">Manzil</div>
+            <div class="v">{site.address}<small>{site.addressNote}</small></div>
+          </div>
+        </div>
+        <div class="c-row">
+          <div class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 4h4l2 5-2.5 1.5a12 12 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="k">Telefon</div>
+            <div class="v"><a class="plain" href={site.phoneHref}>{site.phone}</a></div>
+          </div>
+        </div>
+        <div class="c-row">
+          <div class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5"></circle>
+              <path d="M12 7.5V12l3 2.5"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="k">Ish vaqti</div>
+            <div class="v">{site.hours}<small>{site.hoursNote}</small></div>
+          </div>
+        </div>
+      </div>
+      <div class="cta-card rv">
+        <h3>Navbatni hoziroq oling</h3>
+        <p>Telegram botga oʻting, kontaktni ulashing — 2 daqiqada broningiz tayyor.</p>
+        <a class="btn" href={site.telegramBot} target="_blank" rel="noopener">
+          @dimedklinika botiga oʻtish
+        </a>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  section {
+    padding: 64px 0;
+  }
+
+  .features {
+    padding-top: 26px;
+  }
+
+  .hero {
+    padding: 64px 0 40px;
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 48px;
+    align-items: center;
+  }
+
+  @media (max-width: 980px) {
+    .hero-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .hero h1 {
+    font-size: clamp(34px, 4.6vw, 56px);
+    font-weight: 750;
+  }
+
+  .grad {
+    background: linear-gradient(92deg, var(--rose) 10%, var(--leaf) 95%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .hero-sub {
+    margin-top: 20px;
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 54ch;
+  }
+
+  .hero-cta {
+    display: flex;
+    gap: 14px;
+    margin-top: 30px;
+    flex-wrap: wrap;
+  }
+
+  .hero-stats {
+    display: flex;
+    gap: 10px;
+    margin-top: 34px;
+    flex-wrap: wrap;
+  }
+
+  .stat-chip {
+    background: var(--chip-bg);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    border: 1px solid var(--card-brd);
+    border-radius: 12px;
+    padding: 9px 15px;
+    font-size: 13.5px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .stat-chip b {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--rose);
+  }
+
+  .stat-chip .g {
+    color: var(--leaf);
+  }
+
+  /* features */
+  .feat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+
+  @media (max-width: 820px) {
+    .feat-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .feat {
+    border-radius: 18px;
+    padding: 24px;
+  }
+
+  .feat .ic {
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+
+  .feat .ic svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .feat .ic.rose {
+    background: var(--rose-soft);
+    color: var(--rose);
+  }
+
+  .feat .ic.leaf {
+    background: var(--leaf-soft);
+    color: var(--leaf);
+  }
+
+  .feat h3 {
+    font-size: 17.5px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .feat p {
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  /* departments */
+  .dept-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+
+  @media (max-width: 900px) {
+    .dept-cards {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .dept-cards {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .dept-card {
+    border-radius: 18px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: transform 0.18s;
+  }
+
+  .dept-card:hover {
+    transform: translateY(-3px);
+  }
+
+  .dept-card .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .dept-card .ic {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: var(--rose-soft);
+    color: var(--rose);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .dept-card .ic :global(svg) {
+    width: 21px;
+    height: 21px;
+  }
+
+  .dept-card:nth-child(even) .ic {
+    background: var(--leaf-soft);
+    color: var(--leaf);
+  }
+
+  .dept-card .cnt {
+    font-size: 11.5px;
+    font-weight: 650;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 999px;
+    padding: 4px 10px;
+  }
+
+  .dept-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+  }
+
+  .dept-card p {
+    font-size: 13.5px;
+    color: var(--muted);
+    flex: 1;
+  }
+
+  .dept-card .go {
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--rose);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dept-card .go:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* doctors */
+  .doc-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+
+  @media (max-width: 900px) {
+    .doc-cards {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .doc-cards {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .doc-card {
+    border-radius: 18px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .doc-card .ph {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .doc-card .ph img {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    object-fit: cover;
+    background: var(--rose-soft);
+  }
+
+  .doc-card h3 {
+    font-size: 15.5px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .doc-card .jb {
+    font-size: 12.5px;
+    color: var(--rose);
+    font-weight: 650;
+    margin-top: 2px;
+  }
+
+  .doc-card .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .doc-card .m-chip {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .doc-card .m-chip.exp {
+    color: var(--leaf);
+    background: var(--leaf-soft);
+    border-color: transparent;
+  }
+
+  .doc-card .foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 4px;
+    gap: 8px;
+  }
+
+  .doc-card .slotlen {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .doc-card .slotlen b {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* how it works */
+  .how-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 44px;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .how-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .how-steps {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .how-step {
+    display: flex;
+    gap: 18px;
+    position: relative;
+    padding-bottom: 30px;
+  }
+
+  .how-step:last-child {
+    padding-bottom: 0;
+  }
+
+  .how-step::before {
+    content: '';
+    position: absolute;
+    left: 19px;
+    top: 44px;
+    bottom: 6px;
+    width: 2px;
+    background: linear-gradient(var(--line), transparent);
+  }
+
+  .how-step:last-child::before {
+    display: none;
+  }
+
+  .how-num {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+    flex-shrink: 0;
+    background: var(--card);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    border: 1px solid var(--card-brd);
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 16px;
+    color: var(--rose);
+  }
+
+  .how-step h3 {
+    font-size: 16.5px;
+    font-weight: 700;
+    margin-bottom: 5px;
+    padding-top: 8px;
+  }
+
+  .how-step p {
+    font-size: 14px;
+    color: var(--muted);
+    max-width: 52ch;
+  }
+
+  .how-step .rule {
+    display: inline-block;
+    margin-top: 9px;
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--warn);
+    background: var(--warn-bg);
+    border-radius: 8px;
+    padding: 4px 10px;
+  }
+
+  .phone {
+    border-radius: 26px;
+    padding: 16px;
+    position: sticky;
+    top: 96px;
+  }
+
+  .phone-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 6px 14px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 12px;
+  }
+
+  .phone-top .av {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--color-tg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .phone-top .av svg {
+    width: 17px;
+    height: 17px;
+    fill: #fff;
+  }
+
+  .phone-top .nm {
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1.2;
+  }
+
+  .phone-top .st {
+    font-size: 11px;
+    color: var(--leaf);
+    font-weight: 600;
+  }
+
+  .chat {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .bub {
+    max-width: 88%;
+    border-radius: 14px;
+    padding: 9px 12px;
+    font-size: 12.8px;
+    line-height: 1.5;
+  }
+
+  .bub.bot {
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-top-left-radius: 4px;
+    align-self: flex-start;
+  }
+
+  .bub.usr {
+    background: var(--rose);
+    color: #fff;
+    border-top-right-radius: 4px;
+    align-self: flex-end;
+  }
+
+  .bub .t {
+    display: block;
+    font-size: 10px;
+    opacity: 0.6;
+    text-align: right;
+    margin-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bub .otp {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 17px;
+    letter-spacing: 0.22em;
+    color: var(--rose);
+    display: block;
+    margin: 4px 0;
+  }
+
+  /* analyses preview */
+  .table-wrap {
+    border-radius: 18px;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    min-width: 640px;
+  }
+
+  th {
+    text-align: left;
+    font-size: 11.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  .g-chip {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 999px;
+    padding: 3px 10px;
+    white-space: nowrap;
+  }
+
+  td.price {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--rose);
+  }
+
+  td.dur {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
+  .tbl-note {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  /* contact */
+  .contact-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 820px) {
+    .contact-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .contact-card {
+    border-radius: 20px;
+    padding: 30px;
+  }
+
+  .contact-head {
+    margin-bottom: 14px;
+  }
+
+  .contact-head h2 {
+    font-size: 26px;
+  }
+
+  .c-row {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 11px 0;
+  }
+
+  .c-row .ic {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    background: var(--rose-soft);
+    color: var(--rose);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .c-row .ic svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .c-row .k {
+    font-size: 11.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+
+  .c-row .v {
+    font-weight: 650;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .c-row .v small {
+    display: block;
+    font-weight: 500;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+
+  .plain {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .plain:hover {
+    color: var(--rose);
+  }
+
+  .cta-card {
+    background: linear-gradient(140deg, var(--rose), #9c2470 60%, #4c8f3e);
+    border-radius: 20px;
+    padding: 34px;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    justify-content: center;
+    box-shadow: 0 16px 44px -12px rgb(213 0 111 / 0.45);
+  }
+
+  .cta-card h3 {
+    font-size: 24px;
+    font-weight: 750;
+    color: #fff;
+  }
+
+  .cta-card p {
+    font-size: 14.5px;
+    color: rgb(255 255 255 / 0.85);
+    max-width: 40ch;
+  }
+
+  .cta-card .btn {
+    background: #fff;
+    color: #b0005c;
+    box-shadow: none;
+    align-self: flex-start;
+  }
+</style>

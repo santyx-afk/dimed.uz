@@ -1,0 +1,152 @@
+---
+import Base from '../layouts/Base.astro';
+import analyses from '../data/analyses.json';
+
+const groups = new Map<string, typeof analyses>();
+for (const a of analyses) {
+  const list = groups.get(a.group);
+  if (list) list.push(a);
+  else groups.set(a.group, [a]);
+}
+---
+
+<Base
+  title="Tahlillar va narxlar — Dimed klinikasi"
+  description={`Dimed klinikasi laboratoriyasida ${analyses.length} ta tahlil turi. Narxlar, guruhlar va natija tayyor bo'lish muddati.`}
+>
+  <section class="wrap page">
+    <div class="sec-head">
+      <div class="eyebrow">Laboratoriya</div>
+      <h2>Tahlillar va narxlar</h2>
+      <p>
+        Jami {analyses.length} ta tahlil. Koʻpchilik natijalar 30–60 daqiqada tayyor va shaxsiy
+        kabinetingizga avtomatik tushadi — PDF va matn koʻrinishida.
+      </p>
+    </div>
+
+    {
+      [...groups].map(([group, items]) => (
+        <div class="group rv">
+          <h3>
+            {group} <span class="count">{items.length} ta</span>
+          </h3>
+          <div class="table-wrap glass">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tahlil</th>
+                  <th>Tayyor boʻlishi</th>
+                  <th>Narx</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((a) => (
+                  <tr>
+                    <td>{a.title}</td>
+                    <td class="dur">{a.duration}</td>
+                    <td class="price">{a.price} soʻm</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))
+    }
+
+    <p class="foot-note">
+      Narxlar amaldagi pricelistdan olingan va oʻzgarishi mumkin. Aniqlashtirish uchun:
+      <a href="tel:+998559009103">+998 55 9009 103</a>
+    </p>
+  </section>
+</Base>
+
+<style>
+  .page {
+    padding: 48px 0 64px;
+  }
+
+  .group {
+    margin-bottom: 34px;
+  }
+
+  .group h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .count {
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 650;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 999px;
+    padding: 3px 10px;
+  }
+
+  .table-wrap {
+    border-radius: 16px;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    min-width: 520px;
+  }
+
+  th {
+    text-align: left;
+    font-size: 11.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    padding: 13px 20px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 11px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  td.price {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--rose);
+    text-align: right;
+  }
+
+  td.dur {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
+  .foot-note {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-top: 26px;
+  }
+
+  .foot-note a {
+    color: var(--rose);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+</style>

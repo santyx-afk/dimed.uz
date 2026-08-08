@@ -1,103 +1,93 @@
-# Jekyll Serif Theme
+# dimed.uz
 
-Serif is a modern business theme for Jekyll. It contains multiple content types for a typical brochure/marketing website. The theme is fully responsive, blazing fast and artfully illustrated.
+Dimed klinikasi (Chinoz) sayti: onlayn navbat, Telegram orqali kirish,
+shaxsiy kabinet va laboratoriya natijalari.
 
-[Live Demo](https://jekyll-serif.netlify.app/) |
-[Zerostatic Themes](https://www.zerostatic.io)
+**Stack:** Astro + Tailwind CSS + TypeScript · Netlify Functions · Amazon DynamoDB + S3 · Telegram Bot API
 
-<a href="https://www.buymeacoffee.com/zerostatic" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+## Ishga tushirish
 
-![Jekyll Serif Theme screenshot](https://www.zerostatic.io/theme/jekyll-serif/jekyll-serif-screenshot.png)
-
-### Theme features
-
-- Jekyll 4.2+
-- Netlify & Github Pages ready
-- Services (Collection)
-- Team (Collection)
-- Features (Data)
-- SCSS
-- 100% Responsive design, animated hamburger and mobile slide in menu
-- Bootstrap 4.6 - _Only the bootstrap grid and utilites are imported by default. If you want to use more of the Boostrap library you can uncomment the `@import` in `style.scss`_
-- 100/100 Google Lighthouse speed score
-- 100/100 Google Lighthouse seo score
-- 100/100 Google Lighthouse accessibility score
-- 100/100 Google Lighthouse best practices score
-- Under 50KB without images or 80KB with images and illustrations ⚡
-- Under 20KB without Google fonts ⚡⚡⚡
-- Robust example content included
-- Royalty free illustrations included
-
-## Installation
-
-### Installing Ruby & Jekyll
-
-If this is your first time using Jekyll, please follow the [Jekyll docs](https://jekyllrb.com/docs/installation/) and make sure your local environment (including Ruby) is setup correctly.
-
-### Installing Theme
-
-Download or clone the theme.
-
-To run the theme locally, navigate to the theme directory and run:
-
-```
-bundle install
+```bash
+npm install
+cp .env.example .env    # qiymatlarni to'ldiring
+npm run dev             # http://localhost:4321
 ```
 
-To start the Jekyll local development server.
+| Buyruq | Vazifa |
+| --- | --- |
+| `npm run dev` | Lokal server |
+| `npm run build` | Saytni `dist/` ga yig'ish |
+| `npm run preview` | Yig'ilgan saytni ko'rish |
+| `npm run typecheck` | Astro va funksiyalar tiplarini tekshirish |
+| `npm run create-tables` | DynamoDB jadvallarini yaratish (bir marta) |
+| `npm run build-analyses` | `legacy/` dan tahlillar ro'yxatini yangilash |
+
+## Loyiha tuzilishi
 
 ```
-bundle exec jekyll serve
+src/
+  components/     Astro komponentlari (Nav, Footer, BookingWidget…)
+  data/           doctors.ts, departments.ts, site.ts, analyses.json
+  layouts/        Base.astro — umumiy sahifa qolipi
+  pages/          index.astro, tahlillar.astro
+  styles/         global.css (dizayn tokenlari), fonts.css
+netlify/
+  functions/      API (TypeScript)
+    lib/          db, telegram, session, env, http
+scripts/          create-tables.mjs, build-analyses.mjs
+docs/             1c-integration.md
+legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
 ```
 
-To build the theme.
+## API
 
+| Endpoint | Vazifa | Holat |
+| --- | --- | --- |
+| `POST /api/telegram-webhook` | Bot: `/start`, kontakt qabul qilish, OTP yuborish | ✅ 1-hafta |
+| `POST /api/auth-verify` | OTP kodni tekshirish, sessiya ochish | ✅ 1-hafta |
+| `POST /api/lc-results` | 1C dan tahlil natijalari | ✅ 1-hafta |
+| `GET /api/slots` | Bo'sh slotlar | 2-hafta |
+| `POST /api/book` | Slotni band qilish + RHMT to'lov | 2-hafta |
+| `POST /api/rhmt-webhook` | To'lov tasdig'i | 2-hafta |
+| `POST /api/reschedule` | Vaqtni ko'chirish (1 soat qoidasi) | 3-hafta |
+
+## Sozlash (bir martalik)
+
+### 1. Telegram botlar
+
+1. [@BotFather](https://t.me/BotFather) da `/newbot` — asosiy bot yarating,
+   tokenni `TELEGRAM_BOT_TOKEN` ga yozing.
+2. Yana bir bot yarating (xatolar uchun) — `TELEGRAM_LOG_BOT_TOKEN`.
+   Log-botni yopiq guruhga qo'shing va guruh id sini `TELEGRAM_LOG_CHAT_ID` ga yozing.
+3. Webhook'ni ulang:
+
+```bash
+curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  -d "url=https://dimed.uz/api/telegram-webhook" \
+  -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
 ```
-bundle exec jekyll build
+
+### 2. AWS
+
+```bash
+npm run create-tables    # 7 ta jadval, PAY_PER_REQUEST
 ```
 
-## Deployment
+PDF fayllar uchun S3 bucket yarating (ommaviy kirish **yopiq**) va nomini
+`LAB_S3_BUCKET` ga yozing.
 
-### Netlify
+### 3. Netlify
 
-Use Netlify to deploy this theme. This theme contains a valid and tested `netlify.toml` - Feel free to use the 1-click deploy below.
+Reponi ulang — `netlify.toml` dagi sozlamalar avtomatik qo'llanadi.
+Barcha `.env.example` dagi o'zgaruvchilarni Netlify environment
+variables bo'limiga qo'shing.
 
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/zerostaticthemes/jekyll-serif-theme)
+### 4. 1C
 
-### Github Pages
+[`docs/1c-integration.md`](docs/1c-integration.md) ni laboratoriya
+dasturchisiga bering.
 
-This theme has been tested to work with Github Pages (and Github Project Pages). When using Github Pages you will need to update the `baseurl` in the `_config.yml` otherwise all the css, images and paths will be broken.
+## Eski sayt
 
-For example the site https://zerostaticthemes.github.io/jekyll-serif-theme would have `baseurl: "/jekyll-serif-theme/"`
-
-## Extras
-
-### License
-
-- You cannot create ports of this theme
-- You cannot re-sell this theme
-
-### Credits
-
-- Beautiful royalty free Illustrations by Icons8 - https://icons8.com/illustrations/style--pixeltrue
-- Stock images by Unsplash - https://unsplash.com/
-- Feature icons by Noun Project - https://thenounproject.com/
-
-## Support My Work
-
-I've been building open source themes for all the main static site generators for over 4 years now. My premium themes allow me to continue to allocate time to maintain, improve and build new open source themes.
-
-1. Leave a star ⭐🙏🏻
-2. Make a contribution to this theme, add a feature, fix a bug, nothing is to small 
-2. Mention this theme on twitter [@zerostaticio](https://twitter.com/zerostaticio) 📢
-3. Purchase a premium theme 🔥
-
-### All Jekyll Themes by Zerostatic
-
-- [Jekyll Serif (Open Source)](https://www.zerostatic.io/theme/jekyll-serif/)
-- [Jekyll Atlantic (Open Source)](https://www.zerostatic.io/theme/jekyll-atlantic/)
-- [Jekyll Advance (Premium)](https://www.zerostatic.io/theme/jekyll-advance/)
-- [Jekyll Origin (Premium)](https://www.zerostatic.io/theme/jekyll-origin/)
-- [Jekyll Curate (Premium)](https://www.zerostatic.io/theme/jekyll-curate/)
-
-🇦🇺 **Made in Australia** by Robert Austin
+Avvalgi Jekyll sayti `legacy/` papkasida saqlanmoqda — kontent manbasi
+sifatida ishlatiladi (`npm run build-analyses`) va deploy qilinmaydi.
