@@ -110,9 +110,10 @@ legacy/         eski Jekyll sayti (kontent manbasi, deploy qilinmaydi)
 npm run dev          # lokal server
 npm run build        # dist/ ga yig'ish
 npm run typecheck    # astro check + tsc
-npm test             # 64 mantiq + 42 API testi
+npm test             # 73 mantiq + 44 API testi
 npm run create-tables
 npm run seed-doctors
+npm run link-doctor  # shifokorni Telegram'ga bog'lash (argumentsiz — ro'yxat)
 ```
 
 ### Testlar haqida
@@ -173,7 +174,13 @@ Holatlar bilan ishlash `lib/appointments.ts` da markazlashgan:
    shuning uchun rejadagi B varianti ishlayapti: slot band qilinadi, to'lov
    qabulxonada. `lib/payment.ts` — adapter. Kalitlar kelganda o'sha fayldagi
    `createPayment` to'ldiriladi va `RHMT_ENABLED=1` qilinadi; bron mantig'i
-   o'zgarmaydi.
+   o'zgarmaydi. To'liq spetsifikatsiya: `docs/rhmt-integration.md`.
+
+   **Shifokorning `telegram_id` si qo'lda bog'lanadi.** `seed-doctors` uni
+   yozmaydi — aks holda har seed'da bog'lanish o'chib ketardi. Buning
+   uchun `npm run link-doctor` bor (telefon yoki id bo'yicha, bitta
+   akkaunt ikkita shifokorga biriktirilmaydi). Bu qadam unutilsa bemor
+   tomoni ishlaydi, shifokor esa kabinetiga kira olmaydi.
 
 2. **`define:vars` bo'lgan `<script>` inline bo'ladi** va DOM to'liq
    yuklanishidan oldin ishga tushadi. Shuning uchun BookingWidget'dagi
