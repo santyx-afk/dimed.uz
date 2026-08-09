@@ -3,7 +3,7 @@
  *
  * Haqiqiy AWS'siz API funksiyalarini uchdan-uchgacha sinash imkonini
  * beradi. Faqat loyihada ishlatiladigan amallar qo'llab-quvvatlanadi:
- * PutItem, GetItem, DeleteItem, UpdateItem, Query va oddiy
+ * PutItem, GetItem, DeleteItem, UpdateItem, Query, Scan va oddiy
  * ConditionExpression'lar.
  */
 import { createServer } from 'node:http';
@@ -157,6 +157,13 @@ const server = createServer((req, res) => {
       }
       store.set(id, applyUpdate(existing ?? key, payload.UpdateExpression, names, values));
       return send({});
+    }
+
+    if (target === 'Scan') {
+      const items = [...store.values()];
+      return send({
+        Items: items.map((i) => Object.fromEntries(Object.entries(i).map(([k, v]) => [k, marshal(v)]))),
+      });
     }
 
     if (target === 'Query') {

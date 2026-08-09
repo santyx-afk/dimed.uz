@@ -87,13 +87,56 @@ Bu yerda baza (navbatlar, bemorlar) va tahlil PDF fayllari saqlanadi.
 1. https://aws.amazon.com da akkaunt oching
 2. **Region tanlang va shuni hamma joyda ishlating** — tavsiya: `eu-central-1`
    (Frankfurt). Keyin o'zgartirish qiyin
-3. IAM → foydalanuvchi yarating → unga ikki huquq bering:
-   - DynamoDB: yozish/o'qish/qidirish (jadvallar va indekslar bo'yicha)
-   - S3: fayl yuklash va o'qish
-4. Shu foydalanuvchi uchun **Access Key** va **Secret Key** yarating
-5. S3'da bucket yarating (masalan `dimed-lab`) — tahlil PDF'lari uchun
+3. S3'da bucket yarating (masalan `dimed-lab`) — tahlil PDF'lari uchun.
+   **Ommaviy kirishni yoqmang** — fayllar vaqtinchalik havola orqali
+   beriladi, bucket yopiq qolishi kerak
+4. IAM → foydalanuvchi yarating → quyidagi policy'ni biriktiring
+5. Shu foydalanuvchi uchun **Access Key** va **Secret Key** yarating
 
 **Natijada 3 ta qiymat:** Access Key, Secret Key, bucket nomi.
+
+#### IAM policy
+
+IAM → Policies → Create policy → JSON. `REGION`, `AKKAUNT_ID` va
+`BUCKET` ni o'zingiznikiga almashtiring:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Baza",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:REGION:AKKAUNT_ID:table/dimed_*",
+        "arn:aws:dynamodb:REGION:AKKAUNT_ID:table/dimed_*/index/*"
+      ]
+    },
+    {
+      "Sid": "TahlilFayllari",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::BUCKET/*"
+    }
+  ]
+}
+```
+
+Bu policy'da **jadval yaratish huquqi yo'q** — ataylab. Jadvallar
+CloudShell'dan bir marta yaratiladi (4-qadam), sayt esa faqat
+ma'lumot bilan ishlaydi. Kalit o'g'irlansa ham jadvallarni o'chira
+olmaydi.
+
+`table/dimed_*` — `DIMED_TABLE_PREFIX` ga mos. Prefiksni
+o'zgartirsangiz bu yerni ham o'zgartiring.
 
 ### Qadam 3 — Netlify · ~15 daqiqa · **siz**
 
@@ -158,10 +201,11 @@ barcha maydon turi **String**, barcha indeks proyeksiyasi **ALL**:
 `dimed_otp_codes` dagi TTL — eskirgan kirish kodlarini bazaning o'zi
 o'chirib turadi.
 
-### Qadam 5 — Telegram webhook'ini ulash · ~2 daqiqa · **men**
+### Qadam 5 — Telegram webhook'ini ulash · ~2 daqiqa · **siz**
 
 Bu **deploy'dan keyin** qilinadi, chunki Telegram'ga saytning haqiqiy
-manzili aytiladi:
+manzili aytiladi. Buyruqda bot tokeni bor, shuning uchun uni o'zingiz
+yuritasiz (CloudShell yoki istalgan terminal):
 
 ```bash
 curl -X POST "https://api.telegram.org/bot<ASOSIY_TOKEN>/setWebhook" \
@@ -169,11 +213,55 @@ curl -X POST "https://api.telegram.org/bot<ASOSIY_TOKEN>/setWebhook" \
   -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
 ```
 
+`{"ok":true,...}` kelsa — ulandi. Tekshirish uchun:
+
+```bash
+curl "https://api.telegram.org/bot<ASOSIY_TOKEN>/getWebhookInfo"
+```
+
+Javobdagi `url` to'g'ri bo'lsin, `last_error_message` bo'sh bo'lsin.
+
 **Shu qadamdan keyin bot javob bera boshlaydi.** Usiz botga yozsangiz
-javob bo'lmaydi. Domen ulangach (Qadam 7) bu buyruq yangi manzil bilan
+javob bo'lmaydi. Domen ulangach (8-qadam) bu buyruq yangi manzil bilan
 qayta yuritiladi.
 
-### Qadam 6 — Uchdan-uchgacha sinov · ~30 daqiqa · **birgalikda**
+### Qadam 6 — Shifokorlarni Telegram'ga bog'lash · ~10 daqiqa · **siz**
+
+**Bu qadamsiz birorta shifokor o'z kabinetiga kira olmaydi.**
+
+Bemor Telegram raqami orqali tanaladi, shifokor esa — `doctors`
+jadvalidagi `telegram_id` orqali. Uni `seed-doctors` yozmaydi (aks
+holda har safar seed qilganda bog'lanish o'chib ketardi), shuning
+uchun bir marta qo'lda bog'lanadi.
+
+**Har bir shifokor** avval botga `/start` yuborib, kontaktini
+ulashsin. Shundan keyin CloudShell'da (4-qadamdagi papkada):
+
+```bash
+# kim bog'langan, kim yo'q — ko'rish
+node scripts/link-doctor.mjs
+
+# telefon raqami bo'yicha bog'lash
+node scripts/link-doctor.mjs ashurov --phone +998901234567
+```
+
+Chiqishi:
+
+```
++998901234567 → telegram_id 777
+
+Tayyor: ashurov (Ashurov Tursunali) → telegram_id 777
+Shifokor endi /kabinet/shifokor sahifasiga kira oladi.
+```
+
+Shifokor identifikatorlari (`ashurov`, `narimbetov`, ...) —
+argumentsiz `node scripts/link-doctor.mjs` ro'yxatida ko'rinadi.
+
+Skript o'zi tekshiradi: bitta Telegram akkaunt ikkita shifokorga
+biriktirilmaydi, bog'lanmagan shifokorlar sonini oxirida ko'rsatadi.
+Hammasi bog'langunicha qaytarib ishga tushiraverish mumkin.
+
+### Qadam 7 — Uchdan-uchgacha sinov · ~30 daqiqa · **birgalikda**
 
 Men tekshiraman, siz o'z telefoningizdan takrorlaysiz:
 
@@ -186,7 +274,7 @@ Men tekshiraman, siz o'z telefoningizdan takrorlaysiz:
 7. Eslatma: qabulga 1 soat qolganda xabar keladimi
 8. Xato loglari guruhga tushyaptimi
 
-### Qadam 7 — Domen · ~1 kun (DNS tarqalishi) · **siz + men**
+### Qadam 8 — Domen · ~1 kun (DNS tarqalishi) · **siz + men**
 
 Beta muvaffaqiyatli bo'lgach: `dimed.uz` DNS yozuvlarini Netlify'ga
 yo'naltirasiz, men saytda domenni tasdiqlayman. HTTPS sertifikati
@@ -245,15 +333,20 @@ Bu eng muhim jadval — har bir kalit nimani ochishini ko'rsatadi.
 | **Hech narsa** (hozir) | Hech narsa — sayt internetda yo'q | Hammasi |
 | **Netlify** (kalitsiz) | Sayt ochiladi, sahifalar ko'rinadi, narxlar va shifokorlar ro'yxati | Navbat, kirish — baza yo'q |
 | **+ AWS** | Baza ishlaydi, slotlar ko'rinadi, navbat yoziladi | Kirish — kod yuboradigan bot yo'q |
-| **+ Telegram (asosiy bot)** | **Sayt to'liq ishlaydi:** kirish, navbat, kabinet, ko'chirish, eslatmalar, shifokor kabineti | Xatolarni bilmaysiz; to'lov qabulxonada; tahlil natijalari yo'q |
+| **+ Telegram (asosiy bot va webhook)** | Bemor tomoni to'liq: kirish, navbat, kabinet, ko'chirish, eslatmalar | Shifokorlar kabinetiga kira olmaydi |
+| **+ shifokorlar bog'landi** (6-qadam) | **Sayt to'liq ishlaydi** — shifokor kabineti, jadval boshqaruvi, kunlik xulosa, «ishga chiqa olmayman» | Xatolarni bilmaysiz; to'lov qabulxonada; tahlil natijalari yo'q |
 | **+ log-bot** | Har qanday nosozlik guruhga tushadi | — |
 | **+ 1C moduli** | Tahlil natijalari kabinetga avtomatik keladi | — |
 | **+ RHMT hujjati va kalitlari** | Onlayn to'lov | — |
 | **+ domen** | `dimed.uz` da ochiladi | — |
 
-**Diqqat:** «Sayt to'liq ishlaydi» qatoriga yetish uchun uchtasi kerak:
-**Netlify + AWS + Telegram asosiy bot**. Qolganlari — yaxshilanish,
-ular kutsa ham sayt ishlaydi.
+**Diqqat:** «Sayt to'liq ishlaydi» qatoriga yetish uchun **Netlify + AWS
++ Telegram asosiy bot + shifokorlarni bog'lash** kerak. Qolganlari
+(log-bot, 1C, RHMT, domen) — yaxshilanish, ular kutsa ham sayt ishlaydi.
+
+**Eng ko'p unutiladigan joy — shifokorlarni bog'lash (6-qadam).** Usiz
+bemor tomoni benuqson ishlaydi, lekin shifokor kabinetiga kirmoqchi
+bo'lganda «ruxsat yo'q» oladi va sabab ko'rinmaydi.
 
 ---
 
@@ -300,20 +393,32 @@ parallel yozishni to'xtatadi.
 - [ ] 1C dasturchisiga `docs/1c-integration.md` ni yuboring
 - [ ] Shifokorlardan narx va jadval so'rang
 
-**Siz — shu hafta:**
-- [ ] Telegram: 2 ta bot + log guruh (10 daq)
-- [ ] AWS: akkaunt, IAM kalitlari, S3 bucket (30 daq)
-- [ ] AWS CloudShell: jadvallarni yaratish va shifokorlarni yozish (10 daq)
-- [ ] Netlify: repo ulash, kalitlarni kiritish (15 daq)
+**Siz — shu hafta (tartib bilan):**
+- [ ] 1. Telegram: 2 ta bot + log guruh (10 daq)
+- [ ] 2. AWS: akkaunt, S3 bucket, IAM policy va kalitlar (30 daq)
+- [ ] 3. Netlify: repo ulash, kalitlarni kiritish, deploy (15 daq)
+- [ ] 4. CloudShell: jadvallar + shifokorlar (10 daq)
+- [ ] 5. Telegram webhook'ini ulash (2 daq)
+- [ ] 6. Shifokorlarni Telegram'ga bog'lash (10 daq)
 
 **Men — siz tugatgandan keyin, bir kun ichida:**
-- [ ] CloudShell natijasini tekshirish
-- [ ] Telegram webhook'ini ulash
+- [ ] Har bir qadam natijasini tekshirish
 - [ ] Uchdan-uchgacha sinov va hisobot
 - [ ] Pediatriya bo'limini beta rejimga tayyorlash
 
 **Men — hujjat kelgach:**
-- [ ] RHMT onlayn to'lovi
+- [ ] RHMT onlayn to'lovi (`docs/rhmt-integration.md`)
+
+---
+
+## Hujjatlar ro'yxati
+
+| Fayl | Kim uchun |
+| --- | --- |
+| `docs/ISHGA-TUSHIRISH.md` | Klinika egasi — shu hujjat |
+| `docs/HANDOFF.md` | Sayt dasturchisi — texnik qarorlar, kod tuzilishi |
+| `docs/1c-integration.md` | 1C dasturchisi — tahlil natijalarini yuborish |
+| `docs/rhmt-integration.md` | To'lov tizimini ulaydigan dasturchi |
 
 ---
 

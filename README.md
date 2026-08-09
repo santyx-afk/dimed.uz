@@ -39,8 +39,8 @@ src/
 netlify/
   functions/      API (TypeScript)
     lib/          db, telegram, session, env, http
-scripts/          create-tables.mjs, build-analyses.mjs
-docs/             1c-integration.md
+scripts/          create-tables, seed-doctors, link-doctor, build-analyses
+docs/             ISHGA-TUSHIRISH, HANDOFF, 1c-integration, rhmt-integration
 legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
 ```
 
@@ -129,10 +129,20 @@ Reponi ulang — `netlify.toml` dagi sozlamalar avtomatik qo'llanadi.
 Barcha `.env.example` dagi o'zgaruvchilarni Netlify environment
 variables bo'limiga qo'shing.
 
-### 4. 1C
+### 4. Integratsiyalar
 
 [`docs/1c-integration.md`](docs/1c-integration.md) ni laboratoriya
-dasturchisiga bering.
+dasturchisiga bering, [`docs/rhmt-integration.md`](docs/rhmt-integration.md)
+ni esa to'lov tizimini ulaydigan dasturchiga.
+
+## Hujjatlar
+
+| Fayl | Kim uchun |
+| --- | --- |
+| [`docs/ISHGA-TUSHIRISH.md`](docs/ISHGA-TUSHIRISH.md) | Klinika egasi — qadamma-qadam ishga tushirish |
+| [`docs/HANDOFF.md`](docs/HANDOFF.md) | Sayt dasturchisi — texnik qarorlar, kod tuzilishi, tuzoqlar |
+| [`docs/1c-integration.md`](docs/1c-integration.md) | 1C dasturchisi — tahlil natijalarini yuborish |
+| [`docs/rhmt-integration.md`](docs/rhmt-integration.md) | To'lov dasturchisi — RHMT dan nima so'rash va qayerga yozish |
 
 ## Eski sayt
 
