@@ -106,16 +106,57 @@ Bu yerda baza (navbatlar, bemorlar) va tahlil PDF fayllari saqlanadi.
 
 **Natijada:** sayt vaqtinchalik manzilda ochiladi (`...netlify.app`).
 
-### Qadam 4 — Bazani yaratish · ~5 daqiqa · **men**
+### Qadam 4 — Bazani yaratish · ~10 daqiqa · **siz** (AWS CloudShell)
 
-AWS kalitlari tayyor bo'lgach men ishga tushiraman:
+**Jadvallarni qo'lda yaratmang.** 7 ta jadval, 4 ta indeks va 1 ta TTL
+sozlamasi kerak. Qo'lda kiritishda bitta harf xato bo'lsa sayt xato
+bermaydi — shunchaki jim ishlamay qo'yadi. Skript hammasini to'g'ri
+yaratadi va mavjudini o'tkazib yuboradi (qayta ishga tushirish xavfsiz).
+
+**CloudShell** — AWS konsolining ichidagi terminal. U sizning nomingizdan
+ishlaydi, shuning uchun kalit kiritish shart emas va kompyuteringizga
+hech narsa o'rnatilmaydi.
+
+1. AWS konsoliga kiring → yuqori panelda **terminal belgisi** (CloudShell)
+2. Ketma-ket qo'ying:
 
 ```bash
-npm run create-tables   # 7 ta jadval va indekslar
-npm run seed-doctors    # shifokorlarni bazaga yozish
+git clone https://github.com/santyx-afk/dimed.uz.git
+cd dimed.uz
+npm i @aws-sdk/client-dynamodb @aws-sdk/lib-dynamodb
+
+# 7 ta jadval va indekslar
+DIMED_AWS_REGION=eu-central-1 node scripts/create-tables.mjs
+
+# shifokorlarni bazaga yozish
+DIMED_AWS_REGION=eu-central-1 node --experimental-strip-types scripts/seed-doctors.mjs
 ```
 
-Natijani sizga ko'rsataman.
+`+ dimed_users yaratildi` kabi qatorlar chiqadi. Natijani menga yuboring —
+tekshiraman.
+
+> Region'ni Netlify'dagi `DIMED_AWS_REGION` bilan bir xil qiling.
+> Butun loyihada faqat bitta region ishlatiladi.
+
+#### Jadvallar tarkibi
+
+Skript nima yaratishini bilib qo'yish uchun (yoki qo'lda yaratish
+kerak bo'lib qolsa). Prefiks `dimed_`, hammasi **PAY_PER_REQUEST**,
+barcha maydon turi **String**, barcha indeks proyeksiyasi **ALL**:
+
+| Jadval | Partition key | Sort key | Indeks (GSI) | TTL |
+| --- | --- | --- | --- | --- |
+| `dimed_users` | `telegram_id` | — | `phone-index`: `phone` | — |
+| `dimed_otp_codes` | `phone` | — | — | `expires_at` |
+| `dimed_doctors` | `doctor_id` | — | `telegram-index`: `telegram_id` | — |
+| `dimed_schedules` | `doctor_id` | `date` | — | — |
+| `dimed_appointments` | `doctor_day` | `time` | `patient-index`: `phone` + `starts_at`<br>`date-index`: `date` + `starts_at` | — |
+| `dimed_payments` | `payment_id` | — | — | — |
+| `dimed_lab_results` | `phone` | `sort_key` | — | — |
+
+`date-index` siz eslatmalar va shifokorning kunlik xulosasi ishlamaydi.
+`dimed_otp_codes` dagi TTL — eskirgan kirish kodlarini bazaning o'zi
+o'chirib turadi.
 
 ### Qadam 5 — Telegram webhook'ini ulash · ~2 daqiqa · **men**
 
@@ -262,10 +303,11 @@ parallel yozishni to'xtatadi.
 **Siz — shu hafta:**
 - [ ] Telegram: 2 ta bot + log guruh (10 daq)
 - [ ] AWS: akkaunt, IAM kalitlari, S3 bucket (30 daq)
+- [ ] AWS CloudShell: jadvallarni yaratish va shifokorlarni yozish (10 daq)
 - [ ] Netlify: repo ulash, kalitlarni kiritish (15 daq)
 
 **Men — siz tugatgandan keyin, bir kun ichida:**
-- [ ] Jadvallarni yaratish, shifokorlarni yozish
+- [ ] CloudShell natijasini tekshirish
 - [ ] Telegram webhook'ini ulash
 - [ ] Uchdan-uchgacha sinov va hisobot
 - [ ] Pediatriya bo'limini beta rejimga tayyorlash
