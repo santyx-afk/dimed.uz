@@ -13,7 +13,7 @@ const load = (file) => import(pathToFileURL(join(libDir, file)).href);
 
 const { createSessionCookie, readSession, generateOtp } = await load('session.ts');
 const { normalizePhone } = await load('http.ts');
-const { tableName } = await load('env.ts');
+const { tableName, awsCredentials } = await load('env.ts');
 
 let passed = 0;
 const test = (name, fn) => {
@@ -96,5 +96,72 @@ test('takrorlanmaydi (2000 tadan kamida 1900 xil)', () => {
 
 console.log('Jadval nomlari:');
 test('prefiks qo\'shiladi', () => assert.equal(tableName('users'), 'dimed_users'));
+
+console.log('\nAWS kalitlari:');
+/*
+  Netlify AWS_ACCESS_KEY_ID va AWS_SECRET_ACCESS_KEY nomlarini band
+  qilgan, shuning uchun DIMED_ prefiksli nomlar ham qabul qilinadi.
+*/
+const withEnv = (vars, fn) => {
+  const saved = {};
+  for (const [k, v] of Object.entries(vars)) {
+    saved[k] = process.env[k];
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  try {
+    return fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+};
+
+const NONE = {
+  DIMED_AWS_ACCESS_KEY_ID: undefined,
+  DIMED_AWS_SECRET_ACCESS_KEY: undefined,
+  AWS_ACCESS_KEY_ID: undefined,
+  AWS_SECRET_ACCESS_KEY: undefined,
+};
+
+test('DIMED_ nomlari o\'qiladi', () => {
+  const creds = withEnv(
+    { ...NONE, DIMED_AWS_ACCESS_KEY_ID: 'AKIA_D', DIMED_AWS_SECRET_ACCESS_KEY: 'sirD' },
+    awsCredentials,
+  );
+  assert.deepEqual(creds, { accessKeyId: 'AKIA_D', secretAccessKey: 'sirD' });
+});
+
+test('standart nomlar zaxira sifatida ishlaydi', () => {
+  const creds = withEnv(
+    { ...NONE, AWS_ACCESS_KEY_ID: 'AKIA_S', AWS_SECRET_ACCESS_KEY: 'sirS' },
+    awsCredentials,
+  );
+  assert.deepEqual(creds, { accessKeyId: 'AKIA_S', secretAccessKey: 'sirS' });
+});
+
+test('ikkalasi bo\'lsa DIMED_ ustun turadi', () => {
+  const creds = withEnv(
+    {
+      DIMED_AWS_ACCESS_KEY_ID: 'AKIA_D',
+      DIMED_AWS_SECRET_ACCESS_KEY: 'sirD',
+      AWS_ACCESS_KEY_ID: 'AKIA_S',
+      AWS_SECRET_ACCESS_KEY: 'sirS',
+    },
+    awsCredentials,
+  );
+  assert.deepEqual(creds, { accessKeyId: 'AKIA_D', secretAccessKey: 'sirD' });
+});
+
+test('kalit yo\'q bo\'lsa undefined — SDK o\'z zanjiriga tayanadi', () => {
+  assert.equal(withEnv(NONE, awsCredentials), undefined);
+});
+
+test('faqat yarmi berilsa ham undefined', () => {
+  const creds = withEnv({ ...NONE, DIMED_AWS_ACCESS_KEY_ID: 'AKIA_D' }, awsCredentials);
+  assert.equal(creds, undefined, 'chala kalit bilan mijoz yaratilmasin');
+});
 
 console.log(`\n${passed} ta tekshiruv o'tdi.`);

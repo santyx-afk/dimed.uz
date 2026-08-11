@@ -312,8 +312,8 @@ Netlify → Site settings → Environment variables.
 | `SESSION_SECRET` | Tasodifiy satr, ≥32 belgi | men yarataman |
 | `DIMED_AWS_REGION` | `eu-central-1` | tayyor |
 | `DIMED_TABLE_PREFIX` | `dimed` | tayyor |
-| `AWS_ACCESS_KEY_ID` | AWS IAM | siz |
-| `AWS_SECRET_ACCESS_KEY` | AWS IAM | siz |
+| `DIMED_AWS_ACCESS_KEY_ID` | AWS IAM | siz |
+| `DIMED_AWS_SECRET_ACCESS_KEY` | AWS IAM | siz |
 | `LAB_S3_BUCKET` | S3 bucket nomi | siz |
 | `LC_API_KEY` | Tasodifiy satr → 1C ga beriladi | men yarataman |
 | `PAYMENT_WEBHOOK_SECRET` | Tasodifiy satr | men yarataman |
@@ -321,6 +321,16 @@ Netlify → Site settings → Environment variables.
 
 «Men yarataman» deganlari — tasodifiy parollar, ularni hech kimdan
 so'ramaysiz. Kerak bo'lsa o'zingiz ham yaratasiz: `openssl rand -base64 32`.
+
+> **AWS kalitlari nega `DIMED_` bilan boshlanadi?**
+> Netlify `AWS_ACCESS_KEY_ID` va `AWS_SECRET_ACCESS_KEY` nomlarini o'zi
+> band qilgan — ularni kiritmoqchi bo'lsangiz *«reserved environment
+> variable»* xatosi chiqadi. Shuning uchun kod `DIMED_AWS_ACCESS_KEY_ID`
+> va `DIMED_AWS_SECRET_ACCESS_KEY` ni ham o'qiydi. Netlify'da **faqat
+> prefiksli nomlarni** ishlating.
+>
+> Lokal ishlashda yoki CloudShell'da standart nomlar ham ishlayveradi —
+> kod ikkalasini ham tan oladi.
 
 ---
 
