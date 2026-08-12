@@ -1,13 +1,15 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { AWS_REGION, optional, tableName } from './env.ts';
+import { AWS_REGION, awsCredentials, optional, tableName } from './env.ts';
 
 // Testlarda lokal soxta DynamoDB ishlatiladi.
 const endpoint = optional('DIMED_DYNAMO_ENDPOINT');
+const credentials = awsCredentials();
 
 const client = new DynamoDBClient({
   region: AWS_REGION,
   ...(endpoint ? { endpoint } : {}),
+  ...(credentials ? { credentials } : {}),
 });
 
 export const db = DynamoDBDocumentClient.from(client, {

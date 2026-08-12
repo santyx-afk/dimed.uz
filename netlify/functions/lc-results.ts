@@ -1,9 +1,10 @@
 import type { Context } from '@netlify/functions';
 import { timingSafeEqual } from 'node:crypto';
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { db, TABLES } from './lib/db.ts';
-import { required, optional, AWS_REGION } from './lib/env.ts';
+import { s3 } from './lib/s3.ts';
+import { required, optional } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { json, error, normalizePhone } from './lib/http.ts';
 
@@ -30,8 +31,6 @@ type Body = {
   date?: string;
   results?: ResultItem[];
 };
-
-const s3 = new S3Client({ region: AWS_REGION });
 
 export default async (request: Request, _context: Context): Promise<Response> => {
   if (request.method !== 'POST') return error('Faqat POST', 405);

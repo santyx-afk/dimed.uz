@@ -1,14 +1,14 @@
 import type { Context } from '@netlify/functions';
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { db, TABLES } from './lib/db.ts';
+import { s3 } from './lib/s3.ts';
 import { sessionFrom } from './lib/auth.ts';
-import { required, AWS_REGION } from './lib/env.ts';
+import { required } from './lib/env.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
-const s3 = new S3Client({ region: AWS_REGION });
 const LINK_TTL_SECONDS = 5 * 60;
 
 /**
