@@ -12,9 +12,10 @@ import {
   waitUntilTableExists,
 } from '@aws-sdk/client-dynamodb';
 
-const region = process.env.DIMED_AWS_REGION ?? 'eu-central-1';
-const prefix = process.env.DIMED_TABLE_PREFIX ?? 'dimed';
-const client = new DynamoDBClient({ region });
+import { clientConfig, printTarget, PREFIX as prefix } from './aws-env.mjs';
+
+const client = new DynamoDBClient(clientConfig());
+printTarget();
 
 const S = (name) => ({ AttributeName: name, AttributeType: 'S' });
 const HASH = (name) => ({ AttributeName: name, KeyType: 'HASH' });

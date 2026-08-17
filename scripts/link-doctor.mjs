@@ -17,17 +17,12 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
-const region = process.env.DIMED_AWS_REGION ?? 'eu-central-1';
-const prefix = process.env.DIMED_TABLE_PREFIX ?? 'dimed';
+import { clientConfig, explainMissingTable, PREFIX as prefix } from './aws-env.mjs';
+
 const doctorsTable = `${prefix}_doctors`;
 const usersTable = `${prefix}_users`;
 
-// Testlarda lokal soxta DynamoDB ishlatiladi (lib/db.ts dagidek).
-const endpoint = process.env.DIMED_DYNAMO_ENDPOINT;
-
-const db = DynamoDBDocumentClient.from(
-  new DynamoDBClient({ region, ...(endpoint ? { endpoint } : {}) }),
-);
+const db = DynamoDBDocumentClient.from(new DynamoDBClient(clientConfig()));
 
 /** http.ts dagi bilan bir xil qoida — bazada telefon shu ko'rinishda. */
 const normalizePhone = (raw) => {
@@ -44,7 +39,9 @@ const [doctorId, flag, value] = process.argv.slice(2);
 
 // --- Argument yo'q: hozirgi holatni ko'rsatamiz ---
 if (!doctorId) {
-  const { Items = [] } = await db.send(new ScanCommand({ TableName: doctorsTable }));
+  const { Items = [] } = await db
+    .send(new ScanCommand({ TableName: doctorsTable }))
+    .catch(explainMissingTable(doctorsTable));
   if (Items.length === 0) {
     console.log(`${doctorsTable} bo'sh — avval "npm run seed-doctors" ni ishga tushiring.`);
     process.exit(0);
@@ -68,9 +65,9 @@ if (flag !== '--phone' && flag !== '--telegram') {
 }
 if (!value) die(`${flag} uchun qiymat berilmadi`);
 
-const doctor = await db.send(
-  new GetCommand({ TableName: doctorsTable, Key: { doctor_id: doctorId } }),
-);
+const doctor = await db
+  .send(new GetCommand({ TableName: doctorsTable, Key: { doctor_id: doctorId } }))
+  .catch(explainMissingTable(doctorsTable));
 if (!doctor.Item) {
   die(`"${doctorId}" ${doctorsTable} jadvalida yo'q. Ro'yxat uchun: node scripts/link-doctor.mjs`);
 }

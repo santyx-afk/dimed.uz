@@ -10,17 +10,20 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
+import { clientConfig, printTarget, explainMissingTable, PREFIX as prefix } from './aws-env.mjs';
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const region = process.env.DIMED_AWS_REGION ?? 'eu-central-1';
-const prefix = process.env.DIMED_TABLE_PREFIX ?? 'dimed';
 const table = `${prefix}_doctors`;
 
-const db = DynamoDBDocumentClient.from(new DynamoDBClient({ region }), {
+const db = DynamoDBDocumentClient.from(new DynamoDBClient(clientConfig()), {
   marshallOptions: { removeUndefinedValues: true },
 });
+printTarget();
 
 // doctors.ts to'g'ridan-to'g'ri o'qiladi (node --experimental-strip-types).
 const { doctors } = await import(pathToFileURL(join(root, 'src', 'data', 'doctors.ts')).href);
+
+const explain = explainMissingTable(table);
 
 for (const d of doctors) {
   await db.send(
@@ -48,7 +51,7 @@ for (const d of doctors) {
         ':updated': new Date().toISOString(),
       },
     }),
-  );
+  ).catch(explain);
   console.log(`+ ${d.id} — ${d.name}`);
 }
 
