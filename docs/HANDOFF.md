@@ -101,6 +101,7 @@ netlify/functions/
   *.ts          har bir fayl — bitta /api/<nom> endpoint
   remind-patients.ts, doctor-daily.ts — cron (config.schedule)
 scripts/        create-tables, seed-doctors, build-analyses,
+                cloudshell-setup.sh (+ gen-cloudshell-setup.mjs),
                 fake-dynamo (testlar uchun), test-*.mjs
 legacy/         eski Jekyll sayti (kontent manbasi, deploy qilinmaydi)
 ```
@@ -110,11 +111,26 @@ legacy/         eski Jekyll sayti (kontent manbasi, deploy qilinmaydi)
 npm run dev          # lokal server
 npm run build        # dist/ ga yig'ish
 npm run typecheck    # astro check + tsc
-npm test             # 73 mantiq + 44 API testi
+npm test             # 88 mantiq + 44 API testi
 npm run create-tables
 npm run seed-doctors
 npm run link-doctor  # shifokorni Telegram'ga bog'lash (argumentsiz — ro'yxat)
+npm run gen-cloudshell  # scripts/cloudshell-setup.sh ni qayta yaratish
 ```
+
+### CloudShell skripti
+`scripts/cloudshell-setup.sh` — `create-tables` + `seed-doctors` ning
+AWS CLI'dagi ko'chirmasi. Sababi amaliy: klinika egasi CloudShell'ga
+bitta faylni yuklaydi va `bash cloudshell-setup.sh` deydi — git,
+Node.js, npm va kalit kerak emas.
+
+Fayl **qo'lda tahrirlanmaydi**: u `tables.mjs` va `doctors.ts` dan
+`npm run gen-cloudshell` orqali yaratiladi, `test-tables.mjs` esa
+faylning manbaga mosligini tekshiradi. Shifokor narxi o'zgarib fayl
+yangilanmasa, test qizil bo'ladi.
+
+Maydon nomlari `#f0`, `#f1` kabi taxalluslar bilan yoziladi —
+DynamoDB'ning band so'zlari ro'yxati uzun va kengayib turadi.
 
 ### Testlar haqida
 Testlar **haqiqiy AWS'siz** ishlaydi: `scripts/fake-dynamo.mjs` xotirada

@@ -160,8 +160,28 @@ yaratadi va mavjudini o'tkazib yuboradi (qayta ishga tushirish xavfsiz).
 ishlaydi, shuning uchun kalit kiritish shart emas va kompyuteringizga
 hech narsa o'rnatilmaydi.
 
-1. AWS konsoliga kiring → yuqori panelda **terminal belgisi** (CloudShell)
-2. Ketma-ket qo'ying:
+#### Yo'l A — bitta fayl (tavsiya etiladi)
+
+Hech narsa o'rnatilmaydi: CloudShell'da AWS CLI ham, kalitlar ham
+allaqachon bor. Git, Node.js, npm — kerak emas.
+
+1. `scripts/cloudshell-setup.sh` faylini kompyuteringizga oling
+2. AWS konsolida **yuqori o'ngdan region'ni tanlang** (Netlify'dagi
+   `DIMED_AWS_REGION` bilan bir xil bo'lsin)
+3. Yuqori paneldagi **terminal belgisi** (CloudShell) ni bosing
+4. **Actions → Upload file** → shu faylni tanlang
+5. Yozing:
+
+```bash
+bash cloudshell-setup.sh
+```
+
+Skript uchta ishni ketma-ket bajaradi: 7 ta jadvalni yaratadi, ular
+tayyor bo'lishini kutadi, keyin 9 ta shifokorni yozadi. Boshida qaysi
+region va qaysi AWS hisobi ishlatilayotgani chiqadi — shuni bir
+tekshiring.
+
+#### Yo'l B — repo orqali
 
 ```bash
 git clone https://github.com/santyx-afk/dimed.uz.git
@@ -175,11 +195,15 @@ DIMED_AWS_REGION=eu-central-1 node scripts/create-tables.mjs
 DIMED_AWS_REGION=eu-central-1 node --experimental-strip-types scripts/seed-doctors.mjs
 ```
 
+Ikkala yo'l ham bir xil natija beradi — `cloudshell-setup.sh` aynan
+shu ikki skriptdan yaratiladi.
+
 `+ dimed_users yaratildi` kabi qatorlar chiqadi. Natijani menga yuboring —
 tekshiraman.
 
 > Region'ni Netlify'dagi `DIMED_AWS_REGION` bilan bir xil qiling.
-> Butun loyihada faqat bitta region ishlatiladi.
+> Butun loyihada faqat bitta region ishlatiladi. Boshqasi kerak bo'lsa:
+> `DIMED_AWS_REGION=us-east-1 bash cloudshell-setup.sh`
 
 #### Jadvallar tarkibi
 
@@ -429,6 +453,7 @@ parallel yozishni to'xtatadi.
 | `docs/HANDOFF.md` | Sayt dasturchisi — texnik qarorlar, kod tuzilishi |
 | `docs/1c-integration.md` | 1C dasturchisi — tahlil natijalarini yuborish |
 | `docs/rhmt-integration.md` | To'lov tizimini ulaydigan dasturchi |
+| `scripts/cloudshell-setup.sh` | Siz — AWS CloudShell'ga yuklanadigan fayl |
 
 ---
 
