@@ -12,7 +12,10 @@
  * Ishlatish: node scripts/test-tables.mjs
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
 import { tables } from './tables.mjs';
+import { buildScript, loadDoctors, OUTPUT } from './gen-cloudshell-setup.mjs';
 
 let passed = 0;
 const test = (name, fn) => {
@@ -92,6 +95,35 @@ test('kodda ishlatiladigan indekslar mavjud', () => {
 test('otp_codes da TTL yoqiladi', () => {
   const otp = tables.find((t) => t.name === 'otp_codes');
   assert.equal(otp.ttlAttribute, 'expires_at');
+});
+
+// CloudShell skripti generatordan yaratiladi. Agar jadval ta'rifi
+// yoki shifokorlar ro'yxati o'zgarib, fayl yangilanmasa — klinika
+// AWS'da eski ma'lumot bilan qoladi va buni hech kim sezmaydi.
+const doctors = await loadDoctors();
+
+test('cloudshell-setup.sh manbaga mos', () => {
+  const kutilgan = buildScript(tables, doctors);
+  const hozirgi = readFileSync(OUTPUT, 'utf8');
+  assert.equal(
+    hozirgi,
+    kutilgan,
+    'scripts/cloudshell-setup.sh eskirgan — "npm run gen-cloudshell" ni ishga tushiring',
+  );
+});
+
+test('cloudshell-setup.sh da hamma shifokor bor', () => {
+  const matn = readFileSync(OUTPUT, 'utf8');
+  for (const d of doctors) {
+    assert.ok(matn.includes(`shifokor "${d.id}"`), `${d.id} skriptda yo'q`);
+  }
+});
+
+test('cloudshell-setup.sh telegram_id ga tegmaydi', () => {
+  const matn = readFileSync(OUTPUT, 'utf8');
+  // Bog'lanish qo'lda qilinadi; seed uni o'chirib yubormasligi kerak.
+  assert.ok(!/:v\d+.*telegram_id/.test(matn));
+  assert.ok(!matn.includes('"telegram_id":{"S"'), 'telegram_id yozilyapti');
 });
 
 console.log(`\n${passed} ta tekshiruv o'tdi.`);
