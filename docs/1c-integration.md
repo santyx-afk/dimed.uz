@@ -155,3 +155,32 @@ qaysi yo'nalishda oqishini kelishish qoldi:
 
 Odatda ikkalasi ham kerak. 1C dasturchisi qaysi so'rovni yubora olishini
 aytsa — sayt tomonidagi endpoint shu shaklga moslab yoziladi.
+
+## Tez yo'l: CSV orqali birinchi yuklash
+
+API ulanguncha bemorlarni **fayl orqali** yuklash mumkin — 1C
+dasturchisiz, 10 daqiqada:
+
+1. 1C'da **Jismoniy shaxslar** ro'yxatini oching
+2. Ro'yxat ustida o'ng tugma → **Вывести список** (ro'yxatni chiqarish)
+   → kerakli ustunlarni belgilang: Code, Familiyasi, Ismi, Sharif,
+   Jinsi, Tug'ilgan kuni, **Telefon** (majburiy), Email
+3. Ochilgan jadvalni saqlang (Excel bo'lsa — Excel'da ochib
+   **CSV UTF-8** qilib qayta saqlang)
+4. Loyiha papkasida:
+
+```bash
+node scripts/import-patients.mjs bemorlar.csv --dry   # avval ko'rish
+node scripts/import-patients.mjs bemorlar.csv         # yuklash
+```
+
+Skript telefonni bot foydalanuvchisi bilan solishtiradi:
+
+- **Mos kelsa** — 1C profili (kod, F.I.Sh., jins, tug'ilgan kun)
+  yoziladi. Telegram maydonlariga tegilmaydi.
+- **Bemor botga hali kirmagan bo'lsa** — o'tkazib yuboriladi va
+  ro'yxatda ko'rsatiladi. U botga kirgach skriptni qayta yurgizing —
+  qayta yurgizish xavfsiz (idempotent).
+
+Ustun sarlavhalari avtomatik taniladi (o'zbek/rus/ingliz), ajratgich
+`,` `;` yoki TAB bo'lishi mumkin, telefon istalgan formatda.
