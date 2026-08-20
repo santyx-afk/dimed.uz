@@ -97,3 +97,59 @@ curl -X POST https://dimed.uz/api/lc-results \
 ```
 
 Javobda `{"ok":true,"saved":1}` kelsa — integratsiya ishlayapti.
+
+---
+
+# Bemor profili — 1C bilan maydonlar kelishuvi
+
+Bu bo'lim tahlil natijasiga taalluqli emas. U bemor **profilini** 1C bilan
+sinxronlashda ikki tomon bir xil maydon nomlari va formatidan foydalanishi
+uchun. Maqsad: bir xil ismli bemorlarni adashtirmaslik va sinxronizatsiyada
+nomuvofiqlik bo'lmasligi.
+
+## Bog'lovchi kalitlar
+
+| Kalit | Rol |
+| --- | --- |
+| `phone` | **Asosiy bog'lovchi.** Bemor saytga Telegram orqali kiradi — telefoni shundan olinadi. 1C ham shu telefon bo'yicha bemorni topadi. |
+| `code` | 1C dagi bemor **kodi** (rasmda qavs ichidagi raqam). Yagona va o'zgarmas. Telefon o'zgarsa ham bir xil qoladi. Sayt uni saqlaydi va `code-index` orqali qidiradi. |
+
+Ism-familiya **bog'lovchi emas** — bir xil ismli bemorlar `phone` va `code`
+orqali ajratiladi.
+
+## Maydonlar
+
+Sayt `dimed_users` yozuvida quyidagi maydonlarni saqlaydi. 1C tomon shu
+nomlar va formatga amal qilsa, sinxronizatsiyada moslashtirish shart emas.
+
+| Bazada (sayt) | 1C (Jismoniy shaxs) | Format | Izoh |
+| --- | --- | --- | --- |
+| `code` | Code | matn | 1C bemor kodi — yagona ID |
+| `last_name` | Familiyasi | matn | |
+| `first_name` | Ismi | matn | |
+| `patronymic` | Sharif | matn | |
+| `full_name` | To'liq Ismi | matn | Bo'sh bo'lsa sayt `Familiya Ism` dan yig'adi |
+| `gender` | Jinsi | `male` / `female` | Erkak → `male`, Ayol → `female` |
+| `birth_date` | Tug'ilgan kuni | `YYYY-MM-DD` | Masalan `1990-04-25` |
+| `phone` | Telefon | `+998XXXXXXXXX` | Bog'lovchi kalit. Sayt istalgan formatni shu ko'rinishga keltiradi |
+| `email` | Email | matn | Ixtiyoriy |
+
+Telegram `/start` da sayt `phone`, `first_name`, `last_name`, `full_name` ni
+o'zi to'ldiradi. Qolgan maydonlar (`code`, `patronymic`, `gender`,
+`birth_date`, `email`) — 1C tomondan keladi.
+
+> Qayta `/start` bosilganda 1C to'ldirgan maydonlar **o'chmaydi** — sayt
+> faqat Telegram bergan maydonlarni yangilaydi.
+
+## Sinxronizatsiya yo'nalishi — hali ochiq
+
+Yuqoridagi maydon ro'yxati va `code-index` sayt tomonida tayyor. Ma'lumot
+qaysi yo'nalishda oqishini kelishish qoldi:
+
+- **1C → sayt:** 1C bemor profilini saytga yuboradi (tahlil natijasi kabi
+  `POST`, `X-API-Key` bilan). Sayt kodni saqlaydi.
+- **Sayt → 1C:** yangi bemor saytda bron qilganda 1C uni telefon bo'yicha
+  topadi yoki yangi karta ochadi.
+
+Odatda ikkalasi ham kerak. 1C dasturchisi qaysi so'rovni yubora olishini
+aytsa — sayt tomonidagi endpoint shu shaklga moslab yoziladi.

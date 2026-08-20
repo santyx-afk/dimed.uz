@@ -86,6 +86,10 @@ jadval "users" "$(cat <<JSON
     {
       "AttributeName": "phone",
       "AttributeType": "S"
+    },
+    {
+      "AttributeName": "code",
+      "AttributeType": "S"
     }
   ],
   "KeySchema": [
@@ -101,6 +105,18 @@ jadval "users" "$(cat <<JSON
       "KeySchema": [
         {
           "AttributeName": "phone",
+          "KeyType": "HASH"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      }
+    },
+    {
+      "IndexName": "code-index",
+      "KeySchema": [
+        {
+          "AttributeName": "code",
           "KeyType": "HASH"
         }
       ],

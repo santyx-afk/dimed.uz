@@ -14,10 +14,16 @@ const ALL = { ProjectionType: 'ALL' };
 /** Har bir jadval: bepul chegarada qolish uchun PAY_PER_REQUEST. */
 export const tables = [
   {
+    // phone-index: kirish va tahlil natijalari telefon bo'yicha bog'lanadi.
+    // code-index: 1C bemor kodi bo'yicha qidirish — profil sinxronizatsiyasi
+    //   uchun. Sparse indeks: kodi hali biriktirilmagan bemor unga tushmaydi.
     name: 'users',
-    attrs: [S('telegram_id'), S('phone')],
+    attrs: [S('telegram_id'), S('phone'), S('code')],
     keys: [HASH('telegram_id')],
-    indexes: [{ IndexName: 'phone-index', KeySchema: [HASH('phone')], Projection: ALL }],
+    indexes: [
+      { IndexName: 'phone-index', KeySchema: [HASH('phone')], Projection: ALL },
+      { IndexName: 'code-index', KeySchema: [HASH('code')], Projection: ALL },
+    ],
   },
   {
     name: 'otp_codes',
