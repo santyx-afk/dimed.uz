@@ -23,7 +23,8 @@ process.env.AWS_SECRET_ACCESS_KEY = 'test';
 process.env.TELEGRAM_BOT_TOKEN = 'test-bot-token';
 process.env.TELEGRAM_WEBHOOK_SECRET = 'webhook-secret';
 process.env.LC_API_KEY = 'lc-secret';
-process.env.PAYMENT_WEBHOOK_SECRET = 'pay-secret';
+process.env.PAYME_MERCHANT_ID = 'test-kassa';
+process.env.PAYME_KEY = 'payme-secret';
 process.env.ADMIN_TELEGRAM_IDS = '424242';
 
 import { startFakeDynamo, stopFakeDynamo, seed, tableOf } from './fake-dynamo.mjs';
@@ -61,6 +62,7 @@ const remindPatients = await load('remind-patients.ts');
 const doctorDaily = await load('doctor-daily.ts');
 const doctorsList = await load('doctors.ts');
 const adminDoctors = await load('admin-doctors.ts');
+const paymentWebhook = await load('payment-webhook.ts');
 
 const { toTashkent, toInstant, addDays } = await import(
   pathToFileURL(join(fnDir, 'lib', 'time.ts')).href
@@ -129,6 +131,30 @@ await test('kontakt yuborilganda foydalanuvchi va OTP yaratiladi', async () => {
   const otp = tableOf('test_otp_codes').get('+998901234567');
   assert.match(otp.code, /^\d{6}$/);
   assert.ok(telegramCalls.some((c) => c.body.text.includes(otp.code)), 'kod botga yuborilishi kerak');
+});
+
+await test('qayta /start bosilganda kontakt so\'ralmaydi — kod darhol keladi', async () => {
+  telegramCalls.length = 0;
+  const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({ message: { chat: { id: 777 }, text: '/start' } }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  assert.equal(res.status, 200);
+
+  const sent = telegramCalls.find((c) => c.body.text?.includes('kirish kodingiz'));
+  assert.ok(sent, 'kod yuborilishi kerak');
+  assert.ok(sent.body.text.includes('<code>'), 'kod bosib nusxalanadigan bo\'lishi kerak');
+  assert.ok(!sent.body.reply_markup?.keyboard, 'kontakt tugmasi chiqmasligi kerak');
+});
+
+await test('birinchi /start da kontakt so\'raladi', async () => {
+  telegramCalls.length = 0;
+  await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({ message: { chat: { id: 7007 }, text: '/start' } }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  const greeting = telegramCalls[0];
+  assert.ok(greeting?.body.reply_markup?.keyboard, 'kontakt ulashish tugmasi bo\'lishi kerak');
 });
 
 await test('noto\'g\'ri kod rad etiladi', async () => {
@@ -684,6 +710,116 @@ await test('admin shifokorni o\'chiradi — u faolsizlanadi', async () => {
   ).json();
   const yd = doctors.find((d) => d.id === 'yangidoc');
   assert.ok(yd && yd.active === false, 'faolsiz holatda ro\'yxatda qoladi');
+});
+
+console.log('\nPayme to\'lovi:');
+
+const PAY_DATE = addDays(toTashkent(new Date()).dateKey, 4);
+const rpc = (method, params, auth = 'Paycom:payme-secret') =>
+  call(paymentWebhook, 'https://dimed.uz/api/payment-webhook', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(auth ? { authorization: `Basic ${Buffer.from(auth).toString('base64')}` } : {}),
+    },
+    body: JSON.stringify({ id: 1, method, params }),
+  }).then((r) => r.json());
+
+let payOrder; // { paymentId, amountTiyin, time }
+
+await test('kalitsiz so\'rov rad etiladi (-32504)', async () => {
+  const res = await rpc('CheckPerformTransaction', { amount: 100, account: { order_id: 'x' } }, null);
+  assert.equal(res.error.code, -32504);
+});
+
+await test('onlayn bron Payme havolasini qaytaradi', async () => {
+  process.env.PAYME_ENABLED = '1';
+
+  const free = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${PAY_DATE}`)).json();
+  const time = free.slots.find((s) => s.free).time;
+
+  const res = await call(book, 'https://dimed.uz/api/book', {
+    ...jsonBody({ doctor: 'ashurov', date: PAY_DATE, time }),
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.mode, 'online');
+  assert.ok(data.redirectUrl.startsWith('https://checkout.paycom.uz/'));
+
+  const decoded = Buffer.from(data.redirectUrl.split('/').pop(), 'base64').toString();
+  assert.ok(decoded.includes(`ac.order_id=${data.paymentId}`));
+  assert.ok(decoded.includes('a=7000000'), '70 000 so\'m = 7 000 000 tiyin');
+
+  payOrder = { paymentId: data.paymentId, amountTiyin: 7000000, time };
+});
+
+await test('CheckPerformTransaction: yo\'q buyurtma -31050, noto\'g\'ri summa -31001', async () => {
+  const missing = await rpc('CheckPerformTransaction', { amount: 1, account: { order_id: 'yoq' } });
+  assert.equal(missing.error.code, -31050);
+
+  const wrong = await rpc('CheckPerformTransaction', {
+    amount: 5, account: { order_id: payOrder.paymentId },
+  });
+  assert.equal(wrong.error.code, -31001);
+
+  const ok = await rpc('CheckPerformTransaction', {
+    amount: payOrder.amountTiyin, account: { order_id: payOrder.paymentId },
+  });
+  assert.equal(ok.result.allow, true);
+});
+
+await test('CreateTransaction yaratadi, takrori bir xil javob beradi', async () => {
+  const params = {
+    id: 'payme-tx-1', time: Date.now(), amount: payOrder.amountTiyin,
+    account: { order_id: payOrder.paymentId },
+  };
+  const first = await rpc('CreateTransaction', params);
+  assert.equal(first.result.state, 1);
+  assert.equal(first.result.transaction, payOrder.paymentId);
+
+  const second = await rpc('CreateTransaction', params);
+  assert.equal(second.result.state, 1);
+  assert.equal(second.result.create_time, first.result.create_time);
+
+  const other = await rpc('CreateTransaction', { ...params, id: 'payme-tx-boshqa' });
+  assert.equal(other.error.code, -31099, 'bitta buyurtmaga bitta tranzaksiya');
+});
+
+await test('PerformTransaction slotni paid qiladi va bemorga xabar boradi', async () => {
+  telegramCalls.length = 0;
+  const res = await rpc('PerformTransaction', { id: 'payme-tx-1' });
+  assert.equal(res.result.state, 2);
+
+  const cabinet = await (await call(me, 'https://dimed.uz/api/me', { headers: { cookie: sessionCookie } })).json();
+  const appt = cabinet.appointments.find((a) => a.date === PAY_DATE && a.time === payOrder.time);
+  assert.equal(appt.status, 'paid');
+  assert.ok(telegramCalls.some((c) => c.body.text?.includes('tasdiqlandi')), 'tasdiq xabari ketishi kerak');
+
+  const again = await rpc('PerformTransaction', { id: 'payme-tx-1' });
+  assert.equal(again.result.state, 2, 'takror chaqiruv ham 2 qaytaradi');
+  assert.equal(again.result.perform_time, res.result.perform_time);
+});
+
+await test('CheckTransaction holatni to\'g\'ri ko\'rsatadi', async () => {
+  const res = await rpc('CheckTransaction', { id: 'payme-tx-1' });
+  assert.equal(res.result.state, 2);
+  assert.ok(res.result.perform_time > 0);
+  assert.equal(res.result.transaction, payOrder.paymentId);
+
+  const missing = await rpc('CheckTransaction', { id: 'yoq-tx' });
+  assert.equal(missing.error.code, -31003);
+});
+
+await test('CancelTransaction to\'lovni qaytaradi va slotni bo\'shatadi', async () => {
+  const res = await rpc('CancelTransaction', { id: 'payme-tx-1', reason: 5 });
+  assert.equal(res.result.state, -2, 'to\'langanidan keyin bekor -2');
+
+  const free = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${PAY_DATE}`)).json();
+  const slot = free.slots.find((s) => s.time === payOrder.time);
+  assert.equal(slot.free, true, 'slot yana bo\'sh bo\'lishi kerak');
+
+  delete process.env.PAYME_ENABLED;
 });
 
 stopFakeDynamo();

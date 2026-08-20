@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { optional } from './env.ts';
 
 /**
- * To'lov tizimi adapteri.
+ * To'lov tizimi adapteri — Payme (paycom.uz).
  *
- * RHMT kalitlari kelgunicha sayt "klinikada to'lash" rejimida ishlaydi:
- * slot band qilinadi, to'lov qabulxonada amalga oshiriladi. Kalitlar
- * sozlangach RHMT_ENABLED=1 qilinadi va bir xil interfeys orqali
- * onlayn to'lovga o'tiladi — bron mantig'i o'zgarmaydi.
+ * Payme kassasi ulangunicha sayt "klinikada to'lash" rejimida ishlaydi:
+ * slot band qilinadi, to'lov qabulxonada amalga oshiriladi. Kassa
+ * ochilib PAYME_MERCHANT_ID olingach PAYME_ENABLED=1 qilinadi va bir
+ * xil interfeys orqali onlayn to'lovga o'tiladi — bron mantig'i
+ * o'zgarmaydi. Batafsil: docs/payme-integration.md
  */
 
 export type PaymentMode = 'online' | 'at_clinic';
@@ -15,12 +16,15 @@ export type PaymentMode = 'online' | 'at_clinic';
 export type PaymentIntent = {
   paymentId: string;
   mode: PaymentMode;
-  /** online rejimda — to'lov sahifasi havolasi */
+  /** online rejimda — Payme to'lov sahifasi havolasi */
   redirectUrl?: string;
 };
 
 export const paymentMode = (): PaymentMode =>
-  optional('RHMT_ENABLED') === '1' ? 'online' : 'at_clinic';
+  optional('PAYME_ENABLED') === '1' && optional('PAYME_MERCHANT_ID') ? 'online' : 'at_clinic';
+
+/** Payme summani tiyinda yuboradi va kutadi: 1 so'm = 100 tiyin. */
+export const toTiyin = (som: number): number => Math.round(som * 100);
 
 export async function createPayment(input: {
   amount: number;
@@ -33,9 +37,20 @@ export async function createPayment(input: {
     return { paymentId, mode: 'at_clinic' };
   }
 
-  // RHMT hujjatlari kelgach shu yerga haqiqiy so'rov qo'yiladi.
-  // Interfeys tayyor: amount, appointmentKey va phone yetarli.
-  throw new Error(
-    `RHMT_ENABLED=1, lekin integratsiya hali yozilmagan (${input.appointmentKey}, ${input.amount} so'm)`,
-  );
+  /*
+    Payme checkout havolasi: base64 ichida kassa ID (m), hisob (ac.*)
+    va summa tiyinda (a). Kassa sozlamalarida hisob maydoni nomi
+    "order_id" bo'lishi shart — webhook ham shu nom bilan qidiradi.
+  */
+  const params = [
+    `m=${optional('PAYME_MERCHANT_ID')}`,
+    `ac.order_id=${paymentId}`,
+    `a=${toTiyin(input.amount)}`,
+  ].join(';');
+
+  return {
+    paymentId,
+    mode: 'online',
+    redirectUrl: `https://checkout.paycom.uz/${Buffer.from(params).toString('base64')}`,
+  };
 }

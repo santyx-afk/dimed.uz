@@ -31,8 +31,9 @@ saqlanadi va hech qayerda ochiq ko'rsatilmaydi.
     },
     {
       "code": "19",
-      "title": "Umumiy qon tahlili (14 ko'rsatkich)",
-      "pdf_base64": "JVBERi0xLjQKJcfs..."
+      "title": "Qon shakar (glyukoza)",
+      "value": "5,2 mmol/L",
+      "reference": "3,9 – 6,1"
     }
   ]
 }
@@ -45,13 +46,14 @@ saqlanadi va hech qayerda ochiq ko'rsatilmaydi.
 | `date` | yo'q | Natija sanasi (ISO 8601). Berilmasa — hozirgi vaqt |
 | `results[].code` | ha | Tahlil kodi (price.csv dagi kod bilan bir xil) |
 | `results[].title` | ha | Tahlil nomi |
-| `results[].value` | yo'q | Matn natija, masalan `5,2 mmol/L` |
+| `results[].value` | ha | Matn natija, masalan `5,2 mmol/L` |
 | `results[].reference` | yo'q | Norma oralig'i |
-| `results[].pdf_base64` | yo'q | PDF blank, base64 ko'rinishida |
 
-Bitta so'rovda bir nechta natija yuborish mumkin. `value` ham,
-`pdf_base64` ham bo'lishi mumkin — ikkalasi ham ixtiyoriy, lekin
-kamida bittasi bo'lgani ma'qul.
+Bitta so'rovda bir nechta natija yuborish mumkin.
+
+**PDF yuborilmaydi.** Faqat matn qiymat yuboriladi — bemor kabinetda
+"PDF" tugmasini bossa, sayt blankni brauzerning o'zida yasab beradi.
+Shu sababli fayl saqlash (S3) umuman kerak emas.
 
 ## Javob
 

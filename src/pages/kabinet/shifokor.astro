@@ -52,10 +52,8 @@ import Base from '../../layouts/Base.astro';
           Kun yopiladi, oʻsha kundagi barcha navbatlar bekor qilinadi va har bir bemorga
           Telegram orqali xabar boradi. Bu amalni qaytarib boʻlmaydi.
         </p>
-        <label class="off-lab">
-          Sana
-          <input type="date" id="offDate">
-        </label>
+        <div class="off-lab">Sana</div>
+        <div class="off-days" id="offDays"></div>
         <p class="msg" id="offMsg" role="status" aria-live="polite"></p>
         <button class="btn btn-ghost danger" id="offBtn">Ishga chiqa olmayman</button>
       </div>
@@ -76,6 +74,39 @@ import Base from '../../layouts/Base.astro';
   const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   let shifts: Shift[] = [];
   let slotMinutes = 15;
+
+  /*
+    Sana brauzer kalendarisiz tanlanadi: brauzerniki qurilma tilida
+    (ko'pchilikda ruscha) ochiladi, tugmalar esa har doim o'zbekcha.
+  */
+  const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
+  const OYLAR = ['yan', 'fev', 'mar', 'apr', 'may', 'iyn', 'iyl', 'avg', 'sen', 'okt', 'noy', 'dek'];
+  let offDate = '';
+
+  function renderOffDays(todayKey: string) {
+    const [y, m, d] = todayKey.split('-').map(Number);
+    const today = new Date(y, m - 1, d);
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    let html = '';
+    for (let i = 0; i < 14; i++) {
+      const day = new Date(today);
+      day.setDate(today.getDate() + i);
+      const value = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+      html += `<button class="off-day${value === offDate ? ' on' : ''}" data-value="${value}">
+        ${WD[day.getDay()]}<b>${day.getDate()}</b><small>${OYLAR[day.getMonth()]}</small>
+      </button>`;
+    }
+
+    const box = el('offDays');
+    box.innerHTML = html;
+    box.querySelectorAll<HTMLButtonElement>('.off-day').forEach((b) =>
+      b.addEventListener('click', () => {
+        offDate = b.dataset.value ?? '';
+        renderOffDays(todayKey);
+      }),
+    );
+  }
 
   const setMsg = (text: string, kind: 'error' | 'ok' | '' = '') => {
     const msg = el('msg');
@@ -117,9 +148,8 @@ import Base from '../../layouts/Base.astro';
     el('subtitle').textContent = data.doctor.job;
     el('todayLabel').textContent = data.today;
 
-    const offDate = el<HTMLInputElement>('offDate');
-    offDate.value = data.today;
-    offDate.min = data.today;
+    offDate = data.today;
+    renderOffDays(data.today);
 
     shifts = data.doctor.shifts.map((s) => ({ ...s }));
     slotMinutes = data.doctor.slotMinutes;
@@ -234,7 +264,7 @@ import Base from '../../layouts/Base.astro';
 
   el('offBtn').addEventListener('click', async () => {
     const btn = el<HTMLButtonElement>('offBtn');
-    const date = el<HTMLInputElement>('offDate').value;
+    const date = offDate;
     if (!date) {
       setOffMsg('Sanani tanlang.', 'error');
       return;
@@ -485,20 +515,60 @@ import Base from '../../layouts/Base.astro';
     margin-top: 12px;
   }
 
-  .off-lab input {
+  .off-days {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-top: 10px;
+    scrollbar-width: thin;
+  }
+
+  .off-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    min-width: 46px;
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
-    color: var(--ink);
+    color: var(--muted);
     border-radius: 10px;
-    padding: 8px 11px;
-    font: inherit;
-    font-size: 14px;
+    padding: 6px 8px;
+    font-size: 10.5px;
+    font-weight: 650;
+    line-height: 1.25;
+    flex-shrink: 0;
+  }
+
+  .off-day b {
+    font-size: 14.5px;
+    color: var(--ink);
     font-variant-numeric: tabular-nums;
   }
 
-  .off-lab input:focus {
-    border-color: var(--leaf);
-    outline: none;
+  .off-day small {
+    font-size: 9.5px;
+    font-weight: 600;
+  }
+
+  .off-day:hover {
+    border-color: var(--rose);
+  }
+
+  .off-day.on {
+    border-color: var(--rose);
+    background: var(--rose-soft);
+    color: var(--rose);
+  }
+
+  .off-day.on b {
+    color: var(--rose);
+  }
+
+  .off-day:focus-visible {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
   }
 
   .btn.danger {
