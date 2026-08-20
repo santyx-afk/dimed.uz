@@ -1,5 +1,5 @@
 import type { Context } from '@netlify/functions';
-import { PutCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { required } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
@@ -13,7 +13,12 @@ type TelegramUpdate = {
     chat: { id: number };
     from?: { id: number; first_name?: string };
     text?: string;
-    contact?: { phone_number: string; user_id?: number; first_name?: string };
+    contact?: {
+      phone_number: string;
+      user_id?: number;
+      first_name?: string;
+      last_name?: string;
+    };
   };
 };
 
@@ -72,13 +77,32 @@ async function handleContact(
   contact: NonNullable<NonNullable<TelegramUpdate['message']>['contact']>,
 ): Promise<void> {
   const phone = normalizePhone(contact.phone_number);
-  const name = contact.first_name ?? '';
+  const firstName = contact.first_name ?? '';
+  const lastName = contact.last_name ?? '';
+  const fullName = [lastName, firstName].filter(Boolean).join(' ');
   const now = new Date().toISOString();
 
+  /*
+    Put emas, Update: bemor qayta /start bosganda 1C sinxronlagan
+    profil maydonlari (code, birth_date, gender, ...) o'chib ketmasligi
+    kerak — faqat Telegram bergan maydonlarni yangilaymiz.
+    `name` DynamoDB'da band so'z, shuning uchun taxallus bilan.
+  */
   await db.send(
-    new PutCommand({
+    new UpdateCommand({
       TableName: TABLES.users,
-      Item: { telegram_id: String(chatId), phone, name, updated_at: now },
+      Key: { telegram_id: String(chatId) },
+      UpdateExpression:
+        'SET phone = :p, first_name = :f, last_name = :l, full_name = :fn, #name = :n, updated_at = :u',
+      ExpressionAttributeNames: { '#name': 'name' },
+      ExpressionAttributeValues: {
+        ':p': phone,
+        ':f': firstName,
+        ':l': lastName,
+        ':fn': fullName,
+        ':n': firstName,
+        ':u': now,
+      },
     }),
   );
 

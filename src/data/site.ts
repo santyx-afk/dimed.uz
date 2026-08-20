@@ -9,7 +9,7 @@ export const site = {
   addressNote: 'Abdurashid savdo markazi yonida',
   hours: 'Har kuni 08:00 – 22:00',
   hoursNote: 'boʻlimlar jadvali shifokorga qarab farq qiladi',
-  telegramBot: 'https://t.me/dimedklinika',
+  telegramBot: 'https://t.me/dimedcbot',
   instagram: 'https://instagram.com/dimedklinika',
   facebook: 'https://www.facebook.com/dimedklinika',
 } as const;

@@ -87,6 +87,7 @@ test('kodda ishlatiladigan indekslar mavjud', () => {
 
   // Bu indekslarga tayanadigan joylar: auth.ts, me.ts, cron'lar.
   assert.ok(indexNames('users').includes('phone-index'));
+  assert.ok(indexNames('users').includes('code-index'), '1C profil sinxronizatsiyasi shunga tayanadi');
   assert.ok(indexNames('doctors').includes('telegram-index'));
   assert.ok(indexNames('appointments').includes('patient-index'));
   assert.ok(indexNames('appointments').includes('date-index'), 'cron eslatmalari shunga tayanadi');

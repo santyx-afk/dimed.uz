@@ -213,7 +213,7 @@ barcha maydon turi **String**, barcha indeks proyeksiyasi **ALL**:
 
 | Jadval | Partition key | Sort key | Indeks (GSI) | TTL |
 | --- | --- | --- | --- | --- |
-| `dimed_users` | `telegram_id` | — | `phone-index`: `phone` | — |
+| `dimed_users` | `telegram_id` | — | `phone-index`: `phone`<br>`code-index`: `code` (1C bemor kodi) | — |
 | `dimed_otp_codes` | `phone` | — | — | `expires_at` |
 | `dimed_doctors` | `doctor_id` | — | `telegram-index`: `telegram_id` | — |
 | `dimed_schedules` | `doctor_id` | `date` | — | — |
