@@ -24,6 +24,7 @@ process.env.TELEGRAM_BOT_TOKEN = 'test-bot-token';
 process.env.TELEGRAM_WEBHOOK_SECRET = 'webhook-secret';
 process.env.LC_API_KEY = 'lc-secret';
 process.env.PAYMENT_WEBHOOK_SECRET = 'pay-secret';
+process.env.ADMIN_TELEGRAM_IDS = '424242';
 
 import { startFakeDynamo, stopFakeDynamo, seed, tableOf } from './fake-dynamo.mjs';
 
@@ -58,6 +59,8 @@ const reschedule = await load('reschedule.ts');
 const doctorOff = await load('doctor-off.ts');
 const remindPatients = await load('remind-patients.ts');
 const doctorDaily = await load('doctor-daily.ts');
+const doctorsList = await load('doctors.ts');
+const adminDoctors = await load('admin-doctors.ts');
 
 const { toTashkent, toInstant, addDays } = await import(
   pathToFileURL(join(fnDir, 'lib', 'time.ts')).href
@@ -565,6 +568,122 @@ await test('dam olish kuni belgilansa slot qolmaydi', async () => {
 
   const after = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${BOOK_DATE}`)).json();
   assert.equal(after.slots.length, 0);
+});
+
+// ================= Admin panel =================
+const adminCookie = createSessionCookie({ phone: '+998900424242', userId: '424242' }).split(';')[0];
+
+console.log('\nAdmin panel:');
+
+await test('GET /api/doctors faol shifokorlarni qaytaradi', async () => {
+  const res = await call(doctorsList, 'https://dimed.uz/api/doctors');
+  assert.equal(res.status, 200);
+  const list = await res.json();
+  assert.ok(Array.isArray(list));
+  const a = list.find((d) => d.id === 'ashurov');
+  assert.ok(a, 'ashurov ro\'yxatda bo\'lishi kerak');
+  assert.equal(a.deptId, 'terapiya', 'dept_id → deptId ko\'chirilgan');
+  assert.equal(a.telegramId, undefined, 'telegram_id public javobda chiqmasligi kerak');
+});
+
+await test('admin-doctors sessiyasiz 401', async () => {
+  const res = await call(adminDoctors, 'https://dimed.uz/api/admin-doctors');
+  assert.equal(res.status, 401);
+});
+
+await test('oddiy bemorga 403 va o\'z Telegram ID si qaytadi', async () => {
+  const res = await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', {
+    headers: { cookie: sessionCookie },
+  });
+  assert.equal(res.status, 403);
+  const body = await res.json();
+  assert.equal(body.telegramId, '777', 'egasi o\'z ID sini bilishi uchun');
+});
+
+await test('admin barcha shifokorlarni ko\'radi', async () => {
+  const res = await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(res.status, 200);
+  const { doctors } = await res.json();
+  assert.ok(doctors.find((d) => d.id === 'ashurov'));
+});
+
+await test('admin yangi shifokor qo\'shadi va u /api/doctors da ko\'rinadi', async () => {
+  const res = await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      id: 'yangidoc',
+      name: 'Yangi Shifokor',
+      job: 'Dermatolog',
+      deptId: 'terapiya',
+      price: 55000,
+      slotMinutes: 20,
+      workdays: [1, 2, 3],
+      shifts: [{ start: '09:00', end: '13:00' }],
+    }),
+  });
+  assert.equal(res.status, 200);
+
+  const list = await (await call(doctorsList, 'https://dimed.uz/api/doctors')).json();
+  assert.ok(list.find((d) => d.id === 'yangidoc'), 'yangi shifokor public ro\'yxatda');
+});
+
+await test('admin noto\'g\'ri bo\'lim va slotni rad etadi', async () => {
+  const badDept = await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      id: 'yomon', name: 'X', job: 'Y', deptId: 'yoqdept',
+      price: 1000, slotMinutes: 20, workdays: [1], shifts: [{ start: '09:00', end: '10:00' }],
+    }),
+  });
+  assert.equal(badDept.status, 400);
+
+  const badSlot = await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      id: 'yomon2', name: 'X', job: 'Y', deptId: 'terapiya',
+      price: 1000, slotMinutes: 7, workdays: [1], shifts: [{ start: '09:00', end: '10:00' }],
+    }),
+  });
+  assert.equal(badSlot.status, 400);
+});
+
+await test('bitta Telegram ID ni ikki shifokorga bog\'lab bo\'lmaydi', async () => {
+  // ashurov ning telegram_id si '555'. Uni yangidoc ga bog'lashga urinamiz.
+  const res = await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      id: 'yangidoc', name: 'Yangi Shifokor', job: 'Dermatolog', deptId: 'terapiya',
+      price: 55000, slotMinutes: 20, workdays: [1, 2, 3],
+      shifts: [{ start: '09:00', end: '13:00' }], telegramId: '555',
+    }),
+  });
+  assert.equal(res.status, 400);
+});
+
+await test('admin shifokorni o\'chiradi — u faolsizlanadi', async () => {
+  const res = await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ id: 'yangidoc' }),
+  });
+  assert.equal(res.status, 200);
+
+  // /api/doctors da endi ko'rinmaydi
+  const list = await (await call(doctorsList, 'https://dimed.uz/api/doctors')).json();
+  assert.equal(list.find((d) => d.id === 'yangidoc'), undefined);
+
+  // Admin ro'yxatida active:false bilan turadi (tarix saqlanadi)
+  const { doctors } = await (
+    await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', { headers: { cookie: adminCookie } })
+  ).json();
+  const yd = doctors.find((d) => d.id === 'yangidoc');
+  assert.ok(yd && yd.active === false, 'faolsiz holatda ro\'yxatda qoladi');
 });
 
 stopFakeDynamo();

@@ -341,6 +341,7 @@ Netlify → Site settings → Environment variables.
 | `LAB_S3_BUCKET` | S3 bucket nomi | siz |
 | `LC_API_KEY` | Tasodifiy satr → 1C ga beriladi | men yarataman |
 | `PAYMENT_WEBHOOK_SECRET` | Tasodifiy satr | men yarataman |
+| `ADMIN_TELEGRAM_IDS` | Sizning Telegram ID(lar)ingiz | siz |
 | `RHMT_ENABLED` | Hozircha bo'sh qoldiriladi | keyin |
 
 «Men yarataman» deganlari — tasodifiy parollar, ularni hech kimdan
@@ -355,6 +356,34 @@ so'ramaysiz. Kerak bo'lsa o'zingiz ham yaratasiz: `openssl rand -base64 32`.
 >
 > Lokal ishlashda yoki CloudShell'da standart nomlar ham ishlayveradi —
 > kod ikkalasini ham tan oladi.
+
+---
+
+## 5a. Admin panel — shifokorlarni boshqarish
+
+Manzil: **`/kabinet/admin`**. Bu yerdan terminalsiz:
+
+- yangi shifokor **qo'shish**
+- narx, jadval, lavozim, ish kunlari va h.k. **tahrirlash**
+- shifokorni **o'chirish** (faolsizlantirish — saytdan yo'qoladi, tarixi
+  saqlanadi, kerak bo'lsa qayta faollashtiriladi)
+- shifokorni **Telegram'ga bog'lash** (kabinetiga kirishi uchun)
+
+Kirish — xuddi shifokorlarnikidek, **Telegram orqali** (parol yo'q).
+Faqat `ADMIN_TELEGRAM_IDS` ro'yxatidagi hisob kira oladi.
+
+**Qanday sozlanadi:**
+
+1. Botga `/start` yuborib, kabinetga kiring (`/kirish`).
+2. `/kabinet/admin` sahifasini oching. Ruxsat bo'lmasa, sahifa
+   **sizning Telegram ID**ingizni ko'rsatadi.
+3. O'sha ID ni Netlify → `ADMIN_TELEGRAM_IDS` ga qo'ying (bir nechta
+   bo'lsa, vergul bilan: `39707325,12345678`).
+4. **Deploy** qiling — endi sahifa ochiladi.
+
+Admin panelda qilingan o'zgarish bron oynasida **darhol** ko'rinadi
+(vidjet shifokorlarni jonli `/api/doctors` dan oladi). Bosh sahifadagi
+jamoa kartalari esa keyingi deploy'da yangilanadi.
 
 ---
 
