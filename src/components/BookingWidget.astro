@@ -57,7 +57,13 @@ import DeptIcon from './DeptIcon.astro';
       iconHtml[el.dataset.icon] = el.innerHTML;
     });
 
-  const docById = (id) => doctors.find((d) => d.id === id);
+  /*
+    Shifokor ro'yxati: statik `doctors` faqat birinchi, tez chizish
+    uchun. Sahifa yuklangach `/api/doctors` dan jonli ro'yxat olinadi —
+    admin panelda qo'shilgan/o'chirilgan shifokorlar shunda ko'rinadi.
+  */
+  let docs = doctors;
+  const docById = (id) => docs.find((d) => d.id === id);
 
   /*
     Ish kunlari: shifokor jadvalini kabinetidan o'zgartirishi mumkin,
@@ -129,7 +135,7 @@ import DeptIcon from './DeptIcon.astro';
           .map(
             (d) => `<button class="dept-btn" data-id="${d.id}">
               <span class="ic">${iconHtml[d.id] ?? ''}</span>
-              <span>${d.name}<small>${doctors.filter((x) => x.deptId === d.id).length} shifokor</small></span>
+              <span>${d.name}<small>${docs.filter((x) => x.deptId === d.id).length} shifokor</small></span>
             </button>`,
           )
           .join('') +
@@ -142,7 +148,7 @@ import DeptIcon from './DeptIcon.astro';
         }),
       );
     } else if (state.step === 2) {
-      const list = doctors.filter((d) => d.deptId === state.deptId);
+      const list = docs.filter((d) => d.deptId === state.deptId);
       wBody.innerHTML =
         '<div class="pane-label">Shifokorni tanlang</div><div class="doc-list">' +
         list
@@ -366,6 +372,25 @@ import DeptIcon from './DeptIcon.astro';
   render();
 
   /*
+    Jonli shifokor ro'yxati. Statik ro'yxat bilan darhol chizamiz,
+    keyin serverdagi ro'yxatga almashamiz — bosqich 1/2 da bo'lsak,
+    yangilangan ro'yxat qayta chiziladi.
+  */
+  (async () => {
+    try {
+      const res = await fetch('/api/doctors');
+      if (!res.ok) return;
+      const live = await res.json();
+      if (Array.isArray(live) && live.length) {
+        docs = live;
+        if (state.step <= 2) render();
+      }
+    } catch {
+      /* server yetib bo'lmasa — statik ro'yxat qoladi */
+    }
+  })();
+
+  /*
     Bo'lim/shifokor kartalaridagi "Navbat olish" tugmalari. Bu skript
     (define:vars tufayli) inline bo'lgani uchun kartalar DOM'ga tushishidan
     oldin ishlaydi — shuning uchun delegatsiya ishlatiladi.
@@ -377,8 +402,11 @@ import DeptIcon from './DeptIcon.astro';
     state.booked = null;
     state.time = null;
     state.date = null;
-    if (b.dataset.bookDoc) {
-      state.doc = docById(b.dataset.bookDoc);
+    // Shifokor jonli ro'yxatdan o'chirilgan bo'lishi mumkin — o'shanda
+    // bo'lim ro'yxatiga tushamiz, aks holda to'g'ridan vaqt tanlashga.
+    const doc = b.dataset.bookDoc ? docById(b.dataset.bookDoc) : null;
+    if (doc) {
+      state.doc = doc;
       setStep(3);
     } else {
       state.doc = null;

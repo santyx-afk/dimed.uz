@@ -59,8 +59,10 @@ Amazon DynamoDB + S3 · Telegram Bot API · RHMT (hali ulanmagan)
   `slots.ts` (slot yasash, 1 soat qoidasi), `appointments.ts` (hold muddati),
   `schedule.ts` (smenalarni tekshirish), `payment.ts` (to'lov adapteri)
 - **API:** `/api/slots`, `/api/book` (atomik), `/api/payment-webhook`,
-  `/api/me`, `/api/result-file`, `/api/doctor-schedule`, `/api/logout`
-- **Sahifalar:** `/kirish` (OTP), `/kabinet` (bemor), `/kabinet/shifokor`
+  `/api/me`, `/api/result-file`, `/api/doctor-schedule`, `/api/logout`,
+  `/api/doctors` (public), `/api/admin-doctors` (admin CRUD)
+- **Sahifalar:** `/kirish` (OTP), `/kabinet` (bemor), `/kabinet/shifokor`,
+  `/kabinet/admin` (egaga — shifokorlarni boshqarish)
 - Navbat vidjeti real API'ga ulandi (avval brauzerda taqlid qilardi)
 - SEO: `robots.txt`, `sitemap.xml`
 - `seed-doctors.mjs` — shifokorlarni bazaga yozish
@@ -233,6 +235,21 @@ Holatlar bilan ishlash `lib/appointments.ts` da markazlashgan:
 
 9. **`doctor-off` avval kunni yopadi, keyin navbatlarni bekor qiladi** —
    teskari tartibda bo'shagan slotni yangi bemor ilib ketishi mumkin edi.
+
+10. **Admin panel — `/kabinet/admin`.** Kirish `ADMIN_TELEGRAM_IDS` bo'yicha
+    (`isAdmin`, lib/auth.ts). 403 javobi joriy `telegramId` ni qaytaradi —
+    egasi o'z ID sini bilib, env'ga qo'yishi uchun. `admin-doctors.ts`:
+    GET/POST(upsert)/DELETE(faolsizlantirish). Upsert **UpdateCommand SET**
+    bilan — `telegram_id` va bog'lanish o'chmaydi; Telegram bog'lash
+    `link-doctor.mjs` dagidek guard bilan. "O'chirish" = `active:false`
+    (navbatlar tarixi saqlanadi).
+
+11. **Shifokor ro'yxati endi jonli.** `GET /api/doctors` faol shifokorlarni
+    beradi; bron vidjeti shundan o'qiydi (statik `doctors.ts` faqat birinchi
+    chizish uchun fallback). Shuning uchun admin qo'shgan/o'chirgan shifokor
+    bron oynasida darhol ko'rinadi. Bosh sahifadagi **jamoa kartalari** hali
+    statik — ular keyingi deploy'da yangilanadi (kelajakda ularni ham
+    `/api/doctors` ga o'tkazish mumkin).
 
 ---
 

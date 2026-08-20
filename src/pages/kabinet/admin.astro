@@ -1,0 +1,803 @@
+---
+import Base from '../../layouts/Base.astro';
+import { departments } from '../../data/departments';
+
+const slotOptions = [10, 15, 20, 30];
+const weekdays = [
+  { n: 1, label: 'Du' },
+  { n: 2, label: 'Se' },
+  { n: 3, label: 'Chor' },
+  { n: 4, label: 'Pay' },
+  { n: 5, label: 'Ju' },
+  { n: 6, label: 'Sh' },
+  { n: 0, label: 'Yak' },
+];
+---
+
+<Base
+  title="Admin — Dimed klinikasi"
+  description="Shifokorlarni boshqarish: qo‘shish, tahrirlash, o‘chirish."
+>
+  <section class="wrap page">
+    <div class="head">
+      <div>
+        <div class="eyebrow">Administrator</div>
+        <h1>Shifokorlarni boshqarish</h1>
+        <span class="sub" id="subtitle"></span>
+      </div>
+      <div class="head-actions">
+        <button class="btn btn-sm" id="addBtn" hidden>+ Yangi shifokor</button>
+        <button class="btn btn-ghost btn-sm" id="logout" hidden>Chiqish</button>
+      </div>
+    </div>
+
+    <div id="loading" class="state">Yuklanmoqda…</div>
+
+    <div id="denied" class="state" hidden>
+      <p id="deniedText">Bu bo‘lim faqat administrator uchun.</p>
+      <p id="idHint" class="id-hint" hidden></p>
+      <a class="btn" href="/kirish">Kirish</a>
+    </div>
+
+    <div id="content" hidden>
+      <div id="list" class="doc-rows"></div>
+    </div>
+  </section>
+
+  <!-- Tahrirlash / qo'shish oynasi -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card card glass">
+      <div class="modal-head">
+        <h2 id="formTitle">Yangi shifokor</h2>
+        <button class="x" id="closeForm" aria-label="Yopish">✕</button>
+      </div>
+
+      <div class="form">
+        <label class="fld">
+          <span>ID (lotincha, masalan <code>ashurov</code>)</span>
+          <input id="f-id" type="text" autocomplete="off" placeholder="ashurov" />
+        </label>
+
+        <div class="two">
+          <label class="fld"><span>Ism</span><input id="f-name" type="text" /></label>
+          <label class="fld"><span>Lavozim</span><input id="f-job" type="text" placeholder="Terapevt" /></label>
+        </div>
+
+        <div class="two">
+          <label class="fld">
+            <span>Bo‘lim</span>
+            <select id="f-dept">
+              {departments.map((d) => <option value={d.id}>{d.name}</option>)}
+            </select>
+          </label>
+          <label class="fld"><span>Narx (so‘m)</span><input id="f-price" type="number" min="0" step="1000" /></label>
+        </div>
+
+        <div class="fld">
+          <span>Qabul davomiyligi</span>
+          <div class="seg" id="f-slot">
+            {slotOptions.map((m) => <button type="button" data-min={m}>{m} daq</button>)}
+          </div>
+        </div>
+
+        <div class="fld">
+          <span>Ish kunlari</span>
+          <div class="days" id="f-days">
+            {weekdays.map((w) => (
+              <label class="day"><input type="checkbox" value={w.n} />{w.label}</label>
+            ))}
+          </div>
+        </div>
+
+        <div class="fld">
+          <span>Smenalar (tanaffus — smenalar orasidagi bo‘shliq)</span>
+          <div id="f-shifts"></div>
+          <button class="add" id="addShift" type="button">+ smena qo‘shish</button>
+        </div>
+
+        <div class="two">
+          <label class="fld"><span>Tajriba</span><input id="f-exp" type="text" placeholder="20+ yil" /></label>
+          <label class="fld"><span>Ish vaqti (yozuv)</span><input id="f-hours" type="text" placeholder="Du–Sh · 08:00–17:00" /></label>
+        </div>
+
+        <div class="two">
+          <label class="fld"><span>Rasm (yo‘l)</span><input id="f-photo" type="text" placeholder="/images/team/ashurov.webp" /></label>
+          <label class="fld"><span>Shifokor telefoni</span><input id="f-phone" type="tel" placeholder="+998 90 123 45 67" /></label>
+        </div>
+
+        <label class="fld">
+          <span>Telegram ID (kabinetiga kirishi uchun — ixtiyoriy)</span>
+          <input id="f-tg" type="text" inputmode="numeric" placeholder="masalan 123456789" />
+        </label>
+
+        <label class="chk">
+          <input id="f-active" type="checkbox" checked /> Faol (saytda ko‘rinadi)
+        </label>
+
+        <p class="msg" id="formMsg" role="status" aria-live="polite"></p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost btn-sm" id="cancelForm" type="button">Bekor qilish</button>
+          <button class="btn" id="saveForm" type="button">Saqlash</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</Base>
+
+<script>
+  type Shift = { start: string; end: string };
+  type Doctor = {
+    id: string;
+    name: string;
+    job: string;
+    deptId: string;
+    price: number;
+    slotMinutes: number;
+    workdays: number[];
+    shifts: Shift[];
+    experience: string;
+    photo: string;
+    hours: string;
+    phone: string;
+    active: boolean;
+    telegramId: string;
+    linked: boolean;
+  };
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const DEPT_NAMES: Record<string, string> = {
+    pediatriya: 'Pediatriya',
+    terapiya: 'Terapiya',
+    ginekologiya: 'Ginekologiya',
+    nevrologiya: 'Nevrologiya',
+    lor: 'LOR',
+    fizio: 'Fizioterapiya',
+  };
+  const fmtPrice = (n: number) => n.toLocaleString('ru-RU').replace(/,/g, ' ');
+
+  let doctors: Doctor[] = [];
+  let shifts: Shift[] = [];
+  let slotMinutes = 15;
+
+  // ---------- yuklash ----------
+  async function load() {
+    let data: { doctors: Doctor[] };
+    try {
+      const res = await fetch('/api/admin-doctors', { credentials: 'same-origin' });
+      if (res.status === 401 || res.status === 403) {
+        el('loading').hidden = true;
+        el('denied').hidden = false;
+        if (res.status === 403) {
+          const body = (await res.json()) as { telegramId?: string };
+          el('deniedText').textContent = 'Bu hisobda administrator huquqi yo‘q.';
+          if (body.telegramId) {
+            const hint = el('idHint');
+            hint.hidden = false;
+            hint.textContent = `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`;
+          }
+        }
+        return;
+      }
+      if (!res.ok) throw new Error(String(res.status));
+      data = await res.json();
+    } catch {
+      el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
+      return;
+    }
+
+    doctors = data.doctors;
+    el('loading').hidden = true;
+    el('content').hidden = false;
+    el('addBtn').hidden = false;
+    el('logout').hidden = false;
+    el('subtitle').textContent = `${doctors.length} ta shifokor`;
+    renderList();
+  }
+
+  function renderList() {
+    el('list').innerHTML = doctors
+      .map(
+        (d) => `<div class="doc-row${d.active ? '' : ' off'}">
+          <div class="doc-main">
+            <span class="nm">${esc(d.name)}</span>
+            <span class="meta">${esc(d.job)} · ${DEPT_NAMES[d.deptId] ?? d.deptId} · ${fmtPrice(d.price)} so‘m · ${d.slotMinutes} daq</span>
+          </div>
+          <div class="doc-tags">
+            ${d.active ? '' : '<span class="tag off">faolsiz</span>'}
+            ${d.linked ? '<span class="tag ok">Telegram ✓</span>' : '<span class="tag warn">bog‘lanmagan</span>'}
+          </div>
+          <div class="doc-btns">
+            <button class="mini" data-edit="${d.id}">Tahrirlash</button>
+            ${
+              d.active
+                ? `<button class="mini danger" data-off="${d.id}">O‘chirish</button>`
+                : `<button class="mini okbtn" data-on="${d.id}">Faollashtirish</button>`
+            }
+          </div>
+        </div>`,
+      )
+      .join('');
+
+    el('list')
+      .querySelectorAll<HTMLButtonElement>('[data-edit]')
+      .forEach((b) => (b.onclick = () => openForm(b.dataset.edit!)));
+    el('list')
+      .querySelectorAll<HTMLButtonElement>('[data-off]')
+      .forEach((b) => (b.onclick = () => setActive(b.dataset.off!, false)));
+    el('list')
+      .querySelectorAll<HTMLButtonElement>('[data-on]')
+      .forEach((b) => (b.onclick = () => setActive(b.dataset.on!, true)));
+  }
+
+  const esc = (s: string) =>
+    s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+
+  // ---------- forma ----------
+  function openForm(id: string | null) {
+    const d = id ? doctors.find((x) => x.id === id) ?? null : null;
+
+    el('formTitle').textContent = d ? d.name : 'Yangi shifokor';
+    setMsg('');
+
+    el<HTMLInputElement>('f-id').value = d?.id ?? '';
+    el<HTMLInputElement>('f-id').disabled = Boolean(d); // ID o'zgarmaydi
+    el<HTMLInputElement>('f-name').value = d?.name ?? '';
+    el<HTMLInputElement>('f-job').value = d?.job ?? '';
+    el<HTMLSelectElement>('f-dept').value = d?.deptId ?? 'terapiya';
+    el<HTMLInputElement>('f-price').value = d ? String(d.price) : '';
+    el<HTMLInputElement>('f-exp').value = d?.experience ?? '';
+    el<HTMLInputElement>('f-hours').value = d?.hours ?? '';
+    el<HTMLInputElement>('f-photo').value = d?.photo ?? '';
+    el<HTMLInputElement>('f-phone').value = d?.phone ?? '';
+    el<HTMLInputElement>('f-tg').value = d?.telegramId ?? '';
+    el<HTMLInputElement>('f-active').checked = d ? d.active : true;
+
+    slotMinutes = d?.slotMinutes ?? 15;
+    renderSlotSeg();
+
+    const days = d?.workdays ?? [1, 2, 3, 4, 5, 6];
+    el('f-days')
+      .querySelectorAll<HTMLInputElement>('input')
+      .forEach((cb) => (cb.checked = days.includes(Number(cb.value))));
+
+    shifts = (d?.shifts ?? [{ start: '09:00', end: '13:00' }]).map((s) => ({ ...s }));
+    renderShifts();
+
+    el('modal').hidden = false;
+  }
+
+  function closeForm() {
+    el('modal').hidden = true;
+  }
+
+  function renderSlotSeg() {
+    el('f-slot')
+      .querySelectorAll<HTMLButtonElement>('button')
+      .forEach((btn) => {
+        btn.classList.toggle('on', Number(btn.dataset.min) === slotMinutes);
+        btn.onclick = () => {
+          slotMinutes = Number(btn.dataset.min);
+          renderSlotSeg();
+        };
+      });
+  }
+
+  function renderShifts() {
+    el('f-shifts').innerHTML = shifts
+      .map(
+        (s, i) => `<div class="shift">
+          <input type="time" value="${s.start}" data-i="${i}" data-k="start" aria-label="${i + 1}-smena boshlanishi">
+          <span class="dash">–</span>
+          <input type="time" value="${s.end}" data-i="${i}" data-k="end" aria-label="${i + 1}-smena tugashi">
+          <button class="del" data-del="${i}" type="button" aria-label="Smenani o‘chirish">✕</button>
+        </div>`,
+      )
+      .join('');
+
+    el('f-shifts')
+      .querySelectorAll<HTMLInputElement>('input[data-i]')
+      .forEach((input) =>
+        input.addEventListener('change', () => {
+          const shift = shifts[Number(input.dataset.i)];
+          if (shift) shift[input.dataset.k as 'start' | 'end'] = input.value;
+        }),
+      );
+    el('f-shifts')
+      .querySelectorAll<HTMLButtonElement>('[data-del]')
+      .forEach((btn) =>
+        btn.addEventListener('click', () => {
+          if (shifts.length === 1) {
+            setMsg('Kamida bitta smena qolishi kerak.', 'error');
+            return;
+          }
+          shifts.splice(Number(btn.dataset.del), 1);
+          renderShifts();
+        }),
+      );
+  }
+
+  const setMsg = (text: string, kind: 'error' | 'ok' | '' = '') => {
+    const m = el('formMsg');
+    m.textContent = text;
+    m.className = `msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  el('addShift').addEventListener('click', () => {
+    const last = shifts.at(-1);
+    shifts.push(last ? { start: last.end, end: last.end } : { start: '09:00', end: '13:00' });
+    renderShifts();
+  });
+
+  async function save() {
+    const workdays = [...el('f-days').querySelectorAll<HTMLInputElement>('input')]
+      .filter((cb) => cb.checked)
+      .map((cb) => Number(cb.value));
+
+    const payload = {
+      id: el<HTMLInputElement>('f-id').value.trim(),
+      name: el<HTMLInputElement>('f-name').value.trim(),
+      job: el<HTMLInputElement>('f-job').value.trim(),
+      deptId: el<HTMLSelectElement>('f-dept').value,
+      price: Number(el<HTMLInputElement>('f-price').value),
+      slotMinutes,
+      workdays,
+      shifts,
+      experience: el<HTMLInputElement>('f-exp').value.trim(),
+      hours: el<HTMLInputElement>('f-hours').value.trim(),
+      photo: el<HTMLInputElement>('f-photo').value.trim(),
+      phone: el<HTMLInputElement>('f-phone').value.trim(),
+      telegramId: el<HTMLInputElement>('f-tg').value.trim(),
+      active: el<HTMLInputElement>('f-active').checked,
+    };
+
+    const btn = el<HTMLButtonElement>('saveForm');
+    btn.disabled = true;
+    setMsg('Saqlanmoqda…');
+    try {
+      const res = await fetch('/api/admin-doctors', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setMsg(data.error ?? 'Saqlab bo‘lmadi.', 'error');
+        return;
+      }
+      closeForm();
+      await load();
+    } catch {
+      setMsg('Internetga ulanishda muammo.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function setActive(id: string, active: boolean) {
+    const doc = doctors.find((x) => x.id === id);
+    const q = active
+      ? `"${doc?.name}" qayta faollashtirilsinmi?`
+      : `"${doc?.name}" o‘chirilsinmi? (saytdan va navbatdan yo‘qoladi, tarix saqlanadi)`;
+    if (!confirm(q)) return;
+
+    try {
+      const res = await fetch('/api/admin-doctors', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, active }),
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        alert(data.error ?? 'Bajarib bo‘lmadi.');
+        return;
+      }
+      await load();
+    } catch {
+      alert('Internetga ulanishda muammo.');
+    }
+  }
+
+  el('addBtn').addEventListener('click', () => openForm(null));
+  el('closeForm').addEventListener('click', closeForm);
+  el('cancelForm').addEventListener('click', closeForm);
+  el('saveForm').addEventListener('click', save);
+  el('modal').addEventListener('click', (e) => {
+    if (e.target === el('modal')) closeForm();
+  });
+  el('logout').addEventListener('click', async () => {
+    await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+    window.location.href = '/';
+  });
+
+  load();
+</script>
+
+<style>
+  .page {
+    padding: 48px 0 64px;
+    min-height: 60vh;
+  }
+
+  .head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+
+  .head-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  h1 {
+    font-size: clamp(24px, 3.2vw, 34px);
+    font-weight: 750;
+  }
+
+  .sub {
+    display: block;
+    color: var(--rose);
+    font-weight: 650;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  .state {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  .id-hint {
+    color: var(--ink);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 14px auto 0;
+    max-width: 460px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  /* ---- ro'yxat ---- */
+  .doc-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .doc-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 14px;
+    flex-wrap: wrap;
+  }
+
+  .doc-row.off {
+    opacity: 0.55;
+  }
+
+  .doc-main {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .doc-main .nm {
+    font-weight: 700;
+    font-size: 15px;
+  }
+
+  .doc-main .meta {
+    font-size: 12.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .doc-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .tag {
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 3px 10px;
+  }
+
+  .tag.ok {
+    color: var(--ok);
+    background: var(--ok-bg);
+  }
+
+  .tag.warn {
+    color: var(--warn);
+    background: var(--warn-bg);
+  }
+
+  .tag.off {
+    color: var(--muted);
+    background: var(--busy);
+  }
+
+  .doc-btns {
+    display: flex;
+    gap: 6px;
+  }
+
+  .mini {
+    border: 1px solid var(--card-brd);
+    background: var(--card-bg);
+    color: var(--ink);
+    border-radius: 9px;
+    padding: 7px 12px;
+    font-size: 12.5px;
+    font-weight: 650;
+  }
+
+  .mini:hover {
+    border-color: var(--leaf);
+  }
+
+  .mini.danger {
+    color: var(--rose);
+  }
+
+  .mini.danger:hover {
+    border-color: var(--rose);
+    background: var(--rose-soft);
+  }
+
+  .mini.okbtn {
+    color: var(--leaf);
+  }
+
+  /* ---- modal ---- */
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+    overflow-y: auto;
+    z-index: 50;
+  }
+
+  .modal-card {
+    border-radius: 18px;
+    padding: 22px;
+    width: 100%;
+    max-width: 560px;
+  }
+
+  .modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .modal-head h2 {
+    font-size: 18px;
+    font-weight: 750;
+  }
+
+  .x {
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 16px;
+    padding: 4px 8px;
+    border-radius: 8px;
+  }
+
+  .x:hover {
+    color: var(--rose);
+    background: var(--rose-soft);
+  }
+
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  @media (max-width: 520px) {
+    .two {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .fld {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .fld > span {
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--muted);
+  }
+
+  .fld input,
+  .fld select {
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font: inherit;
+    font-size: 14px;
+  }
+
+  .fld input:focus,
+  .fld select:focus {
+    border-color: var(--leaf);
+    outline: none;
+  }
+
+  .fld input:disabled {
+    opacity: 0.6;
+  }
+
+  .seg {
+    display: flex;
+    gap: 6px;
+  }
+
+  .seg button {
+    flex: 1;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 10px;
+    padding: 9px 4px;
+    font-size: 13px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .seg button.on {
+    background: var(--leaf);
+    border-color: var(--leaf);
+    color: #fff;
+  }
+
+  .days {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .day {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 9px;
+    padding: 7px 11px;
+    cursor: pointer;
+  }
+
+  .day input {
+    accent-color: var(--leaf);
+  }
+
+  .chk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+
+  .chk input {
+    accent-color: var(--leaf);
+    width: 17px;
+    height: 17px;
+  }
+
+  .form :global(.shift) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .form :global(.shift input) {
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 11px;
+    font: inherit;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .form :global(.dash) {
+    color: var(--muted);
+  }
+
+  .form :global(.del) {
+    margin-left: auto;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 6px 8px;
+    border-radius: 8px;
+  }
+
+  .form :global(.del:hover) {
+    color: var(--rose);
+    background: var(--rose-soft);
+  }
+
+  .add {
+    border: 1.5px dashed var(--line);
+    background: none;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--muted);
+    align-self: flex-start;
+  }
+
+  .add:hover {
+    border-color: var(--leaf);
+    color: var(--leaf);
+  }
+
+  .msg {
+    min-height: 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .msg.error {
+    color: var(--rose);
+  }
+
+  .msg.ok {
+    color: var(--leaf);
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+</style>
