@@ -430,6 +430,23 @@ await test('shifokor o\'z jadvalini va navbatini ko\'radi', async () => {
   assert.equal(data.slots.length, 8);
 });
 
+await test('shifokor kelgusi kun navbatini ?date bilan ko\'radi', async () => {
+  // BOOK_DATE ga bemor navbati bor (yuqoridagi bron testidan).
+  const res = await call(doctorSchedule, `https://dimed.uz/api/doctor-schedule?date=${BOOK_DATE}`, {
+    headers: { cookie: doctorCookie },
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.date, BOOK_DATE);
+  assert.ok(data.appointments.length >= 1, 'kelgusi kunning navbati ko\'rinishi kerak');
+  assert.ok(data.appointments[0].phone.includes('•'), 'telefon niqoblangan bo\'lishi kerak');
+
+  const bad = await call(doctorSchedule, 'https://dimed.uz/api/doctor-schedule?date=21-08-2026', {
+    headers: { cookie: doctorCookie },
+  });
+  assert.equal(bad.status, 400, 'noto\'g\'ri sana rad etilishi kerak');
+});
+
 await test('shifokor smenalari va slot davomiyligini o\'zgartiradi', async () => {
   const res = await call(doctorSchedule, 'https://dimed.uz/api/doctor-schedule', {
     method: 'POST',
