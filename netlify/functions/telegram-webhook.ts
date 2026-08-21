@@ -1,9 +1,10 @@
 import type { Context } from '@netlify/functions';
-import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { required } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { generateOtp } from './lib/session.ts';
+import { mergeIndividualProfile } from './lib/patients.ts';
 import { json, normalizePhone } from './lib/http.ts';
 
 const OTP_TTL_SECONDS = 5 * 60;
@@ -51,12 +52,29 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     if (message.contact) {
       await handleContact(message.chat.id, message.contact);
     } else if (message.text?.startsWith('/start')) {
-      await sendMessage(
-        message.chat.id,
-        'Assalomu alaykum! <b>Dimed</b> klinikasiga xush kelibsiz.\n\n' +
-          'Saytga kirish uchun pastdagi tugma orqali kontaktingizni ulashing.',
-        shareContactKeyboard,
+      /*
+        Kontakt bir marta so'raladi. Telefon allaqachon bog'langan
+        bo'lsa — darhol yangi kod yuboriladi: har /start da tugma
+        bosishga majburlash bemorni charchatadi.
+      */
+      const existing = await db.send(
+        new GetCommand({
+          TableName: TABLES.users,
+          Key: { telegram_id: String(message.chat.id) },
+        }),
       );
+      const phone = (existing.Item as { phone?: string } | undefined)?.phone;
+
+      if (phone) {
+        await sendOtp(message.chat.id, phone);
+      } else {
+        await sendMessage(
+          message.chat.id,
+          'Assalomu alaykum! <b>Dimed</b> klinikasiga xush kelibsiz.\n\n' +
+            'Saytga kirish uchun pastdagi tugma orqali kontaktingizni ulashing.',
+          shareContactKeyboard,
+        );
+      }
     } else if (message.text === '/help') {
       await sendMessage(
         message.chat.id,
@@ -106,6 +124,20 @@ async function handleContact(
     }),
   );
 
+  /*
+    1C bemorlar jadvalida bo'lsa, F.I.Sh. va kodini shu yerda olamiz.
+    Bu qulaylik, kirish sharti emas — 1C jadvali hali bo'lmasa yoki
+    bemor unda topilmasa, kirish baribir davom etadi.
+  */
+  await mergeIndividualProfile(phone, String(chatId)).catch((err) =>
+    logToAdmin('telegram-webhook/1c-profil', err),
+  );
+
+  await sendOtp(chatId, phone);
+}
+
+/** Yangi kirish kodi yasab yuboradi. */
+async function sendOtp(chatId: number, phone: string): Promise<void> {
   const code = generateOtp();
   await db.send(
     new PutCommand({
@@ -120,10 +152,11 @@ async function handleContact(
     }),
   );
 
+  // <code> — Telegram'da bosilsa nusxalanadi.
   await sendMessage(
     chatId,
-    `Saytga kirish kodingiz:\n\n<b>${code}</b>\n\n` +
-      'Kod 5 daqiqa amal qiladi. Uni hech kimga bermang.',
+    `Saytga kirish kodingiz:\n\n<code>${code}</code>\n\n` +
+      'Kod ustiga bossangiz — nusxalanadi. 5 daqiqa amal qiladi, hech kimga bermang.',
     { remove_keyboard: true },
   );
 }

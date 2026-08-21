@@ -31,8 +31,9 @@ saqlanadi va hech qayerda ochiq ko'rsatilmaydi.
     },
     {
       "code": "19",
-      "title": "Umumiy qon tahlili (14 ko'rsatkich)",
-      "pdf_base64": "JVBERi0xLjQKJcfs..."
+      "title": "Qon shakar (glyukoza)",
+      "value": "5,2 mmol/L",
+      "reference": "3,9 – 6,1"
     }
   ]
 }
@@ -45,13 +46,14 @@ saqlanadi va hech qayerda ochiq ko'rsatilmaydi.
 | `date` | yo'q | Natija sanasi (ISO 8601). Berilmasa — hozirgi vaqt |
 | `results[].code` | ha | Tahlil kodi (price.csv dagi kod bilan bir xil) |
 | `results[].title` | ha | Tahlil nomi |
-| `results[].value` | yo'q | Matn natija, masalan `5,2 mmol/L` |
+| `results[].value` | ha | Matn natija, masalan `5,2 mmol/L` |
 | `results[].reference` | yo'q | Norma oralig'i |
-| `results[].pdf_base64` | yo'q | PDF blank, base64 ko'rinishida |
 
-Bitta so'rovda bir nechta natija yuborish mumkin. `value` ham,
-`pdf_base64` ham bo'lishi mumkin — ikkalasi ham ixtiyoriy, lekin
-kamida bittasi bo'lgani ma'qul.
+Bitta so'rovda bir nechta natija yuborish mumkin.
+
+**PDF yuborilmaydi.** Faqat matn qiymat yuboriladi — bemor kabinetda
+"PDF" tugmasini bossa, sayt blankni brauzerning o'zida yasab beradi.
+Shu sababli fayl saqlash (S3) umuman kerak emas.
 
 ## Javob
 
@@ -141,6 +143,64 @@ o'zi to'ldiradi. Qolgan maydonlar (`code`, `patronymic`, `gender`,
 > Qayta `/start` bosilganda 1C to'ldirgan maydonlar **o'chmaydi** — sayt
 > faqat Telegram bergan maydonlarni yangilaydi.
 
+## 1C to'g'ridan-to'g'ri DynamoDB'ga yozadi (joriy usul)
+
+1C dasturchisi bemor profilini alohida jadvalga o'zi yozadi — sayt
+API'si shart emas. Kelishuv:
+
+| Sozlama | Qiymat |
+| --- | --- |
+| Jadval nomi (`DynamoDBIndividualsTable` konstantasi) | **`dimed_individuals`** |
+| Region | **`us-east-1`** |
+| Partition key | `phone` (String) — `+998XXXXXXXXX`, plyus bilan |
+| Sort key | `sort_key` (String) — **1C bemor kodi** (`IndividualRef.Code`) |
+
+Maydonlar (1C yuboradigan nomlar): `Surname`, `Name`, `Patronymic`,
+`FullName`, `IsMale` (BOOL), `Birthday`, `Email`, `PriceCategory`,
+`BirthArea`, `ResidenceArea`, `Address`, `WhereHeard`.
+
+Alohida `Code` maydoni kerak emas — kod `sort_key` ning o'zi. Shu
+tufayli bir telefon ostida bir nechta bemor (oila a'zolari) sig'adi,
+har biri o'z kodi bilan. Sayt profilni birlashtirshda birinchi
+yozuvni oladi — odatda telefon egasi.
+
+Sayt bu jadvaldan **o'zi o'qiydi**: bemor botga kontakt ulashganda va
+har saytga kirishda profil `dimed_users` ga birlashtiriladi (yuqoridagi
+snake_case nomlar bilan). 1C jadvalga xohlagan payt yozaveradi.
+
+1C tomonga iltimos: **`Birthday` ni `Format(..., "DF=yyyy-MM-dd")`**
+bilan yozing. `DLF=D` (25.04.1990) ham qabul qilinadi, lekin ISO
+ishonchliroq.
+
+> Diqqat: `dimed_lab_results` ga yozmang — u tahlil natijalari uchun,
+> kaliti o'xshash bo'lsa ham. Profil faqat `dimed_individuals` ga.
+
+## Tahlil natijalari to'g'ridan-to'g'ri DynamoDB'ga (joriy usul)
+
+Profil singari, laboratoriya natijalarini ham 1C o'zi yozadi. Kelishuv:
+
+| Sozlama | Qiymat |
+| --- | --- |
+| Jadval nomi (`DynamoDBAnalysisResultTable` konstantasi) | **`dimed_analysis_results`** |
+| Region | **`us-east-1`** |
+| Partition key | `phone` (String) — `+998XXXXXXXXX`, plyus bilan |
+| Sort key | `sort_key` (String) — hujjat UUID |
+
+Hujjat maydonlari: `DocumentUID`, `Date`, `SampleID`, `Biomaterial`,
+`PatientName`, `PatientBirthday`, `PatientIsMale`, `RegisterDate` va
+`AnalysisResults` (ro'yxat: `Analyte`, `Result`, `AnalyteUnit`,
+`AnalyteInternationalCode`).
+
+Sayt kabinetda har analitni alohida qator qilib ko'rsatadi, PDF ni
+brauzerning o'zida yasaydi. `Date` `DLF=DT` (21.08.2026 14:30:00)
+kelsa ISO ga o'giriladi — lekin `DF=yyyy-MM-ddTHH:mm:ss` ishonchliroq.
+
+> Diqqat: konstantani standart `AnalysisResult` da qoldirmang —
+> **`dimed_analysis_results`** qiling. Sayt kaliti faqat `dimed_*`
+> jadvallarni o'qiy oladi (IAM policy), va eski nomdagi jadval
+> saytga ko'rinmaydi. Konstanta o'zgargach eski yozuvlarni yangi
+> jadvalga qayta yuborish kifoya.
+
 ## Sinxronizatsiya yo'nalishi — hali ochiq
 
 Yuqoridagi maydon ro'yxati va `code-index` sayt tomonida tayyor. Ma'lumot
@@ -153,3 +213,32 @@ qaysi yo'nalishda oqishini kelishish qoldi:
 
 Odatda ikkalasi ham kerak. 1C dasturchisi qaysi so'rovni yubora olishini
 aytsa — sayt tomonidagi endpoint shu shaklga moslab yoziladi.
+
+## Tez yo'l: CSV orqali birinchi yuklash
+
+API ulanguncha bemorlarni **fayl orqali** yuklash mumkin — 1C
+dasturchisiz, 10 daqiqada:
+
+1. 1C'da **Jismoniy shaxslar** ro'yxatini oching
+2. Ro'yxat ustida o'ng tugma → **Вывести список** (ro'yxatni chiqarish)
+   → kerakli ustunlarni belgilang: Code, Familiyasi, Ismi, Sharif,
+   Jinsi, Tug'ilgan kuni, **Telefon** (majburiy), Email
+3. Ochilgan jadvalni saqlang (Excel bo'lsa — Excel'da ochib
+   **CSV UTF-8** qilib qayta saqlang)
+4. Loyiha papkasida:
+
+```bash
+node scripts/import-patients.mjs bemorlar.csv --dry   # avval ko'rish
+node scripts/import-patients.mjs bemorlar.csv         # yuklash
+```
+
+Skript telefonni bot foydalanuvchisi bilan solishtiradi:
+
+- **Mos kelsa** — 1C profili (kod, F.I.Sh., jins, tug'ilgan kun)
+  yoziladi. Telegram maydonlariga tegilmaydi.
+- **Bemor botga hali kirmagan bo'lsa** — o'tkazib yuboriladi va
+  ro'yxatda ko'rsatiladi. U botga kirgach skriptni qayta yurgizing —
+  qayta yurgizish xavfsiz (idempotent).
+
+Ustun sarlavhalari avtomatik taniladi (o'zbek/rus/ingliz), ajratgich
+`,` `;` yoki TAB bo'lishi mumkin, telefon istalgan formatda.

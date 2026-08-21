@@ -1,16 +1,17 @@
 import type { Context } from '@netlify/functions';
 import { timingSafeEqual } from 'node:crypto';
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { db, TABLES } from './lib/db.ts';
-import { s3 } from './lib/s3.ts';
-import { required, optional } from './lib/env.ts';
+import { required } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { json, error, normalizePhone } from './lib/http.ts';
 
 /**
  * 1C laboratoriya tizimidan tahlil natijalarini qabul qiladi.
- * Matn natija DynamoDB'ga, PDF esa S3'ga yoziladi.
+ *
+ * Faqat matn natija olinadi — PDF fayl qabul qilinmaydi: bemor
+ * kabinetning o'zida "PDF" tugmasi bilan chiroyli blankni brauzerda
+ * yasab oladi. Shu sababli S3 ham, fayl saqlash ham kerak emas.
  *
  * Spetsifikatsiya: docs/1c-integration.md
  */
@@ -21,8 +22,6 @@ type ResultItem = {
   /** Matn natija, masalan "5,2 mmol/L" */
   value?: string;
   reference?: string;
-  /** PDF base64 ko'rinishida (ixtiyoriy) */
-  pdf_base64?: string;
 };
 
 type Body = {
@@ -46,26 +45,15 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     if (!body.phone) return error('phone maydoni kerak');
     if (!body.results?.length) return error('results ro‘yxati bo‘sh');
 
+    for (const item of body.results) {
+      if (!item.code || !item.title) return error('Har bir natijada code va title kerak');
+      if (!item.value) return error(`"${item.title}": value maydoni kerak (matn natija)`);
+    }
+
     const phone = normalizePhone(body.phone);
     const date = body.date ?? new Date().toISOString();
-    const bucket = optional('LAB_S3_BUCKET');
 
     for (const item of body.results) {
-      let s3Key: string | undefined;
-
-      if (item.pdf_base64) {
-        if (!bucket) throw new Error('LAB_S3_BUCKET sozlanmagan — PDF saqlab bo‘lmadi');
-        s3Key = `results/${encodeURIComponent(phone)}/${date.slice(0, 10)}/${item.code}.pdf`;
-        await s3.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: s3Key,
-            Body: Buffer.from(item.pdf_base64, 'base64'),
-            ContentType: 'application/pdf',
-          }),
-        );
-      }
-
       await db.send(
         new PutCommand({
           TableName: TABLES.labResults,
@@ -76,8 +64,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             title: item.title,
             value: item.value,
             reference: item.reference,
-            type: s3Key ? 'pdf' : 'text',
-            s3_key: s3Key,
+            type: 'text',
             order_id: body.order_id,
             date,
             seen: false,

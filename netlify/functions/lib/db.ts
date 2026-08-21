@@ -19,6 +19,8 @@ export const db = DynamoDBDocumentClient.from(client, {
 export const TABLES = {
   users: tableName('users'),
   otpCodes: tableName('otp_codes'),
+  individuals: tableName('individuals'),
+  analysisResults: tableName('analysis_results'),
   doctors: tableName('doctors'),
   schedules: tableName('schedules'),
   appointments: tableName('appointments'),

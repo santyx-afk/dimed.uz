@@ -44,7 +44,8 @@ import Base from '../../layouts/Base.astro';
       </div>
 
       <div class="card glass">
-        <h2>Bugungi navbat · <span id="todayLabel"></span></h2>
+        <h2>Navbat · <span id="todayLabel"></span></h2>
+        <div class="off-days" id="queueDays"></div>
         <div id="queue"></div>
 
         <h2 class="mt">Ishga chiqa olmasangiz</h2>
@@ -52,10 +53,8 @@ import Base from '../../layouts/Base.astro';
           Kun yopiladi, oʻsha kundagi barcha navbatlar bekor qilinadi va har bir bemorga
           Telegram orqali xabar boradi. Bu amalni qaytarib boʻlmaydi.
         </p>
-        <label class="off-lab">
-          Sana
-          <input type="date" id="offDate">
-        </label>
+        <div class="off-lab">Sana</div>
+        <div class="off-days" id="offDays"></div>
         <p class="msg" id="offMsg" role="status" aria-live="polite"></p>
         <button class="btn btn-ghost danger" id="offBtn">Ishga chiqa olmayman</button>
       </div>
@@ -69,6 +68,7 @@ import Base from '../../layouts/Base.astro';
   type Data = {
     doctor: { name: string; job: string; shifts: Shift[]; slotMinutes: number };
     today: string;
+    date?: string;
     slots: string[];
     appointments: Appointment[];
   };
@@ -76,6 +76,85 @@ import Base from '../../layouts/Base.astro';
   const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   let shifts: Shift[] = [];
   let slotMinutes = 15;
+
+  /*
+    Sana brauzer kalendarisiz tanlanadi: brauzerniki qurilma tilida
+    (ko'pchilikda ruscha) ochiladi, tugmalar esa har doim o'zbekcha.
+  */
+  const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
+  const OYLAR = ['yan', 'fev', 'mar', 'apr', 'may', 'iyn', 'iyl', 'avg', 'sen', 'okt', 'noy', 'dek'];
+  let offDate = '';
+  let queueDate = '';
+  let todayKey = '';
+
+  const addDaysKey = (key: string, offset: number) => {
+    const [y, m, d] = key.split('-').map(Number);
+    const day = new Date(y, m - 1, d + offset);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+  };
+
+  /** Navbat uchun kun tanlagichi: bugun + keyingi 6 kun. */
+  function renderQueueDays() {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    let html = '';
+    for (let i = 0; i < 7; i++) {
+      const value = addDaysKey(todayKey, i);
+      const [y, m, d] = value.split('-').map(Number);
+      const day = new Date(y, m - 1, d);
+      const label = i === 0 ? 'Bugun' : i === 1 ? 'Ertaga' : WD[day.getDay()];
+      html += `<button class="off-day${value === queueDate ? ' on' : ''}" data-value="${value}">
+        ${label}<b>${d}</b><small>${OYLAR[m - 1]}</small>
+      </button>`;
+    }
+    const box = el('queueDays');
+    box.innerHTML = html;
+    box.querySelectorAll<HTMLButtonElement>('.off-day').forEach((b) =>
+      b.addEventListener('click', () => loadQueue(b.dataset.value ?? todayKey)),
+    );
+  }
+
+  /** Tanlangan kun navbatini serverdan olib chizadi. */
+  async function loadQueue(date: string) {
+    queueDate = date;
+    renderQueueDays();
+    el('todayLabel').textContent = date === todayKey ? `${date} (bugun)` : date;
+    el('queue').innerHTML = '<p class="empty">Yuklanmoqda…</p>';
+    try {
+      const res = await fetch(`/api/doctor-schedule?date=${encodeURIComponent(date)}`, {
+        credentials: 'same-origin',
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      renderQueue(await res.json());
+    } catch {
+      el('queue').innerHTML = '<p class="empty">Navbatni yuklab boʻlmadi. Qayta urining.</p>';
+    }
+  }
+
+  function renderOffDays(todayKey: string) {
+    const [y, m, d] = todayKey.split('-').map(Number);
+    const today = new Date(y, m - 1, d);
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    let html = '';
+    for (let i = 0; i < 14; i++) {
+      const day = new Date(today);
+      day.setDate(today.getDate() + i);
+      const value = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+      html += `<button class="off-day${value === offDate ? ' on' : ''}" data-value="${value}">
+        ${WD[day.getDay()]}<b>${day.getDate()}</b><small>${OYLAR[day.getMonth()]}</small>
+      </button>`;
+    }
+
+    const box = el('offDays');
+    box.innerHTML = html;
+    box.querySelectorAll<HTMLButtonElement>('.off-day').forEach((b) =>
+      b.addEventListener('click', () => {
+        offDate = b.dataset.value ?? '';
+        renderOffDays(todayKey);
+      }),
+    );
+  }
 
   const setMsg = (text: string, kind: 'error' | 'ok' | '' = '') => {
     const msg = el('msg');
@@ -115,11 +194,14 @@ import Base from '../../layouts/Base.astro';
 
     el('title').textContent = data.doctor.name;
     el('subtitle').textContent = data.doctor.job;
-    el('todayLabel').textContent = data.today;
 
-    const offDate = el<HTMLInputElement>('offDate');
-    offDate.value = data.today;
-    offDate.min = data.today;
+    todayKey = data.today;
+    queueDate = data.date ?? data.today;
+    el('todayLabel').textContent = `${queueDate} (bugun)`;
+    renderQueueDays();
+
+    offDate = data.today;
+    renderOffDays(data.today);
 
     shifts = data.doctor.shifts.map((s) => ({ ...s }));
     slotMinutes = data.doctor.slotMinutes;
@@ -201,7 +283,7 @@ import Base from '../../layouts/Base.astro';
             return `<div class="q"><span class="tm">${time}</span>${who}</div>`;
           })
           .join('')
-      : '<p class="empty">Bugun qabul yoʻq.</p>';
+      : '<p class="empty">Bu kuni qabul yoʻq.</p>';
   }
 
   el('addShift').addEventListener('click', () => {
@@ -234,7 +316,7 @@ import Base from '../../layouts/Base.astro';
 
   el('offBtn').addEventListener('click', async () => {
     const btn = el<HTMLButtonElement>('offBtn');
-    const date = el<HTMLInputElement>('offDate').value;
+    const date = offDate;
     if (!date) {
       setOffMsg('Sanani tanlang.', 'error');
       return;
@@ -485,20 +567,60 @@ import Base from '../../layouts/Base.astro';
     margin-top: 12px;
   }
 
-  .off-lab input {
+  .off-days {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-top: 10px;
+    scrollbar-width: thin;
+  }
+
+  .off-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    min-width: 46px;
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
-    color: var(--ink);
+    color: var(--muted);
     border-radius: 10px;
-    padding: 8px 11px;
-    font: inherit;
-    font-size: 14px;
+    padding: 6px 8px;
+    font-size: 10.5px;
+    font-weight: 650;
+    line-height: 1.25;
+    flex-shrink: 0;
+  }
+
+  .off-day b {
+    font-size: 14.5px;
+    color: var(--ink);
     font-variant-numeric: tabular-nums;
   }
 
-  .off-lab input:focus {
-    border-color: var(--leaf);
-    outline: none;
+  .off-day small {
+    font-size: 9.5px;
+    font-weight: 600;
+  }
+
+  .off-day:hover {
+    border-color: var(--rose);
+  }
+
+  .off-day.on {
+    border-color: var(--rose);
+    background: var(--rose-soft);
+    color: var(--rose);
+  }
+
+  .off-day.on b {
+    color: var(--rose);
+  }
+
+  .off-day:focus-visible {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
   }
 
   .btn.danger {

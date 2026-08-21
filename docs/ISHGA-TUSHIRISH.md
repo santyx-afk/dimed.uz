@@ -16,9 +16,9 @@ kiritilmagan.** Kalitlar kiritilgach — bir kun ichida ishga tushadi.
 | --- | --- |
 | Sayt kodi (3 haftalik reja) | ✅ tugagan, `master` da |
 | Avtomatik tekshiruv (CI) | ✅ har o'zgarishda ishlaydi |
-| Testlar | ✅ 108 ta (64 mantiq + 44 API) o'tadi |
+| Testlar | ✅ 149 ta (88 mantiq + 61 API) o'tadi |
 | Internetda ishlashi | ❌ kalitlar yo'q |
-| Onlayn to'lov (RHMT) | ❌ RHMT hujjati yo'q |
+| Onlayn to'lov (Payme) | 🟡 kod tayyor — kassa kalitlari kutilmoqda |
 
 ---
 
@@ -33,7 +33,7 @@ kiritilmagan.** Kalitlar kiritilgach — bir kun ichida ishga tushadi.
 | Shaxsiy kabinet | Navbatlari, tahlil natijalari, holati |
 | Vaqtni ko'chirish | Boshqa vaqtga o'tkazadi. Bekor qilish yo'q — kelishuvga muvofiq |
 | Eslatma | Qabuldan ~1 soat oldin botga xabar |
-| Tahlil natijalari | 1C dan avtomatik keladi, PDF yuklab olinadi |
+| Tahlil natijalari | 1C dan avtomatik keladi; PDF ni sayt brauzerda yasab beradi |
 
 ### Shifokor uchun
 
@@ -82,23 +82,21 @@ kiritilmagan.** Kalitlar kiritilgach — bir kun ichida ishga tushadi.
 
 ### Qadam 2 — AWS · ~30 daqiqa · **siz** (bank kartasi kerak)
 
-Bu yerda baza (navbatlar, bemorlar) va tahlil PDF fayllari saqlanadi.
+Bu yerda baza (navbatlar, bemorlar, tahlil natijalari) saqlanadi.
+S3 kerak emas — tahlil PDF'ini sayt brauzerning o'zida yasab beradi.
 
 1. https://aws.amazon.com da akkaunt oching
 2. **Region tanlang va shuni hamma joyda ishlating** — tavsiya: `eu-central-1`
    (Frankfurt). Keyin o'zgartirish qiyin
-3. S3'da bucket yarating (masalan `dimed-lab`) — tahlil PDF'lari uchun.
-   **Ommaviy kirishni yoqmang** — fayllar vaqtinchalik havola orqali
-   beriladi, bucket yopiq qolishi kerak
-4. IAM → foydalanuvchi yarating → quyidagi policy'ni biriktiring
-5. Shu foydalanuvchi uchun **Access Key** va **Secret Key** yarating
+3. IAM → foydalanuvchi yarating → quyidagi policy'ni biriktiring
+4. Shu foydalanuvchi uchun **Access Key** va **Secret Key** yarating
 
-**Natijada 3 ta qiymat:** Access Key, Secret Key, bucket nomi.
+**Natijada 2 ta qiymat:** Access Key, Secret Key.
 
 #### IAM policy
 
-IAM → Policies → Create policy → JSON. `REGION`, `AKKAUNT_ID` va
-`BUCKET` ni o'zingiznikiga almashtiring:
+IAM → Policies → Create policy → JSON. `REGION` va `AKKAUNT_ID` ni
+o'zingiznikiga almashtiring:
 
 ```json
 {
@@ -119,12 +117,6 @@ IAM → Policies → Create policy → JSON. `REGION`, `AKKAUNT_ID` va
         "arn:aws:dynamodb:REGION:AKKAUNT_ID:table/dimed_*",
         "arn:aws:dynamodb:REGION:AKKAUNT_ID:table/dimed_*/index/*"
       ]
-    },
-    {
-      "Sid": "TahlilFayllari",
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject"],
-      "Resource": "arn:aws:s3:::BUCKET/*"
     }
   ]
 }
@@ -215,6 +207,8 @@ barcha maydon turi **String**, barcha indeks proyeksiyasi **ALL**:
 | --- | --- | --- | --- | --- |
 | `dimed_users` | `telegram_id` | — | `phone-index`: `phone`<br>`code-index`: `code` (1C bemor kodi) | — |
 | `dimed_otp_codes` | `phone` | — | — | `expires_at` |
+| `dimed_individuals` | `phone` | `sort_key` | — | — |
+| `dimed_analysis_results` | `phone` | `sort_key` | — | — |
 | `dimed_doctors` | `doctor_id` | — | `telegram-index`: `telegram_id` | — |
 | `dimed_schedules` | `doctor_id` | `date` | — | — |
 | `dimed_appointments` | `doctor_day` | `time` | `patient-index`: `phone` + `starts_at`<br>`date-index`: `date` + `starts_at` | — |
@@ -312,14 +306,15 @@ Bular javob kutadi, shuning uchun yuqoridagi qadamlarga parallel yuritiladi.
 
 | Kim | Nima berasiz | Nima olasiz | Nega bugun |
 | --- | --- | --- | --- |
-| **RHMT** | Merchant ariza | API kalitlari + **integratsiya hujjati** | Eng uzun kutish. Hujjatsiz to'lov kodi yozilmaydi |
+| **Payme** | Kassa arizasi (merchant.payme.uz, yuridik shaxs hujjatlari bilan) | Kassa ID + kalitlar | Kod tayyor — faqat kalitlar yetishmayapti |
 | **1C dasturchisi** | `docs/1c-integration.md` + `LC_API_KEY` | Ular yozadigan yuborish moduli | Tahlil natijalari shunga bog'liq |
 | **Shifokorlar** | Narx va jadval so'rovnomasi | Har biri uchun: qabul narxi, ish kunlari, smena vaqtlari, slot davomiyligi | Hozirgi qiymatlar taxminiy |
 
-**RHMT haqida aniqlik:** kalitning o'zi yetarli emas — ularning texnik
-hujjati kerak. Hujjat kelgach to'lov kodi yoziladi (`lib/payment.ts`),
-`RHMT_ENABLED=1` qilinadi va **bron mantig'i umuman o'zgarmaydi**.
-Hujjat kelmaguncha sayt «klinikada to'lash» rejimida to'liq ishlaydi.
+**Payme haqida aniqlik:** integratsiya kodi **yozib bo'lingan va
+testlangan** (`docs/payme-integration.md`). Kassa ochilgach kalitlar
+Netlify'ga qo'yiladi, `PAYME_ENABLED=1` qilinadi va **bron mantig'i
+umuman o'zgarmaydi**. Kassa ochilmaguncha sayt «klinikada to'lash»
+rejimida to'liq ishlaydi.
 
 ---
 
@@ -338,11 +333,12 @@ Netlify → Site settings → Environment variables.
 | `DIMED_TABLE_PREFIX` | `dimed` | tayyor |
 | `DIMED_AWS_ACCESS_KEY_ID` | AWS IAM | siz |
 | `DIMED_AWS_SECRET_ACCESS_KEY` | AWS IAM | siz |
-| `LAB_S3_BUCKET` | S3 bucket nomi | siz |
 | `LC_API_KEY` | Tasodifiy satr → 1C ga beriladi | men yarataman |
-| `PAYMENT_WEBHOOK_SECRET` | Tasodifiy satr | men yarataman |
 | `ADMIN_TELEGRAM_IDS` | Sizning Telegram ID(lar)ingiz | siz |
-| `RHMT_ENABLED` | Hozircha bo'sh qoldiriladi | keyin |
+| `PAYME_MERCHANT_ID` | Payme kassa ID | kassa ochilgach |
+| `PAYME_KEY` | Payme ishchi kalit | kassa ochilgach |
+| `PAYME_TEST_KEY` | Payme sinov kaliti | kassa ochilgach |
+| `PAYME_ENABLED` | Hozircha bo'sh; kassadan keyin `1` | keyin |
 
 «Men yarataman» deganlari — tasodifiy parollar, ularni hech kimdan
 so'ramaysiz. Kerak bo'lsa o'zingiz ham yaratasiz: `openssl rand -base64 32`.
@@ -400,12 +396,12 @@ Bu eng muhim jadval — har bir kalit nimani ochishini ko'rsatadi.
 | **+ shifokorlar bog'landi** (6-qadam) | **Sayt to'liq ishlaydi** — shifokor kabineti, jadval boshqaruvi, kunlik xulosa, «ishga chiqa olmayman» | Xatolarni bilmaysiz; to'lov qabulxonada; tahlil natijalari yo'q |
 | **+ log-bot** | Har qanday nosozlik guruhga tushadi | — |
 | **+ 1C moduli** | Tahlil natijalari kabinetga avtomatik keladi | — |
-| **+ RHMT hujjati va kalitlari** | Onlayn to'lov | — |
+| **+ Payme kassa kalitlari** | Onlayn to'lov | — |
 | **+ domen** | `dimed.uz` da ochiladi | — |
 
 **Diqqat:** «Sayt to'liq ishlaydi» qatoriga yetish uchun **Netlify + AWS
 + Telegram asosiy bot + shifokorlarni bog'lash** kerak. Qolganlari
-(log-bot, 1C, RHMT, domen) — yaxshilanish, ular kutsa ham sayt ishlaydi.
+(log-bot, 1C, Payme, domen) — yaxshilanish, ular kutsa ham sayt ishlaydi.
 
 **Eng ko'p unutiladigan joy — shifokorlarni bog'lash (6-qadam).** Usiz
 bemor tomoni benuqson ishlaydi, lekin shifokor kabinetiga kirmoqchi
@@ -436,7 +432,7 @@ parallel yozishni to'xtatadi.
 ## 8. Ma'lum cheklovlar — oldindan biling
 
 1. **To'lov hozircha qabulxonada.** Slot band qilinadi, pul klinikada
-   to'lanadi. RHMT hujjati kelgach onlayn to'lov qo'shiladi
+   to'lanadi. Payme kassasi ochilgach onlayn to'lov yoqiladi
 2. **Bekor qilish yo'q.** Bemor faqat vaqtni ko'chira oladi. Shifokorni
    almashtirish — bu yangi navbat. Bu kelishilgan qoida
 3. **1 soat qoidasi.** Qabulga 1 soatdan kam qolgan bo'lsa bron ham,
@@ -452,13 +448,13 @@ parallel yozishni to'xtatadi.
 ## 9. Xulosa: kim nima qiladi
 
 **Siz — bugun:**
-- [ ] RHMT ga ariza (hujjat ham so'rang)
+- [ ] Payme'da kassa ochishga ariza (merchant.payme.uz)
 - [ ] 1C dasturchisiga `docs/1c-integration.md` ni yuboring
 - [ ] Shifokorlardan narx va jadval so'rang
 
 **Siz — shu hafta (tartib bilan):**
 - [ ] 1. Telegram: 2 ta bot + log guruh (10 daq)
-- [ ] 2. AWS: akkaunt, S3 bucket, IAM policy va kalitlar (30 daq)
+- [ ] 2. AWS: akkaunt, IAM policy va kalitlar (30 daq)
 - [ ] 3. Netlify: repo ulash, kalitlarni kiritish, deploy (15 daq)
 - [ ] 4. CloudShell: jadvallar + shifokorlar (10 daq)
 - [ ] 5. Telegram webhook'ini ulash (2 daq)
@@ -469,8 +465,9 @@ parallel yozishni to'xtatadi.
 - [ ] Uchdan-uchgacha sinov va hisobot
 - [ ] Pediatriya bo'limini beta rejimga tayyorlash
 
-**Men — hujjat kelgach:**
-- [ ] RHMT onlayn to'lovi (`docs/rhmt-integration.md`)
+**Kassa ochilgach:**
+- [ ] Payme kalitlarini Netlify'ga qo'yish va sandbox sinovi
+      (`docs/payme-integration.md` — kod tayyor)
 
 ---
 
@@ -481,7 +478,7 @@ parallel yozishni to'xtatadi.
 | `docs/ISHGA-TUSHIRISH.md` | Klinika egasi — shu hujjat |
 | `docs/HANDOFF.md` | Sayt dasturchisi — texnik qarorlar, kod tuzilishi |
 | `docs/1c-integration.md` | 1C dasturchisi — tahlil natijalarini yuborish |
-| `docs/rhmt-integration.md` | To'lov tizimini ulaydigan dasturchi |
+| `docs/payme-integration.md` | Payme kassasini ulaydigan odam |
 | `scripts/cloudshell-setup.sh` | Siz — AWS CloudShell'ga yuklanadigan fayl |
 
 ---

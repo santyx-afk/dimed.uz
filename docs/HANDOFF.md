@@ -15,7 +15,7 @@ Eski sayt — Jekyll'da edi, u `legacy/` papkasiga arxivlangan (o'chirilmagan:
 tahlillar va narxlar shu yerdan olinadi, deploy qilinmaydi).
 
 **Stack:** Astro 5 + Tailwind 4 + TypeScript · Netlify Functions ·
-Amazon DynamoDB + S3 · Telegram Bot API · RHMT (hali ulanmagan)
+Amazon DynamoDB · Telegram Bot API · Payme (kod tayyor, kassa kutilmoqda)
 
 **Repo:** `santyx-afk/dimed.uz`, asosiy branch — `master`
 
@@ -49,7 +49,7 @@ Amazon DynamoDB + S3 · Telegram Bot API · RHMT (hali ulanmagan)
 - Dizayn Astro komponentlariga ko'chirildi (bosh sahifa, tahlillar sahifasi)
 - Shriftlar o'z serverimizda (woff2), shifokor rasmlari webp (423KB → 103KB)
 - `telegram-webhook`, `auth-verify` (OTP + imzolangan HttpOnly sessiya)
-- `lc-results` — 1C dan natijalar (matn → DynamoDB, PDF → S3)
+- `lc-results` — 1C dan matn natijalar (PDF yo'q — brauzer o'zi yasaydi)
 - Admin log-bot: har qanday xato Telegram guruhga
 - `create-tables.mjs` — 7 ta DynamoDB jadvali
 - `docs/1c-integration.md` — 1C dasturchisi uchun spetsifikatsiya
@@ -59,7 +59,7 @@ Amazon DynamoDB + S3 · Telegram Bot API · RHMT (hali ulanmagan)
   `slots.ts` (slot yasash, 1 soat qoidasi), `appointments.ts` (hold muddati),
   `schedule.ts` (smenalarni tekshirish), `payment.ts` (to'lov adapteri)
 - **API:** `/api/slots`, `/api/book` (atomik), `/api/payment-webhook`,
-  `/api/me`, `/api/result-file`, `/api/doctor-schedule`, `/api/logout`,
+  `/api/me`, `/api/doctor-schedule`, `/api/logout`,
   `/api/doctors` (public), `/api/admin-doctors` (admin CRUD)
 - **Sahifalar:** `/kirish` (OTP), `/kabinet` (bemor), `/kabinet/shifokor`,
   `/kabinet/admin` (egaga — shifokorlarni boshqarish)
@@ -113,7 +113,7 @@ legacy/         eski Jekyll sayti (kontent manbasi, deploy qilinmaydi)
 npm run dev          # lokal server
 npm run build        # dist/ ga yig'ish
 npm run typecheck    # astro check + tsc
-npm test             # 88 mantiq + 44 API testi
+npm test             # 88 mantiq + 61 API testi
 npm run create-tables
 npm run seed-doctors
 npm run link-doctor  # shifokorni Telegram'ga bog'lash (argumentsiz — ro'yxat)
@@ -172,7 +172,7 @@ to'g'ridan-to'g'ri import qilinadi — shuning uchun `lib/` ichidagi importlar
 | `schedules` | `doctor_id` / `date` | kunlik alohida jadval, `day_off`, `summary_sent_at` |
 | `appointments` | `doctor_day` / `time` | `doctor_day` = `"<doctor_id>#<sana>"`, GSI: `patient-index` (`phone`/`starts_at`), `date-index` (`date`/`starts_at`) |
 | `payments` | `payment_id` | |
-| `lab_results` | `phone` / `sort_key` | `sort_key` = `"<sana>#<kod>"`, PDF S3'da |
+| `lab_results` | `phone` / `sort_key` | `sort_key` = `"<sana>#<kod>"`, faqat matn natija — PDF brauzerda yasaladi |
 
 **Bron holatlari:** `hold` (5 daqiqa, onlayn to'lov uchun) → `paid`;
 `booked` (klinikada to'lash — darhol kuchga kiradi); `done`; `moved`;
@@ -188,11 +188,15 @@ Holatlar bilan ishlash `lib/appointments.ts` da markazlashgan:
 
 ## Muhim qarorlar va tuzoqlar
 
-1. **To'lov hozircha «klinikada to'lash» rejimida.** RHMT kalitlari yo'q edi,
+1. **To'lov hozircha «klinikada to'lash» rejimida.** Payme kassasi hali ochilmagan,
    shuning uchun rejadagi B varianti ishlayapti: slot band qilinadi, to'lov
    qabulxonada. `lib/payment.ts` — adapter. Kalitlar kelganda o'sha fayldagi
-   `createPayment` to'ldiriladi va `RHMT_ENABLED=1` qilinadi; bron mantig'i
-   o'zgarmaydi. To'liq spetsifikatsiya: `docs/rhmt-integration.md`.
+   lekin integratsiya kodi to'liq yozilgan: checkout havolasi
+   (`lib/payment.ts`) va Payme Merchant API webhook'i
+   (`payment-webhook.ts`, JSON-RPC: CheckPerform/Create/Perform/
+   Cancel/Check/GetStatement). Kassa ochilgach `PAYME_MERCHANT_ID`,
+   `PAYME_KEY` qo'yiladi va `PAYME_ENABLED=1` qilinadi; bron mantig'i
+   o'zgarmaydi. To'liq spetsifikatsiya: `docs/payme-integration.md`.
 
    **Shifokorning `telegram_id` si qo'lda bog'lanadi.** `seed-doctors` uni
    yozmaydi — aks holda har seed'da bog'lanish o'chib ketardi. Buning
@@ -259,9 +263,9 @@ Bularsiz sayt real ishlay olmaydi (kod tayyor, kalitlar yo'q):
 
 - [ ] **Telegram bot tokenlari** — asosiy bot va log-bot (@BotFather), log-bot
       uchun guruh id
-- [ ] **AWS** — akkaunt, IAM kalitlari, S3 bucket nomi
+- [ ] **AWS** — akkaunt, IAM kalitlari
 - [ ] **Netlify** — repo ulanishi, environment variables
-- [ ] **RHMT** — merchant API kalitlari va hujjatlar (eng ko'p kutish
+- [ ] **Payme** — kassa ID va kalitlar (eng ko'p kutish
       chiqishi mumkin bo'lgan qism)
 - [ ] **1C** — laboratoriya dasturchisiga `docs/1c-integration.md` berilishi
 - [ ] **dimed.uz DNS** — domenni Netlify'ga yo'naltirish huquqi
@@ -272,7 +276,7 @@ Bularsiz sayt real ishlay olmaydi (kod tayyor, kalitlar yo'q):
 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_LOG_BOT_TOKEN`,
 `TELEGRAM_LOG_CHAT_ID`, `SESSION_SECRET`, `DIMED_AWS_REGION`,
 `DIMED_TABLE_PREFIX`, `DIMED_AWS_ACCESS_KEY_ID`, `DIMED_AWS_SECRET_ACCESS_KEY`,
-`LAB_S3_BUCKET`, `LC_API_KEY`, `PAYMENT_WEBHOOK_SECRET`, `RHMT_ENABLED`
+`LC_API_KEY`, `PAYME_MERCHANT_ID`, `PAYME_KEY`, `PAYME_TEST_KEY`, `PAYME_ENABLED`
 
 To'liq izohlar bilan — `.env.example`.
 

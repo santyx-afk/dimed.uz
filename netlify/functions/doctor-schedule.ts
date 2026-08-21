@@ -9,6 +9,7 @@ import {
   checkShifts,
   isAllowedSlotMinutes,
   maskPhone,
+  shiftsFor,
   ALLOWED_SLOT_MINUTES,
 } from './lib/schedule.ts';
 import { logToAdmin } from './lib/telegram.ts';
@@ -30,7 +31,23 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     if (request.method === 'GET') {
       const now = new Date();
       const today = toTashkent(now).dateKey;
-      const appointments = await dayAppointments(doctor.doctor_id, today);
+
+      // ?date= bilan istalgan kunning navbati; berilmasa — bugun.
+      const requested = new URL(request.url).searchParams.get('date');
+      if (requested && !isDateKey(requested)) {
+        return error('date YYYY-MM-DD ko‘rinishida bo‘lishi kerak');
+      }
+      const date = requested ?? today;
+
+      /*
+        Slotlar kunga qarab: shifokor shu kunga alohida jadval qo'ygan
+        yoki kunni yopgan bo'lishi mumkin — doimiy smenalar emas,
+        shiftsFor haqiqatni beradi.
+      */
+      const [shifts, appointments] = await Promise.all([
+        shiftsFor(doctor.doctor_id, date, doctor.shifts),
+        dayAppointments(doctor.doctor_id, date),
+      ]);
 
       return json(
         {
@@ -44,7 +61,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             price: doctor.price,
           },
           today,
-          slots: slotTimes(doctor.shifts, doctor.slot_minutes),
+          date,
+          slots: slotTimes(shifts, doctor.slot_minutes),
           // Navbatda faqat kuchdagi yozuvlar: bekor qilingan va
           // ko'chirilganlar slotni bo'shatgan.
           appointments: appointments

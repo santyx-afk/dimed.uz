@@ -69,6 +69,8 @@ import Base from '../layouts/Base.astro';
     'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
   ];
 
+  const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
+
   const fmtDate = (key: string) => {
     const [y, m, d] = key.split('-').map(Number);
     return m && d ? `${d}-${MONTHS[m - 1]} ${y}` : key;
@@ -174,13 +176,16 @@ import Base from '../layouts/Base.astro';
       Ko'chirish tugmasi faqat kuchdagi bronda va qabulga 1 soatdan
       ko'p qolganda chiqadi — bu qoidani server ham qayta tekshiradi.
     */
+    /*
+      Sana brauzerning date input'i bilan emas, o'z tugmalarimiz bilan
+      tanlanadi: brauzer kalendari qurilma tilida ochiladi (ko'pchilikda
+      ruscha), tugmalar esa har doim o'zbekcha.
+    */
     const move = a.canMove
       ? `<button class="mv-btn" data-move="${key}">Vaqtni koʻchirish</button>
          <div class="mv" data-panel="${key}" hidden>
-           <label class="mv-lab">Yangi sana
-             <input type="date" data-date="${key}" value="${a.date}"
-                    min="${dayKey()}" max="${dayKey(90)}">
-           </label>
+           <div class="mv-lab">Yangi sana</div>
+           <div class="mv-days" data-days="${key}"></div>
            <div class="mv-slots" data-slots="${key}"></div>
            <p class="mv-msg" data-msg="${key}" role="status" aria-live="polite"></p>
          </div>`
@@ -200,21 +205,44 @@ import Base from '../layouts/Base.astro';
     </div>`;
   }
 
+  /** Ko'chirish oynasida tanlangan yangi sana (kalit -> YYYY-MM-DD). */
+  const moveDates: Record<string, string> = {};
+
+  /** Kelgusi 14 kun uchun o'zbekcha sana tugmalari. */
+  function renderDays(key: string) {
+    const box = pick<HTMLDivElement>('days', key);
+    if (!box) return;
+
+    const selected = moveDates[key] ?? (moveDates[key] = dayKey());
+    let html = '';
+    for (let i = 0; i < 14; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const value = dayKey(i);
+      html += `<button class="mv-day${value === selected ? ' on' : ''}"
+        data-day="${key}" data-value="${value}"
+        aria-label="${d.getDate()}-${MONTHS[d.getMonth()]}">
+        ${WD[d.getDay()]}<b>${d.getDate()}</b><small>${MONTHS[d.getMonth()].slice(0, 3)}</small>
+      </button>`;
+    }
+    box.innerHTML = html;
+  }
+
   /** Tanlangan kun uchun bo'sh slotlarni yuklaydi. */
   async function loadSlots(key: string) {
     const panel = panelOf(key);
     const box = pick<HTMLDivElement>('slots', key);
-    const input = pick<HTMLInputElement>('date', key);
-    if (!panel || !box || !input) return;
+    if (!panel || !box) return;
 
     panel.hidden = false;
+    renderDays(key);
     box.innerHTML = '<span class="mv-hint">Yuklanmoqda…</span>';
     setMoveMsg(key, '');
 
     const { doctor } = partsOf(key);
     try {
       const res = await fetch(
-        `/api/slots?doctor=${encodeURIComponent(doctor)}&date=${encodeURIComponent(input.value)}`,
+        `/api/slots?doctor=${encodeURIComponent(doctor)}&date=${encodeURIComponent(moveDates[key] ?? dayKey())}`,
       );
       const data = (await res.json()) as { slots?: Slot[]; reason?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? String(res.status));
@@ -238,8 +266,8 @@ import Base from '../layouts/Base.astro';
   }
 
   async function moveTo(key: string, toTime: string) {
-    const input = pick<HTMLInputElement>('date', key);
-    if (!input) return;
+    const toDate = moveDates[key];
+    if (!toDate) return;
 
     const { doctor, date, time } = partsOf(key);
     setMoveMsg(key, 'Koʻchirilmoqda…');
@@ -249,7 +277,7 @@ import Base from '../layouts/Base.astro';
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ doctor, date, time, toDate: input.value, toTime }),
+        body: JSON.stringify({ doctor, date, time, toDate, toTime }),
       });
       const data = (await res.json()) as { error?: string };
 
@@ -293,53 +321,88 @@ import Base from '../layouts/Base.astro';
       return;
     }
 
+    const day = target.closest<HTMLButtonElement>('[data-day]');
+    if (day) {
+      const key = day.dataset.day ?? '';
+      moveDates[key] = day.dataset.value ?? '';
+      loadSlots(key);
+      return;
+    }
+
     const slot = target.closest<HTMLButtonElement>('[data-slot]');
     if (slot) moveTo(slot.dataset.slot ?? '', slot.dataset.time ?? '');
   });
 
-  el('upcoming').addEventListener('change', (event) => {
-    const input = (event.target as HTMLElement).closest<HTMLInputElement>('[data-date]');
-    if (input) loadSlots(input.dataset.date ?? '');
-  });
+  let lastResults: LabResult[] = [];
 
   function renderResults(results: LabResult[]) {
+    lastResults = results;
+
     el('results').innerHTML = results.length
       ? results
-          .map((r) => {
-            const badge = r.type === 'pdf' ? 'PDF' : 'TXT';
-            const value = r.value
-              ? `<span class="val">${r.value}${r.reference ? ` <span class="ref">(norma: ${r.reference})</span>` : ''}</span>`
-              : '';
-            const tag = r.seen ? '' : '<span class="pill new">yangi</span>';
-            const open = r.type === 'pdf' ? ` data-pdf="${r.id}"` : '';
-            const Tag = r.type === 'pdf' ? 'button' : 'div';
-            return `<${Tag} class="lab"${open}>
-              <span class="fic ${r.type}">${badge}</span>
-              <span class="lab-body"><span class="nm">${r.title}</span>${value}
+          .map(
+            (r, i) => `<div class="lab">
+              <span class="fic text">TXT</span>
+              <span class="lab-body"><span class="nm">${r.title}</span>
+                ${r.value ? `<span class="val">${r.value}${r.reference ? ` <span class="ref">(norma: ${r.reference})</span>` : ''}</span>` : ''}
                 <span class="dt">${fmtDateTime(r.date)}</span></span>
-              ${tag}
-            </${Tag}>`;
-          })
+              ${r.seen ? '' : '<span class="pill new">yangi</span>'}
+              <button class="pdf-btn" data-print="${i}" title="PDF qilib saqlash">PDF</button>
+            </div>`,
+          )
           .join('')
       : '<p class="empty">Hozircha tahlil natijasi yoʻq. Natijalar tayyor boʻlishi bilan shu yerda paydo boʻladi.</p>';
 
     el('results')
-      .querySelectorAll<HTMLButtonElement>('[data-pdf]')
+      .querySelectorAll<HTMLButtonElement>('[data-print]')
       .forEach((btn) =>
-        btn.addEventListener('click', async () => {
-          btn.disabled = true;
-          try {
-            const res = await fetch(`/api/result-file?id=${encodeURIComponent(btn.dataset.pdf!)}`, {
-              credentials: 'same-origin',
-            });
-            const data = (await res.json()) as { url?: string; error?: string };
-            if (data.url) window.open(data.url, '_blank', 'noopener');
-            else alert(data.error ?? 'Faylni ochib boʻlmadi');
-          } finally {
-            btn.disabled = false;
-          }
-        }),
+        btn.addEventListener('click', () => printResult(Number(btn.dataset.print))),
       );
+  }
+
+  /*
+    PDF serverda saqlanmaydi — brauzerning o'zi yasaydi: chop etish
+    oynasida "PDF sifatida saqlash" tanlanadi. O'zbekcha harflar ham
+    to'g'ri chiqadi, fayl saqlash xarajati ham yo'q.
+  */
+  function printResult(index: number) {
+    const r = lastResults[index];
+    if (!r) return;
+
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const w = window.open('', '_blank', 'noopener,width=720,height=900');
+    if (!w) {
+      alert('Brauzer yangi oynani blokladi — ruxsat bering.');
+      return;
+    }
+
+    w.document.write(`<!doctype html><html lang="uz"><head><meta charset="utf-8">
+      <title>Dimed — ${esc(r.title)}</title>
+      <style>
+        body { font: 14px/1.6 system-ui, sans-serif; color: #1a1a1a; margin: 40px; }
+        .head { display: flex; justify-content: space-between; align-items: baseline;
+                border-bottom: 2px solid #1a1a1a; padding-bottom: 10px; }
+        .head b { font-size: 20px; }
+        .head span { font-size: 12px; color: #555; }
+        table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+        th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #ccc; }
+        th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #555; }
+        .foot { margin-top: 32px; font-size: 12px; color: #555; }
+        @media print { body { margin: 12mm; } }
+      </style></head><body>
+      <div class="head"><b>Dimed klinikasi</b><span>Chinoz, Navoiy ko‘chasi 18 · +998 55 9009 103</span></div>
+      <table>
+        <tr><th>Tahlil</th><th>Natija</th><th>Norma</th><th>Sana</th></tr>
+        <tr><td>${esc(r.title)}</td><td><b>${esc(r.value ?? '—')}</b></td>
+            <td>${esc(r.reference ?? '—')}</td><td>${fmtDateTime(r.date)}</td></tr>
+      </table>
+      <p class="foot">Natija dimed.uz shaxsiy kabinetidan chop etildi.
+        Savollar uchun shifokoringizga murojaat qiling.</p>
+      <script>window.onload = () => window.print();<\/script>
+      </body></html>`);
+    w.document.close();
   }
 
   el('logout').addEventListener('click', async () => {
@@ -536,20 +599,60 @@ import Base from '../layouts/Base.astro';
     margin-bottom: 10px;
   }
 
-  .card :global(.mv-lab input) {
+  .card :global(.mv-days) {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+    scrollbar-width: thin;
+  }
+
+  .card :global(.mv-day) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    min-width: 46px;
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
-    color: var(--ink);
+    color: var(--muted);
     border-radius: 10px;
-    padding: 7px 10px;
-    font: inherit;
-    font-size: 13px;
+    padding: 6px 8px;
+    font-size: 10.5px;
+    font-weight: 650;
+    line-height: 1.25;
+    flex-shrink: 0;
+  }
+
+  .card :global(.mv-day b) {
+    font-size: 14.5px;
+    color: var(--ink);
     font-variant-numeric: tabular-nums;
   }
 
-  .card :global(.mv-lab input:focus) {
+  .card :global(.mv-day small) {
+    font-size: 9.5px;
+    font-weight: 600;
+  }
+
+  .card :global(.mv-day:hover) {
     border-color: var(--leaf);
-    outline: none;
+  }
+
+  .card :global(.mv-day.on) {
+    border-color: var(--leaf);
+    background: var(--leaf-soft);
+    color: var(--leaf);
+  }
+
+  .card :global(.mv-day.on b) {
+    color: var(--leaf);
+  }
+
+  .card :global(.mv-day:focus-visible) {
+    outline: 2px solid var(--leaf);
+    outline-offset: 2px;
   }
 
   .card :global(.mv-slots) {
@@ -668,9 +771,21 @@ import Base from '../layouts/Base.astro';
     letter-spacing: 0.03em;
   }
 
-  .card :global(.fic.pdf) {
-    background: var(--rose-soft);
-    color: var(--rose);
+  .card :global(.pdf-btn) {
+    flex-shrink: 0;
+    border: 1px solid var(--card-brd);
+    background: none;
+    color: var(--leaf);
+    border-radius: 9px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0.03em;
+  }
+
+  .card :global(.pdf-btn:hover) {
+    border-color: var(--leaf);
+    background: var(--leaf-soft);
   }
 
   .card :global(.fic.text) {

@@ -103,18 +103,55 @@ type ResultRow = {
   seen?: boolean;
 };
 
-async function loadResults(phone: string) {
-  const found = await db.send(
-    new QueryCommand({
-      TableName: TABLES.labResults,
-      KeyConditionExpression: 'phone = :p',
-      ExpressionAttributeValues: { ':p': phone },
-      ScanIndexForward: false,
-      Limit: 100,
-    }),
-  );
+/** 1C to'g'ridan-to'g'ri yozadigan hujjat (dimed_analysis_results). */
+type AnalysisDocument = {
+  sort_key: string;
+  Date?: string;
+  RegisterDate?: string;
+  SampleID?: string;
+  Biomaterial?: string;
+  AnalysisResults?: {
+    Analyte?: string;
+    Result?: string;
+    AnalyteUnit?: string;
+    AnalyteInternationalCode?: string;
+  }[];
+};
 
-  return ((found.Items ?? []) as ResultRow[]).map((r) => ({
+/**
+ * 1C sanasi "21.08.2026 14:30:00" → "2026-08-21T14:30:00".
+ * Soat bir xonali ham keladi ("9:30:24"). ISO — o'zgarishsiz.
+ */
+const fromOneCDate = (raw: string | undefined): string => {
+  if (!raw) return '';
+  const m = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return raw;
+  const time = `${(m[4] ?? '00').padStart(2, '0')}:${m[5] ?? '00'}:${m[6] ?? '00'}`;
+  return `${m[3]}-${m[2]}-${m[1]}T${time}`;
+};
+
+async function loadResults(phone: string) {
+  const [manual, oneC] = await Promise.all([
+    db.send(
+      new QueryCommand({
+        TableName: TABLES.labResults,
+        KeyConditionExpression: 'phone = :p',
+        ExpressionAttributeValues: { ':p': phone },
+        ScanIndexForward: false,
+        Limit: 100,
+      }),
+    ),
+    db.send(
+      new QueryCommand({
+        TableName: TABLES.analysisResults,
+        KeyConditionExpression: 'phone = :p',
+        ExpressionAttributeValues: { ':p': phone },
+        Limit: 50,
+      }),
+    ),
+  ]);
+
+  const rows = ((manual.Items ?? []) as ResultRow[]).map((r) => ({
     id: r.sort_key,
     code: r.code,
     title: r.title,
@@ -124,4 +161,27 @@ async function loadResults(phone: string) {
     date: r.date,
     seen: r.seen ?? false,
   }));
+
+  /*
+    1C hujjatida bitta buyurtmaning hamma analitlari yotadi — kabinet
+    esa tekis ro'yxat ko'rsatadi, shuning uchun yoyamiz. "yangi"
+    belgisi qo'yilmaydi: 1C eski tarixni ham to'kib yuborishi mumkin.
+  */
+  const fromDocs = ((oneC.Items ?? []) as AnalysisDocument[]).flatMap((doc) => {
+    const date = fromOneCDate(doc.Date) || fromOneCDate(doc.RegisterDate);
+    return (doc.AnalysisResults ?? [])
+      .filter((a) => a.Analyte)
+      .map((a, i) => ({
+        id: `${doc.sort_key}#${i}`,
+        code: a.AnalyteInternationalCode ?? '',
+        title: a.Analyte ?? '',
+        value: [a.Result, a.AnalyteUnit].filter(Boolean).join(' ') || null,
+        reference: null,
+        type: 'text' as const,
+        date,
+        seen: true,
+      }));
+  });
+
+  return [...rows, ...fromDocs].sort((a, b) => b.date.localeCompare(a.date));
 }

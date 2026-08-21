@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { GetCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { createSessionCookie } from './lib/session.ts';
+import { mergeIndividualProfile } from './lib/patients.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error, normalizePhone } from './lib/http.ts';
 
@@ -37,6 +38,12 @@ export default async (request: Request, _context: Context): Promise<Response> =>
 
     // Kod bir marta ishlatiladi.
     await db.send(new DeleteCommand({ TableName: TABLES.otpCodes, Key: { phone } }));
+
+    // Har kirishda 1C profili yangilanadi — 1C keyin yozgan bo'lsa ham
+    // yetib keladi. Bu qulaylik, kirish sharti emas.
+    await mergeIndividualProfile(phone, record.telegram_id).catch((err) =>
+      logToAdmin('auth-verify/1c-profil', err),
+    );
 
     return json(
       { ok: true },
