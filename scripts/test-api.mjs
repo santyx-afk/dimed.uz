@@ -134,8 +134,8 @@ await test('kontakt yuborilganda foydalanuvchi va OTP yaratiladi', async () => {
 });
 
 await test('kontaktda 1C profili birlashadi (individuals jadvalidan)', async () => {
-  seed('test_individuals', '+998907777777|PROFILE', {
-    phone: '+998907777777', sort_key: 'PROFILE', Code: '1146',
+  seed('test_individuals', '+998907777777|1146', {
+    phone: '+998907777777', sort_key: '1146',
     Surname: 'Toirov', Name: 'Rozimuhammad', IsMale: true,
     Birthday: '25.04.1990', PriceCategory: 'Asosiy',
   });
@@ -209,8 +209,8 @@ await test('to\'g\'ri kod sessiya beradi va kod bir martalik', async () => {
 });
 
 await test('kirishda 1C profili yangilanadi', async () => {
-  seed('test_individuals', '+998901234567|PROFILE', {
-    phone: '+998901234567', sort_key: 'PROFILE', Surname: 'Azizova', Code: '555A',
+  seed('test_individuals', '+998901234567|555A', {
+    phone: '+998901234567', sort_key: '555A', Surname: 'Azizova',
   });
   await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({ message: { chat: { id: 777 }, text: '/start' } }),

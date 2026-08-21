@@ -153,22 +153,24 @@ API'si shart emas. Kelishuv:
 | Jadval nomi (`DynamoDBIndividualsTable` konstantasi) | **`dimed_individuals`** |
 | Region | **`us-east-1`** |
 | Partition key | `phone` (String) — `+998XXXXXXXXX`, plyus bilan |
-| Sort key | `sort_key` (String) — profil uchun doim `"PROFILE"` |
+| Sort key | `sort_key` (String) — **1C bemor kodi** (`IndividualRef.Code`) |
 
 Maydonlar (1C yuboradigan nomlar): `Surname`, `Name`, `Patronymic`,
 `FullName`, `IsMale` (BOOL), `Birthday`, `Email`, `PriceCategory`,
 `BirthArea`, `ResidenceArea`, `Address`, `WhereHeard`.
 
+Alohida `Code` maydoni kerak emas — kod `sort_key` ning o'zi. Shu
+tufayli bir telefon ostida bir nechta bemor (oila a'zolari) sig'adi,
+har biri o'z kodi bilan. Sayt profilni birlashtirshda birinchi
+yozuvni oladi — odatda telefon egasi.
+
 Sayt bu jadvaldan **o'zi o'qiydi**: bemor botga kontakt ulashganda va
 har saytga kirishda profil `dimed_users` ga birlashtiriladi (yuqoridagi
 snake_case nomlar bilan). 1C jadvalga xohlagan payt yozaveradi.
 
-1C tomonga ikkita iltimos:
-
-1. **`Code` maydonini ham yuboring** (1C bemor kodi) — bir xil ismli
-   bemorlarni ajratish uchun kerak. Hozircha yuborilmayapti.
-2. **`Birthday` ni `Format(..., "DF=yyyy-MM-dd")`** bilan yozing.
-   `DLF=D` (25.04.1990) ham qabul qilinadi, lekin ISO ishonchliroq.
+1C tomonga iltimos: **`Birthday` ni `Format(..., "DF=yyyy-MM-dd")`**
+bilan yozing. `DLF=D` (25.04.1990) ham qabul qilinadi, lekin ISO
+ishonchliroq.
 
 > Diqqat: `dimed_lab_results` ga yozmang — u tahlil natijalari uchun,
 > kaliti o'xshash bo'lsa ham. Profil faqat `dimed_individuals` ga.
