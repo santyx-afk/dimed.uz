@@ -74,6 +74,14 @@ export const tables = [
     ],
   },
   {
+    // 1C laboratoriya natijalari — 1C o'zi yozadi: kalit telefon,
+    // sort_key = hujjat UUID, ichida AnalysisResults ro'yxati.
+    // Sayt /api/me da o'qib, har analitni alohida qatorga yoyadi.
+    name: 'analysis_results',
+    attrs: [S('phone'), S('sort_key')],
+    keys: [HASH('phone'), RANGE('sort_key')],
+  },
+  {
     name: 'payments',
     attrs: [S('payment_id')],
     keys: [HASH('payment_id')],

@@ -364,6 +364,31 @@ await test('1C natijasi kabinetda ko\'rinadi', async () => {
   assert.equal(cabinet.results[0].type, 'text');
 });
 
+await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async () => {
+  seed('test_analysis_results', '+998901234567|doc-uuid-1', {
+    phone: '+998901234567',
+    sort_key: 'doc-uuid-1',
+    Date: '21.08.2026 14:30:00',
+    SampleID: '4127',
+    Biomaterial: 'Qon',
+    AnalysisResults: [
+      { Analyte: 'Gemoglobin', Result: '132', AnalyteUnit: 'g/L', AnalyteInternationalCode: 'HGB' },
+      { Analyte: 'Leykotsitlar', Result: '6.2', AnalyteUnit: '10^9/L' },
+    ],
+  });
+
+  const cabinet = await (await call(me, 'https://dimed.uz/api/me', {
+    headers: { cookie: sessionCookie },
+  })).json();
+
+  const hgb = cabinet.results.find((r) => r.title === 'Gemoglobin' && r.id === 'doc-uuid-1#0');
+  assert.ok(hgb, 'hujjatdagi analit alohida qator bo\'lishi kerak');
+  assert.equal(hgb.value, '132 g/L');
+  assert.equal(hgb.code, 'HGB');
+  assert.equal(hgb.date, '2026-08-21T14:30:00', '1C sanasi ISO ga o\'girilishi kerak');
+  assert.ok(cabinet.results.some((r) => r.title === 'Leykotsitlar'), 'ikkinchi analit ham chiqishi kerak');
+});
+
 await test('noto\'g\'ri API kalit bilan 1C rad etiladi', async () => {
   const res = await call(lcResults, 'https://dimed.uz/api/lc-results', {
     ...jsonBody({ phone: '+998901234567', results: [{ code: '1', title: 'X' }] }),

@@ -173,6 +173,32 @@ snake_case nomlar bilan). 1C jadvalga xohlagan payt yozaveradi.
 > Diqqat: `dimed_lab_results` ga yozmang — u tahlil natijalari uchun,
 > kaliti o'xshash bo'lsa ham. Profil faqat `dimed_individuals` ga.
 
+## Tahlil natijalari to'g'ridan-to'g'ri DynamoDB'ga (joriy usul)
+
+Profil singari, laboratoriya natijalarini ham 1C o'zi yozadi. Kelishuv:
+
+| Sozlama | Qiymat |
+| --- | --- |
+| Jadval nomi (`DynamoDBAnalysisResultTable` konstantasi) | **`dimed_analysis_results`** |
+| Region | **`us-east-1`** |
+| Partition key | `phone` (String) — `+998XXXXXXXXX`, plyus bilan |
+| Sort key | `sort_key` (String) — hujjat UUID |
+
+Hujjat maydonlari: `DocumentUID`, `Date`, `SampleID`, `Biomaterial`,
+`PatientName`, `PatientBirthday`, `PatientIsMale`, `RegisterDate` va
+`AnalysisResults` (ro'yxat: `Analyte`, `Result`, `AnalyteUnit`,
+`AnalyteInternationalCode`).
+
+Sayt kabinetda har analitni alohida qator qilib ko'rsatadi, PDF ni
+brauzerning o'zida yasaydi. `Date` `DLF=DT` (21.08.2026 14:30:00)
+kelsa ISO ga o'giriladi — lekin `DF=yyyy-MM-ddTHH:mm:ss` ishonchliroq.
+
+> Diqqat: konstantani standart `AnalysisResult` da qoldirmang —
+> **`dimed_analysis_results`** qiling. Sayt kaliti faqat `dimed_*`
+> jadvallarni o'qiy oladi (IAM policy), va eski nomdagi jadval
+> saytga ko'rinmaydi. Konstanta o'zgargach eski yozuvlarni yangi
+> jadvalga qayta yuborish kifoya.
+
 ## Sinxronizatsiya yo'nalishi — hali ochiq
 
 Yuqoridagi maydon ro'yxati va `code-index` sayt tomonida tayyor. Ma'lumot
