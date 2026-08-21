@@ -131,23 +131,36 @@ const fromOneCDate = (raw: string | undefined): string => {
 };
 
 async function loadResults(phone: string) {
+  /*
+    Natija jadvallaridan biri ishlamasa (ruxsat, region, hali
+    yaratilmagan) kabinet yiqilmasin: qabullar va ikkinchi manba
+    baribir ko'rinadi, xato esa log-botga boradi.
+  */
+  const safeQuery = (input: ConstructorParameters<typeof QueryCommand>[0], where: string) =>
+    db.send(new QueryCommand(input)).catch(async (err) => {
+      await logToAdmin(where, err);
+      return { Items: [] };
+    });
+
   const [manual, oneC] = await Promise.all([
-    db.send(
-      new QueryCommand({
+    safeQuery(
+      {
         TableName: TABLES.labResults,
         KeyConditionExpression: 'phone = :p',
         ExpressionAttributeValues: { ':p': phone },
         ScanIndexForward: false,
         Limit: 100,
-      }),
+      },
+      'me/lab-natijalar',
     ),
-    db.send(
-      new QueryCommand({
+    safeQuery(
+      {
         TableName: TABLES.analysisResults,
         KeyConditionExpression: 'phone = :p',
         ExpressionAttributeValues: { ':p': phone },
         Limit: 50,
-      }),
+      },
+      'me/1c-natijalar',
     ),
   ]);
 
