@@ -387,6 +387,19 @@ await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async
   assert.equal(hgb.code, 'HGB');
   assert.equal(hgb.date, '2026-08-21T14:30:00', '1C sanasi ISO ga o\'girilishi kerak');
   assert.ok(cabinet.results.some((r) => r.title === 'Leykotsitlar'), 'ikkinchi analit ham chiqishi kerak');
+
+  // 1C soatni bir xonali yuborishi mumkin: "9:05:00"
+  seed('test_analysis_results', '+998901234567|doc-uuid-2', {
+    phone: '+998901234567',
+    sort_key: 'doc-uuid-2',
+    Date: '05.01.2026 9:05:00',
+    AnalysisResults: [{ Analyte: 'Kreatinin', Result: '80', AnalyteUnit: 'mkmol/l' }],
+  });
+  const again = await (await call(me, 'https://dimed.uz/api/me', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  const kre = again.results.find((r) => r.title === 'Kreatinin');
+  assert.equal(kre.date, '2026-01-05T09:05:00', 'bir xonali soat ham ISO bo\'lishi kerak');
 });
 
 await test('noto\'g\'ri API kalit bilan 1C rad etiladi', async () => {

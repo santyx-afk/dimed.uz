@@ -118,12 +118,16 @@ type AnalysisDocument = {
   }[];
 };
 
-/** 1C sanasi "21.08.2026 14:30:00" → "2026-08-21T14:30:00". ISO — o'zgarishsiz. */
+/**
+ * 1C sanasi "21.08.2026 14:30:00" → "2026-08-21T14:30:00".
+ * Soat bir xonali ham keladi ("9:30:24"). ISO — o'zgarishsiz.
+ */
 const fromOneCDate = (raw: string | undefined): string => {
   if (!raw) return '';
-  const m = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}:\d{2}(?::\d{2})?))?/);
+  const m = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (!m) return raw;
-  return `${m[3]}-${m[2]}-${m[1]}T${m[4] ?? '00:00:00'}`;
+  const time = `${(m[4] ?? '00').padStart(2, '0')}:${m[5] ?? '00'}:${m[6] ?? '00'}`;
+  return `${m[3]}-${m[2]}-${m[1]}T${time}`;
 };
 
 async function loadResults(phone: string) {
