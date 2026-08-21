@@ -150,6 +150,34 @@ JSON
 )"
 ttl "otp_codes" "expires_at"
 
+jadval "individuals" "$(cat <<JSON
+{
+  "TableName": "${PREFIX}_individuals",
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "phone",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "sort_key",
+      "AttributeType": "S"
+    }
+  ],
+  "KeySchema": [
+    {
+      "AttributeName": "phone",
+      "KeyType": "HASH"
+    },
+    {
+      "AttributeName": "sort_key",
+      "KeyType": "RANGE"
+    }
+  ],
+  "BillingMode": "PAY_PER_REQUEST"
+}
+JSON
+)"
+
 jadval "doctors" "$(cat <<JSON
 {
   "TableName": "${PREFIX}_doctors",
@@ -341,7 +369,7 @@ JSON
 # --- 2-qadam: jadvallar tayyor bo'lishini kutamiz ---
 echo
 echo "2-qadam: jadvallar tayyor bo'lishini kutamiz"
-for t in users otp_codes doctors schedules appointments payments lab_results; do
+for t in users otp_codes individuals doctors schedules appointments payments lab_results; do
   ddb wait table-exists --table-name "${PREFIX}_$t"
 done
 echo "  hammasi tayyor"

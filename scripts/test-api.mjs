@@ -133,6 +133,27 @@ await test('kontakt yuborilganda foydalanuvchi va OTP yaratiladi', async () => {
   assert.ok(telegramCalls.some((c) => c.body.text.includes(otp.code)), 'kod botga yuborilishi kerak');
 });
 
+await test('kontaktda 1C profili birlashadi (individuals jadvalidan)', async () => {
+  seed('test_individuals', '+998907777777|PROFILE', {
+    phone: '+998907777777', sort_key: 'PROFILE', Code: '1146',
+    Surname: 'Toirov', Name: 'Rozimuhammad', IsMale: true,
+    Birthday: '25.04.1990', PriceCategory: 'Asosiy',
+  });
+  const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: { chat: { id: 888 }, contact: { phone_number: '998907777777', first_name: 'Rozi' } },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  assert.equal(res.status, 200);
+  const user = tableOf('test_users').get('888');
+  assert.equal(user.code, '1146');
+  assert.equal(user.last_name, 'Toirov');
+  assert.equal(user.gender, 'male');
+  assert.equal(user.birth_date, '1990-04-25', 'sana ISO ga o\'girilishi kerak');
+  assert.equal(user.name, 'Rozi', 'Telegram maydonlari saqlanishi kerak');
+});
+
 await test('qayta /start bosilganda kontakt so\'ralmaydi — kod darhol keladi', async () => {
   telegramCalls.length = 0;
   const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
@@ -185,6 +206,25 @@ await test('to\'g\'ri kod sessiya beradi va kod bir martalik', async () => {
     jsonBody({ phone: '+998901234567', code }),
   );
   assert.equal(again.status, 401, 'ishlatilgan kod qayta o\'tmasligi kerak');
+});
+
+await test('kirishda 1C profili yangilanadi', async () => {
+  seed('test_individuals', '+998901234567|PROFILE', {
+    phone: '+998901234567', sort_key: 'PROFILE', Surname: 'Azizova', Code: '555A',
+  });
+  await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({ message: { chat: { id: 777 }, text: '/start' } }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  const code = tableOf('test_otp_codes').get('+998901234567').code;
+  const res = await call(
+    authVerify,
+    'https://dimed.uz/api/auth-verify',
+    jsonBody({ phone: '+998901234567', code }),
+  );
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_users').get('777').code, '555A');
+  assert.equal(tableOf('test_users').get('777').last_name, 'Azizova');
 });
 
 console.log('\nSlotlar:');

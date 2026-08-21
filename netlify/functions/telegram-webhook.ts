@@ -4,6 +4,7 @@ import { db, TABLES } from './lib/db.ts';
 import { required } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { generateOtp } from './lib/session.ts';
+import { mergeIndividualProfile } from './lib/patients.ts';
 import { json, normalizePhone } from './lib/http.ts';
 
 const OTP_TTL_SECONDS = 5 * 60;
@@ -121,6 +122,15 @@ async function handleContact(
         ':u': now,
       },
     }),
+  );
+
+  /*
+    1C bemorlar jadvalida bo'lsa, F.I.Sh. va kodini shu yerda olamiz.
+    Bu qulaylik, kirish sharti emas — 1C jadvali hali bo'lmasa yoki
+    bemor unda topilmasa, kirish baribir davom etadi.
+  */
+  await mergeIndividualProfile(phone, String(chatId)).catch((err) =>
+    logToAdmin('telegram-webhook/1c-profil', err),
   );
 
   await sendOtp(chatId, phone);

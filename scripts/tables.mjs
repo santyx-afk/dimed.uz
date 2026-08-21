@@ -32,6 +32,15 @@ export const tables = [
     ttlAttribute: 'expires_at',
   },
   {
+    // 1C bemorlar katalogining ko'chirmasi. 1C o'zi yozadi: kalit —
+    // telefon (+998...), sort_key="PROFILE". Sayt /start va har
+    // kirishda shu yerdan o'qib, profilni dimed_users ga
+    // birlashtiradi. 1C xohlagancha yozaveradi — saytga xalal yo'q.
+    name: 'individuals',
+    attrs: [S('phone'), S('sort_key')],
+    keys: [HASH('phone'), RANGE('sort_key')],
+  },
+  {
     // telegram-index: shifokor o'z kabinetiga Telegram orqali kiradi
     name: 'doctors',
     attrs: [S('doctor_id'), S('telegram_id')],

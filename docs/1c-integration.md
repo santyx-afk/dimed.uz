@@ -143,6 +143,36 @@ o'zi to'ldiradi. Qolgan maydonlar (`code`, `patronymic`, `gender`,
 > Qayta `/start` bosilganda 1C to'ldirgan maydonlar **o'chmaydi** — sayt
 > faqat Telegram bergan maydonlarni yangilaydi.
 
+## 1C to'g'ridan-to'g'ri DynamoDB'ga yozadi (joriy usul)
+
+1C dasturchisi bemor profilini alohida jadvalga o'zi yozadi — sayt
+API'si shart emas. Kelishuv:
+
+| Sozlama | Qiymat |
+| --- | --- |
+| Jadval nomi (`DynamoDBIndividualsTable` konstantasi) | **`dimed_individuals`** |
+| Region | **`us-east-1`** |
+| Partition key | `phone` (String) — `+998XXXXXXXXX`, plyus bilan |
+| Sort key | `sort_key` (String) — profil uchun doim `"PROFILE"` |
+
+Maydonlar (1C yuboradigan nomlar): `Surname`, `Name`, `Patronymic`,
+`FullName`, `IsMale` (BOOL), `Birthday`, `Email`, `PriceCategory`,
+`BirthArea`, `ResidenceArea`, `Address`, `WhereHeard`.
+
+Sayt bu jadvaldan **o'zi o'qiydi**: bemor botga kontakt ulashganda va
+har saytga kirishda profil `dimed_users` ga birlashtiriladi (yuqoridagi
+snake_case nomlar bilan). 1C jadvalga xohlagan payt yozaveradi.
+
+1C tomonga ikkita iltimos:
+
+1. **`Code` maydonini ham yuboring** (1C bemor kodi) — bir xil ismli
+   bemorlarni ajratish uchun kerak. Hozircha yuborilmayapti.
+2. **`Birthday` ni `Format(..., "DF=yyyy-MM-dd")`** bilan yozing.
+   `DLF=D` (25.04.1990) ham qabul qilinadi, lekin ISO ishonchliroq.
+
+> Diqqat: `dimed_lab_results` ga yozmang — u tahlil natijalari uchun,
+> kaliti o'xshash bo'lsa ham. Profil faqat `dimed_individuals` ga.
+
 ## Sinxronizatsiya yo'nalishi — hali ochiq
 
 Yuqoridagi maydon ro'yxati va `code-index` sayt tomonida tayyor. Ma'lumot

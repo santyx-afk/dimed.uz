@@ -12,6 +12,7 @@ const tables = new Map(); // jadval -> Map(kalit -> item)
 const keySchema = {
   test_users: ['telegram_id'],
   test_otp_codes: ['phone'],
+  test_individuals: ['phone', 'sort_key'],
   test_doctors: ['doctor_id'],
   test_schedules: ['doctor_id', 'date'],
   test_appointments: ['doctor_day', 'time'],
