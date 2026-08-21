@@ -83,9 +83,17 @@ import Base from '../../layouts/Base.astro';
   */
   const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
   const OYLAR = ['yan', 'fev', 'mar', 'apr', 'may', 'iyn', 'iyl', 'avg', 'sen', 'okt', 'noy', 'dek'];
+  const OYLAR_TOLIQ = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'];
+  const KUNLAR = ['yakshanba', 'dushanba', 'seshanba', 'chorshanba', 'payshanba', 'juma', 'shanba'];
   let offDate = '';
   let queueDate = '';
   let todayKey = '';
+
+  /** 2026-08-22 → "22-avgust, shanba" */
+  const fmtKey = (key: string) => {
+    const [y, m, d] = key.split('-').map(Number);
+    return `${d}-${OYLAR_TOLIQ[m - 1]}, ${KUNLAR[new Date(y, m - 1, d).getDay()]}`;
+  };
 
   const addDaysKey = (key: string, offset: number) => {
     const [y, m, d] = key.split('-').map(Number);
@@ -118,7 +126,7 @@ import Base from '../../layouts/Base.astro';
   async function loadQueue(date: string) {
     queueDate = date;
     renderQueueDays();
-    el('todayLabel').textContent = date === todayKey ? `${date} (bugun)` : date;
+    el('todayLabel').textContent = date === todayKey ? `${fmtKey(date)} (bugun)` : fmtKey(date);
     el('queue').innerHTML = '<p class="empty">Yuklanmoqda…</p>';
     try {
       const res = await fetch(`/api/doctor-schedule?date=${encodeURIComponent(date)}`, {
@@ -197,7 +205,7 @@ import Base from '../../layouts/Base.astro';
 
     todayKey = data.today;
     queueDate = data.date ?? data.today;
-    el('todayLabel').textContent = `${queueDate} (bugun)`;
+    el('todayLabel').textContent = `${fmtKey(queueDate)} (bugun)`;
     renderQueueDays();
 
     offDate = data.today;
@@ -269,21 +277,21 @@ import Base from '../../layouts/Base.astro';
       });
   }
 
+  /*
+    Faqat band slotlar ko'rsatiladi: shifokorga "kim keladi" kerak,
+    60 ta "bo'sh" qatorni aylanib o'tish emas.
+  */
   function renderQueue(data: Data) {
-    const byTime = new Map(data.appointments.map((a) => [a.time, a]));
-    el('queue').innerHTML = data.slots.length
-      ? data.slots
-          .map((time) => {
-            const a = byTime.get(time);
-            const who = a
-              ? `<span class="who">${a.phone}</span><span class="pill ${a.status === 'hold' ? 'warn' : 'ok'}">${
-                  a.status === 'hold' ? 'kutilmoqda' : 'band'
-                }</span>`
-              : '<span class="who empty">boʻsh</span>';
-            return `<div class="q"><span class="tm">${time}</span>${who}</div>`;
-          })
-          .join('')
-      : '<p class="empty">Bu kuni qabul yoʻq.</p>';
+    el('queue').innerHTML = data.appointments.length
+      ? data.appointments
+          .map(
+            (a) =>
+              `<div class="q"><span class="tm">${a.time}</span><span class="who">${a.phone}</span><span class="pill ${
+                a.status === 'hold' ? 'warn' : 'ok'
+              }">${a.status === 'hold' ? 'kutilmoqda' : 'band'}</span></div>`,
+          )
+          .join('') + `<p class="note">${data.appointments.length} ta navbat</p>`
+      : '<p class="empty">Bu kuni band qilingan navbat yoʻq.</p>';
   }
 
   el('addShift').addEventListener('click', () => {
