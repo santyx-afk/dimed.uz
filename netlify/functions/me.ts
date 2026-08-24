@@ -164,23 +164,38 @@ async function loadResults(phone: string) {
     ),
   ]);
 
-  const rows = ((manual.Items ?? []) as ResultRow[]).map((r) => ({
-    id: r.sort_key,
-    code: r.code,
-    title: r.title,
-    value: r.value ?? null,
-    reference: r.reference ?? null,
-    type: r.type,
-    date: r.date,
-    seen: r.seen ?? false,
-  }));
+  /*
+    lab_results da ikki xil yozuv uchraydi: saytniki (title/date bilan)
+    va 1C adashib shu jadvalga quygan hujjatlar (AnalysisResults bilan,
+    title'siz). Ikkinchisini hujjat sifatida o'qiymiz — bemorning
+    tarixi bekor ketmasin, noma'lum shakldagisi esa tashlab yuboriladi,
+    yiqilish emas.
+  */
+  const manualItems = (manual.Items ?? []) as (ResultRow & AnalysisDocument)[];
+
+  const rows = manualItems
+    .filter((r) => r.title)
+    .map((r) => ({
+      id: r.sort_key,
+      code: r.code ?? '',
+      title: r.title,
+      value: r.value ?? null,
+      reference: r.reference ?? null,
+      type: r.type ?? ('text' as const),
+      date: r.date ?? '',
+      seen: r.seen ?? false,
+    }));
 
   /*
     1C hujjatida bitta buyurtmaning hamma analitlari yotadi — kabinet
     esa tekis ro'yxat ko'rsatadi, shuning uchun yoyamiz. "yangi"
     belgisi qo'yilmaydi: 1C eski tarixni ham to'kib yuborishi mumkin.
   */
-  const fromDocs = ((oneC.Items ?? []) as AnalysisDocument[]).flatMap((doc) => {
+  const docs = [
+    ...((oneC.Items ?? []) as AnalysisDocument[]),
+    ...manualItems.filter((r) => !r.title && Array.isArray(r.AnalysisResults)),
+  ];
+  const fromDocs = docs.flatMap((doc) => {
     const date = fromOneCDate(doc.Date) || fromOneCDate(doc.RegisterDate);
     return (doc.AnalysisResults ?? [])
       .filter((a) => a.Analyte)
@@ -196,5 +211,9 @@ async function loadResults(phone: string) {
       }));
   });
 
-  return [...rows, ...fromDocs].sort((a, b) => b.date.localeCompare(a.date));
+  // Bir hujjat ikkala jadvalda ham bo'lsa, bir marta ko'rinadi.
+  const seen = new Set<string>();
+  return [...rows, ...fromDocs]
+    .filter((r) => !seen.has(r.id) && (seen.add(r.id), true))
+    .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
