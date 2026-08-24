@@ -400,6 +400,28 @@ await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async
   })).json();
   const kre = again.results.find((r) => r.title === 'Kreatinin');
   assert.equal(kre.date, '2026-01-05T09:05:00', 'bir xonali soat ham ISO bo\'lishi kerak');
+
+  // 1C adashib lab_results ga yozgan hujjat: kabinet yiqilmasin,
+  // analitlari esa ko'rinsin (1420 ta shunday yozuv bor edi).
+  seed('test_lab_results', '+998901234567|doc-stray-1', {
+    phone: '+998901234567',
+    sort_key: 'doc-stray-1',
+    Date: '10.02.2026 11:00:00',
+    AnalysisResults: [{ Analyte: 'Bilirubin', Result: '12', AnalyteUnit: 'mkmol/l' }],
+  });
+  // Xuddi shu hujjat to'g'ri jadvalda ham bo'lsa — bir marta chiqadi.
+  seed('test_analysis_results', '+998901234567|doc-stray-1', {
+    phone: '+998901234567',
+    sort_key: 'doc-stray-1',
+    Date: '10.02.2026 11:00:00',
+    AnalysisResults: [{ Analyte: 'Bilirubin', Result: '12', AnalyteUnit: 'mkmol/l' }],
+  });
+  const uchinchi = await (await call(me, 'https://dimed.uz/api/me', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  const bil = uchinchi.results.filter((r) => r.title === 'Bilirubin');
+  assert.equal(bil.length, 1, 'takror hujjat bir marta ko\'rinishi kerak');
+  assert.equal(bil[0].value, '12 mkmol/l');
 });
 
 await test('noto\'g\'ri API kalit bilan 1C rad etiladi', async () => {
