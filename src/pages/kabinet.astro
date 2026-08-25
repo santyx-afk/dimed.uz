@@ -372,13 +372,11 @@ import Base from '../layouts/Base.astro';
     const esc = (s: string) =>
       s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    const w = window.open('', '_blank', 'noopener,width=720,height=900');
-    if (!w) {
-      alert('Brauzer yangi oynani blokladi — ruxsat bering.');
-      return;
-    }
-
-    w.document.write(`<!doctype html><html lang="uz"><head><meta charset="utf-8">
+    /*
+      Yangi oyna emas — yashirin iframe: popup-blokerlarga umuman
+      duch kelmaydi. Chop oynasida "PDF sifatida saqlash" tanlanadi.
+    */
+    const html = (`<!doctype html><html lang="uz"><head><meta charset="utf-8">
       <title>Dimed — ${esc(r.title)}</title>
       <style>
         body { font: 14px/1.6 system-ui, sans-serif; color: #1a1a1a; margin: 40px; }
@@ -400,9 +398,18 @@ import Base from '../layouts/Base.astro';
       </table>
       <p class="foot">Natija dimed.uz shaxsiy kabinetidan chop etildi.
         Savollar uchun shifokoringizga murojaat qiling.</p>
-      <script>window.onload = () => window.print();<\/script>
       </body></html>`);
-    w.document.close();
+
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'position:fixed;right:200%;width:720px;height:900px;';
+    frame.srcdoc = html;
+    frame.onload = () => {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      // Chop oynasi modal — yopilgach olib tashlash kifoya.
+      setTimeout(() => frame.remove(), 60_000);
+    };
+    document.body.appendChild(frame);
   }
 
   el('logout').addEventListener('click', async () => {

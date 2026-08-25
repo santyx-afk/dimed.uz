@@ -384,6 +384,16 @@ import DeptIcon from './DeptIcon.astro';
       if (Array.isArray(live) && live.length) {
         docs = live;
         if (state.step <= 2) render();
+        /*
+          Sahifadagi statik sonlar ham jonli ro'yxatga tenglashadi —
+          faolsiz shifokor "9 shifokor" hisobida turmasin.
+        */
+        const stat = document.getElementById('statDoctors');
+        if (stat) stat.textContent = String(docs.length);
+        document.querySelectorAll('[data-dept-cnt]').forEach((el) => {
+          const n = docs.filter((d) => d.deptId === el.dataset.deptCnt).length;
+          el.textContent = `${n} shifokor`;
+        });
       }
     } catch {
       /* server yetib bo'lmasa — statik ro'yxat qoladi */
