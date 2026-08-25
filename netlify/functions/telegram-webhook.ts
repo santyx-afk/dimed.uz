@@ -32,9 +32,20 @@ const shareContactKeyboard = {
 export default async (request: Request, _context: Context): Promise<Response> => {
   if (request.method !== 'POST') return json({ error: 'Faqat POST' }, 405);
 
-  // Telegram webhook'ni faqat bizning secret bilan qabul qilamiz.
-  const secret = request.headers.get('x-telegram-bot-api-secret-token');
-  if (secret !== required('TELEGRAM_WEBHOOK_SECRET')) {
+  /*
+    Telegram webhook'ni faqat bizning secret bilan qabul qilamiz.
+    trim: Netlify paneliga nusxalashda qiymat oxiriga probel yoki
+    qator ilashib qolishi mumkin — bu ko'zga ko'rinmaydigan 401.
+  */
+  const secret = (request.headers.get('x-telegram-bot-api-secret-token') ?? '').trim();
+  const expected = required('TELEGRAM_WEBHOOK_SECRET').trim();
+  if (secret !== expected) {
+    // Netlify function logida ko'rinadi. Qiymat emas, faqat uzunlik —
+    // sir oshkor bo'lmaydi, lekin qaysi tomon xato ekani darhol ayon.
+    console.log(
+      `telegram-webhook 401: Telegram yuborgani ${secret.length} belgi, ` +
+        `Netlify'dagi ${expected.length} belgi`,
+    );
     return json({ error: 'Ruxsat yo‘q' }, 401);
   }
 
