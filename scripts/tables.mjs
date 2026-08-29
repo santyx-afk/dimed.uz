@@ -33,9 +33,10 @@ export const tables = [
   },
   {
     // 1C bemorlar katalogining ko'chirmasi. 1C o'zi yozadi: kalit —
-    // telefon (+998...), sort_key="PROFILE". Sayt /start va har
-    // kirishda shu yerdan o'qib, profilni dimed_users ga
-    // birlashtiradi. 1C xohlagancha yozaveradi — saytga xalal yo'q.
+    // telefon (+998...), sort_key = 1C bemor kodi (eng eski yozuvlarda
+    // "PROFILE" ham uchraydi). Sayt /start va har kirishda shu yerdan
+    // o'qib, profilni dimed_users ga birlashtiradi. 1C xohlagancha
+    // yozaveradi — saytga xalal yo'q.
     name: 'individuals',
     attrs: [S('phone'), S('sort_key')],
     keys: [HASH('phone'), RANGE('sort_key')],
