@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { AWS_REGION, awsCredentials, optional, tableName } from './env.ts';
 
 // Testlarda lokal soxta DynamoDB ishlatiladi.
@@ -27,3 +27,27 @@ export const TABLES = {
   payments: tableName('payments'),
   labResults: tableName('lab_results'),
 } as const;
+
+/**
+ * Query natijasini oxirigacha o'qiydi.
+ *
+ * DynamoDB javobni 1 MB da kesadi va qolganini `LastEvaluatedKey` bilan
+ * qaytaradi. Bitta chaqiruvga ishonib qolsak, ma'lumotning bir qismi
+ * jimgina yo'qoladi — bemor tahlilini ko'rmaydi, cron esa eslatma
+ * yubormaydi. `cap` — buzuq kursorda cheksiz aylanmaslik uchun.
+ */
+export async function queryAllPages(
+  input: ConstructorParameters<typeof QueryCommand>[0],
+  cap = 2000,
+): Promise<Record<string, unknown>[]> {
+  const items: Record<string, unknown>[] = [];
+  let startKey: Record<string, unknown> | undefined;
+
+  do {
+    const page = await db.send(new QueryCommand({ ...input, ExclusiveStartKey: startKey }));
+    items.push(...((page.Items ?? []) as Record<string, unknown>[]));
+    startKey = page.LastEvaluatedKey;
+  } while (startKey && items.length < cap);
+
+  return items;
+}

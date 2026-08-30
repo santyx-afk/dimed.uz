@@ -1,6 +1,6 @@
 import type { Context } from '@netlify/functions';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLES } from './lib/db.ts';
+import { db, TABLES, queryAllPages } from './lib/db.ts';
 import { sessionFrom, getDoctor } from './lib/auth.ts';
 import { isConfirmed } from './lib/appointments.ts';
 import { isBookable } from './lib/slots.ts';
@@ -110,6 +110,13 @@ type AnalysisDocument = {
   RegisterDate?: string;
   SampleID?: string;
   Biomaterial?: string;
+  /* Bir telefon ostida oila a'zolari bo'lishi mumkin — natija
+     kimniki ekani shu maydondan ko'rinadi. */
+  PatientName?: string;
+  /* 1C hujjatni bekor qilsa yoki o'chirishga belgilasa, natija
+     kabinetda qolib ketmasligi kerak. */
+  Posted?: boolean;
+  DeletionMark?: boolean;
   AnalysisResults?: {
     Analyte?: string;
     Result?: string;
@@ -117,6 +124,15 @@ type AnalysisDocument = {
     AnalyteInternationalCode?: string;
   }[];
 };
+
+/**
+ * Hujjat bemorga hali ham ko'rsatiladimi.
+ *
+ * Bayroqlar umuman bo'lmasa — ko'rsatiladi: 1C ularni yuborishni
+ * keyinroq boshladi, eski yozuvlar shusiz yotibdi.
+ */
+const isLive = (doc: AnalysisDocument): boolean =>
+  doc.DeletionMark !== true && doc.Posted !== false;
 
 /**
  * 1C sanasi "21.08.2026 14:30:00" → "2026-08-21T14:30:00".
@@ -130,35 +146,44 @@ const fromOneCDate = (raw: string | undefined): string => {
   return `${m[3]}-${m[2]}-${m[1]}T${time}`;
 };
 
-async function loadResults(phone: string) {
-  /*
-    Natija jadvallaridan biri ishlamasa (ruxsat, region, hali
-    yaratilmagan) kabinet yiqilmasin: qabullar va ikkinchi manba
-    baribir ko'rinadi, xato esa log-botga boradi.
-  */
-  const safeQuery = (input: ConstructorParameters<typeof QueryCommand>[0], where: string) =>
-    db.send(new QueryCommand(input)).catch(async (err) => {
-      await logToAdmin(where, err);
-      return { Items: [] };
-    });
+/*
+  Bitta bemorda o'qiladigan yozuvlarning yuqori chegarasi. 1C butun
+  tarixni yuklab yuborishi mumkin — cheksiz aylanib qolmaslik uchun.
+*/
+const MAX_RESULT_ROWS = 2000;
 
+/**
+ * Natijalarni oxirigacha o'qiydi.
+ *
+ * Bitta sahifa bilan cheklab bo'lmaydi: 1C hujjatlarining sort kaliti —
+ * UUID, ya'ni tartibi sanaga bog'liq emas va bemor tasodifiy yozuvlarni
+ * ko'rardi (eng yangilari ko'rinmasligi mumkin edi).
+ *
+ * Jadvallardan biri ishlamasa (ruxsat, region, hali yaratilmagan)
+ * kabinet yiqilmasin: xato log-botga boradi, ikkinchi manba ko'rinadi.
+ */
+const queryAll = (input: ConstructorParameters<typeof QueryCommand>[0], where: string) =>
+  queryAllPages(input, MAX_RESULT_ROWS).catch(async (err) => {
+    await logToAdmin(where, err);
+    return [];
+  });
+
+async function loadResults(phone: string) {
   const [manual, oneC] = await Promise.all([
-    safeQuery(
+    queryAll(
       {
         TableName: TABLES.labResults,
         KeyConditionExpression: 'phone = :p',
         ExpressionAttributeValues: { ':p': phone },
         ScanIndexForward: false,
-        Limit: 100,
       },
       'me/lab-natijalar',
     ),
-    safeQuery(
+    queryAll(
       {
         TableName: TABLES.analysisResults,
         KeyConditionExpression: 'phone = :p',
         ExpressionAttributeValues: { ':p': phone },
-        Limit: 50,
       },
       'me/1c-natijalar',
     ),
@@ -171,7 +196,7 @@ async function loadResults(phone: string) {
     tarixi bekor ketmasin, noma'lum shakldagisi esa tashlab yuboriladi,
     yiqilish emas.
   */
-  const manualItems = (manual.Items ?? []) as (ResultRow & AnalysisDocument)[];
+  const manualItems = manual as (ResultRow & AnalysisDocument)[];
 
   const rows = manualItems
     .filter((r) => r.title)
@@ -184,6 +209,7 @@ async function loadResults(phone: string) {
       type: r.type ?? ('text' as const),
       date: r.date ?? '',
       seen: r.seen ?? false,
+      patientName: null as string | null,
     }));
 
   /*
@@ -192,23 +218,39 @@ async function loadResults(phone: string) {
     belgisi qo'yilmaydi: 1C eski tarixni ham to'kib yuborishi mumkin.
   */
   const docs = [
-    ...((oneC.Items ?? []) as AnalysisDocument[]),
+    ...(oneC as AnalysisDocument[]),
     ...manualItems.filter((r) => !r.title && Array.isArray(r.AnalysisResults)),
-  ];
+  ].filter(isLive);
+
   const fromDocs = docs.flatMap((doc) => {
     const date = fromOneCDate(doc.Date) || fromOneCDate(doc.RegisterDate);
-    return (doc.AnalysisResults ?? [])
-      .filter((a) => a.Analyte)
-      .map((a, i) => ({
-        id: `${doc.sort_key}#${i}`,
-        code: a.AnalyteInternationalCode ?? '',
-        title: a.Analyte ?? '',
-        value: [a.Result, a.AnalyteUnit].filter(Boolean).join(' ') || null,
-        reference: null,
-        type: 'text' as const,
-        date,
-        seen: true,
-      }));
+    return (doc.AnalysisResults ?? []).flatMap((a, i) => {
+      /*
+        Analit nomi 1C'da bo'sh bo'lishi mumkin (PrintName to'ldirilmagan) —
+        qator yo'qolmasin: xalqaro kod bilan ko'rsatiladi. Nomi ham,
+        qiymati ham bo'lmasa — ko'rsatadigan narsa qolmaydi.
+      */
+      const title = a.Analyte?.trim() || a.AnalyteInternationalCode?.trim() || '';
+      const value = [a.Result, a.AnalyteUnit]
+        .map((v) => v?.trim())
+        .filter(Boolean)
+        .join(' ');
+      if (!title && !value) return [];
+
+      return [
+        {
+          id: `${doc.sort_key}#${i}`,
+          code: a.AnalyteInternationalCode ?? '',
+          title: title || 'Koʻrsatkich',
+          value: value || null,
+          reference: null,
+          type: 'text' as const,
+          date,
+          seen: true,
+          patientName: doc.PatientName?.trim() || null,
+        },
+      ];
+    });
   });
 
   // Bir hujjat ikkala jadvalda ham bo'lsa, bir marta ko'rinadi.

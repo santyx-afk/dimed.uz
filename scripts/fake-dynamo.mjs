@@ -173,9 +173,42 @@ const server = createServer((req, res) => {
       const m = cond.match(/([#\w]+)\s*=\s*(:\w+)/);
       const field = m[1].startsWith('#') ? names[m[1]] : m[1];
       const wanted = values[m[2]];
-      const items = [...store.values()].filter((i) => i[field] === wanted);
+      let items = [...store.values()].filter((i) => i[field] === wanted);
+
+      // Haqiqiy DynamoDB natijani sort kalit bo'yicha beradi —
+      // sahifalash shu tartibga tayanadi.
+      const range = keySchema[table][1];
+      if (range) {
+        items.sort((a, b) => String(a[range]).localeCompare(String(b[range])));
+        if (payload.ScanIndexForward === false) items.reverse();
+      }
+
+      if (payload.ExclusiveStartKey) {
+        const from = Object.fromEntries(
+          Object.entries(payload.ExclusiveStartKey).map(([k, v]) => [k, un(v)]),
+        );
+        const at = items.findIndex((i) => itemKey(table, i) === itemKey(table, from));
+        items = at === -1 ? [] : items.slice(at + 1);
+      }
+
+      /*
+        Haqiqiy DynamoDB javobni 1 MB da kesadi, Limit so'ralmasa ham.
+        Soxta jadval ham shunday qiladi — sahifalashni unutgan kod
+        testda ushlanadi, produksiyada emas.
+      */
+      const limit = payload.Limit ?? 25;
+      const page = items.slice(0, limit);
+      const last = items.length > limit ? page[page.length - 1] : undefined;
+
       return send({
-        Items: items.map((i) => Object.fromEntries(Object.entries(i).map(([k, v]) => [k, marshal(v)]))),
+        Items: page.map((i) => Object.fromEntries(Object.entries(i).map(([k, v]) => [k, marshal(v)]))),
+        ...(last
+          ? {
+              LastEvaluatedKey: Object.fromEntries(
+                keySchema[table].map((k) => [k, marshal(last[k])]),
+              ),
+            }
+          : {}),
       });
     }
 

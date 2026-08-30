@@ -116,13 +116,18 @@ async function handleContact(
     profil maydonlari (code, birth_date, gender, ...) o'chib ketmasligi
     kerak — faqat Telegram bergan maydonlarni yangilaymiz.
     `name` DynamoDB'da band so'z, shuning uchun taxallus bilan.
+
+    `telegram_name` — Telegram bergan ism o'zgarishsiz saqlanadigan
+    yagona joy: qolgan ism maydonlarini 1C profili qayta yozadi. U
+    bir telefon ostidagi oila a'zolaridan kimligini aniqlashga kerak.
   */
   await db.send(
     new UpdateCommand({
       TableName: TABLES.users,
       Key: { telegram_id: String(chatId) },
       UpdateExpression:
-        'SET phone = :p, first_name = :f, last_name = :l, full_name = :fn, #name = :n, updated_at = :u',
+        'SET phone = :p, first_name = :f, last_name = :l, full_name = :fn, ' +
+        '#name = :n, telegram_name = :tn, updated_at = :u',
       ExpressionAttributeNames: { '#name': 'name' },
       ExpressionAttributeValues: {
         ':p': phone,
@@ -130,6 +135,7 @@ async function handleContact(
         ':l': lastName,
         ':fn': fullName,
         ':n': firstName,
+        ':tn': fullName || firstName,
         ':u': now,
       },
     }),
