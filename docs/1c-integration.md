@@ -161,8 +161,11 @@ Maydonlar (1C yuboradigan nomlar): `Surname`, `Name`, `Patronymic`,
 
 Alohida `Code` maydoni kerak emas — kod `sort_key` ning o'zi. Shu
 tufayli bir telefon ostida bir nechta bemor (oila a'zolari) sig'adi,
-har biri o'z kodi bilan. Sayt profilni birlashtirshda birinchi
-yozuvni oladi — odatda telefon egasi.
+har biri o'z kodi bilan. Sayt profilni birlashtirishda Telegram bergan
+ism bilan solishtirib mos kelganini oladi; mos kelmasa — birinchisini.
+
+Bemor o'chirishga belgilangan bo'lsa `DeletionMark` (BOOL) yuboring —
+sayt uni profil sifatida olmaydi. Batafsil: «Sayt tomonining javobi».
 
 Sayt bu jadvaldan **o'zi o'qiydi**: bemor botga kontakt ulashganda va
 har saytga kirishda profil `dimed_users` ga birlashtiriladi (yuqoridagi
@@ -190,6 +193,10 @@ Hujjat maydonlari: `DocumentUID`, `Date`, `SampleID`, `Biomaterial`,
 `PatientName`, `PatientBirthday`, `PatientIsMale`, `RegisterDate` va
 `AnalysisResults` (ro'yxat: `Analyte`, `Result`, `AnalyteUnit`,
 `AnalyteInternationalCode`).
+
+Bundan tashqari `Posted` va `DeletionMark` (BOOL) yuboring: bekor
+qilingan yoki o'chirilgan natija kabinetda qolib ketmasligi kerak.
+Batafsil: «Sayt tomonining javobi».
 
 Sayt kabinetda har analitni alohida qator qilib ko'rsatadi, PDF ni
 brauzerning o'zida yasaydi. `Date` `DLF=DT` (21.08.2026 14:30:00)
@@ -242,3 +249,142 @@ Skript telefonni bot foydalanuvchisi bilan solishtiradi:
 
 Ustun sarlavhalari avtomatik taniladi (o'zbek/rus/ingliz), ajratgich
 `,` `;` yoki TAB bo'lishi mumkin, telefon istalgan formatda.
+
+---
+
+# Sayt tomonining javobi (2026-08-30)
+
+Bu bo'lim 1C dasturchisining `dimed-medhisob.md` hisobotiga javob.
+Qisqasi: **shartnoma o'zgarmadi**, sayt esa hisobotdagi nuqsonlarga
+chidamli qilib tuzatildi. Quyida faqat 1C tomonidan kutiladigan narsalar
+va har bir savolga javob.
+
+## 1C tomonidan kutilayotgani (3 ta yangi maydon)
+
+| Jadval | Maydon | Turi | Nega |
+| --- | --- | --- | --- |
+| `dimed_analysis_results` | `Posted` | BOOL | Hujjat o'tkazilgan-o'tkazilmagani. `false` bo'lsa sayt natijani **ko'rsatmaydi** |
+| `dimed_analysis_results` | `DeletionMark` | BOOL | O'chirishga belgilangan bo'lsa — ko'rsatilmaydi |
+| `dimed_individuals` | `DeletionMark` | BOOL | O'chirilgan bemor profil sifatida olinmaydi |
+
+`PatientName` allaqachon yuborilyapti — uni **doim** to'ldiring: bir
+telefonga oila a'zolari bog'langanda kabinetda natija kimniki ekani
+shundan yoziladi.
+
+> Maydon umuman bo'lmasa, sayt yozuvni **ko'rsataveradi** — eski
+> yozuvlar shusiz yotibdi va ular yo'qolmasligi kerak. Ya'ni bu
+> maydonlarni qo'shish sizni hech narsadan to'smaydi, faqat bekor
+> qilingan natijani kabinetdan olib tashlash imkonini beradi.
+
+**`DeleteItem` kerak emas.** Bekor qilingan hujjatni o'chirish o'rniga
+xuddi shu yozuvni `Posted=false` yoki `DeletionMark=true` bilan qayta
+yuboring — sayt uni yashiradi. Shu tufayli IAM'ga qo'shimcha huquq ham
+kerak emas.
+
+## Savollarga javob
+
+### Shartnoma (1–7)
+
+**1. `sort_key` — `"10482"` yoki `"10 482"`?**
+Toza `"10482"` yuboring (sizning kengaytmangiz shunday qiladi — to'g'ri).
+Sayt endi kodni o'qiyotganda bo'shliqlarni **o'zi tozalaydi**, shuning
+uchun eski yozuvlar ham to'g'ri ko'rinadi. Lekin DynamoDB'da eski
+`"10 482"` **alohida qator** bo'lib qoladi — imkoni bo'lsa bemorlarni
+yangi formatda bir marta qayta yuboring, biz eskilarini tozalaymiz.
+
+**2. `Date` / `RegisterDate` formati.**
+Ikkalasi ham ishlaydi: sayt `DLF=DT` (`28.08.2026 11:42:00`, bir xonali
+soat ham) va ISO ni tushunadi. **ISO afzal** — `DF=yyyy-MM-ddTHH:mm:ss`.
+
+**3. `Result` dagi son formati.**
+Sayt raqamni **tahlil qilmaydi**, matn sifatida ko'rsatadi. Ya'ni
+`"1 234,5"` ham yiqilmaydi, lekin bemorga g'alati ko'rinadi —
+`Format(V, "NDS=.; NG=0")` bilan `"1234.5"` yuborganingiz to'g'ri.
+
+**4. Bemor kodi o'zgarganda.**
+Sizning **(a) variantingiz** — 1C'da `Code` ni tahrirlashni bloklash.
+Bu eng arzon va ishonchli yechim. `sort_key` ni UUID ga o'tkazish
+(b varianti) hozir kerak emas: kod amalda o'zgarmasa, muammo yo'q.
+Yetim yozuvlarni biz tozalaymiz.
+
+**5. O'chirilgan / bekor qilingan yozuvlar.**
+Hal qilindi — yuqoridagi `Posted` / `DeletionMark` maydonlari.
+Bu **bemor xavfsizligi masalasi**: bekor qilingan tahlil natijasi
+kabinetda qolib ketmasligi kerak. Iltimos shu ikki maydonni qo'shing.
+
+**6. Bemor telefonini o'zgartirsa.**
+Eski telefon ostidagi yozuvni `DeletionMark=true` bilan bir marta qayta
+yuboring — sayt uni yashiradi. Aks holda eski raqam boshqa odamga
+o'tsa, u begona bemor ma'lumotini ko'rishi mumkin.
+
+**7. Bir telefon — bir nechta bemor.**
+Sayt **Telegram bergan ism** bo'yicha mos kelganini tanlaydi, mos
+kelmasa — birinchisini (eng kichik kod). Natijalar esa hammasi
+ko'rsatiladi va har biri `PatientName` bilan belgilanadi.
+
+### Telefon (8–10)
+
+**8. `88` bilan boshlanadigan raqamlar.** Sizning chekinishingiz
+**to'g'ri** — `8` ni faqat uzunlik 10 yoki 13 bo'lganda olib tashlang.
+O'zgartirmang.
+
+**9. Shahar raqamlari.** Filtrlash **shart emas**. Telegram faqat mobil
+raqam beradi, ya'ni shahar raqamli bemor saytga baribir kirmaydi —
+yozuv shunchaki ishlatilmay yotadi, zarari yo'q.
+
+**10. Bir maydonda ikkita raqam.** Yubormaslik **to'g'ri**. Ularni
+jurnalga yozib boring — registrator keyin tuzatadi.
+
+### Ma'lumot (11–14)
+
+So'rovlaringiz to'g'ri, klinika egasi ularni yurgizadi. Sayt tomoni
+**hech qanday chegara qo'ymaydi**: natijalar endi sahifama-sahifa,
+oxirigacha o'qiladi (avval faqat 50 tasi ko'rinardi). Tarix qancha
+katta bo'lsa ham kabinet to'g'ri ishlaydi.
+
+### Infratuzilma (15–20)
+
+Bularning hammasi klinika tomonida. Faqat ikkitasini alohida
+ta'kidlaymiz:
+
+- **15.** Fayl rejimi bo'lsa reglament topshirig'i ishlamaydi — bu
+  hozirgi «ma'lumot uzilib qoladi» muammosining eng ehtimolli sababi.
+  Birinchi navbatda shuni tekshiring.
+- **19.** Kodda ochiq qolgan AWS kaliti **almashtirilmoqda**. Yangi
+  kalitni faqat konstantaga yozing.
+
+**20.** Jadvallar `On-Demand` rejimida — to'liq yuklashda throttling
+bo'lmaydi.
+
+### Navbat / bron (21–23)
+
+**Hozircha hech narsa qilmaymiz.** Sayt bronni o'zida saqlaydi:
+shifokor `/kabinet/shifokor` da o'z navbatini kun bo'yicha ko'radi,
+registrator esa admin panelda. MedHisob'da vaqt oynasi tushunchasi
+yo'q ekan, sun'iy ravishda kiritish foydadan ko'ra chalkashlik keltiradi.
+
+Keyinroq kerak bo'lsa — sizning **C variantingiz** (kengaytmada alohida
+`dm_WebBooking` hujjati) eng to'g'ri yo'l. `Document.Sales` ga saytdan
+yozmaymiz: kassa va o'zaro hisob-kitobga tegish xavfli.
+
+### Kengaytma (24–25)
+
+**24.** Alohida sozlamalar formasi **kerak emas** — konstantalar yetadi.
+
+**25.** `BatchWriteItem` ni **faqat birinchi to'liq yuklashda**
+ishlatsangiz bo'ladi (25 barobar tez). Kundalik ishda `PutItem` qoladi:
+xato qaysi yozuvda ekani aniq ko'rinadi.
+
+## Sayt tomonida nima o'zgardi
+
+Hisobotingiz asosida tuzatilgan joylar (1C dan hech narsa talab
+qilmaydi):
+
+- natijalar **oxirigacha** o'qiladi — eski 50 talik chegara olib
+  tashlandi (to'liq yuklashdan keyin bu kritik bo'lardi);
+- bir telefondagi oiladan **to'g'ri bemor** tanlanadi;
+- kod bo'shliqlardan tozalanadi (`"10 482"` → `"10482"`);
+- analit nomi bo'sh bo'lsa qator yo'qolmaydi — xalqaro kod bilan
+  ko'rsatiladi (`PrintName` ni to'ldirsangiz yaxshi bo'ladi);
+- `Posted` / `DeletionMark` hisobga olinadi;
+- natijada bemor ismi ko'rinadi.

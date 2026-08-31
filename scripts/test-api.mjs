@@ -63,6 +63,7 @@ const doctorDaily = await load('doctor-daily.ts');
 const doctorsList = await load('doctors.ts');
 const adminDoctors = await load('admin-doctors.ts');
 const paymentWebhook = await load('payment-webhook.ts');
+const patientsApi = await load('patients.ts');
 
 const { toTashkent, toInstant, addDays } = await import(
   pathToFileURL(join(fnDir, 'lib', 'time.ts')).href
@@ -424,12 +425,268 @@ await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async
   assert.equal(bil[0].value, '12 mkmol/l');
 });
 
+await test('natijalar bir sahifaga sig\'masa ham hammasi ko\'rinadi', async () => {
+  // 1C butun tarixni to'kib yuborishi mumkin. Hujjat sort kaliti — UUID,
+  // ya'ni tartibi sanaga bog'liq emas: bitta sahifa bilan cheklansak,
+  // bemor tasodifiy yozuvlarni ko'rardi.
+  for (let i = 0; i < 60; i++) {
+    const key = `ko\u2018p-${String(i).padStart(3, '0')}`;
+    seed('test_analysis_results', `+998901234567|${key}`, {
+      phone: '+998901234567',
+      sort_key: key,
+      Date: '01.03.2026 10:00:00',
+      AnalysisResults: [{ Analyte: `Ko\u2018rsatkich ${i}`, Result: String(i) }],
+    });
+  }
+
+  const cabinet = await (await call(me, 'https://dimed.uz/api/me', {
+    headers: { cookie: sessionCookie },
+  })).json();
+
+  const yuklangan = cabinet.results.filter((r) => r.id.startsWith('ko\u2018p-'));
+  assert.equal(yuklangan.length, 60, 'barcha sahifalar o\'qilishi kerak');
+});
+
+await test('bekor qilingan va o\'chirilgan natija kabinetda ko\'rinmaydi', async () => {
+  seed('test_analysis_results', '+998901234567|doc-bekor', {
+    phone: '+998901234567', sort_key: 'doc-bekor', Date: '02.03.2026 10:00:00',
+    Posted: false,
+    AnalysisResults: [{ Analyte: 'Bekor qilingan tahlil', Result: '1' }],
+  });
+  seed('test_analysis_results', '+998901234567|doc-ochirilgan', {
+    phone: '+998901234567', sort_key: 'doc-ochirilgan', Date: '02.03.2026 11:00:00',
+    DeletionMark: true,
+    AnalysisResults: [{ Analyte: 'O\u2018chirilgan tahlil', Result: '2' }],
+  });
+  seed('test_analysis_results', '+998901234567|doc-kuchda', {
+    phone: '+998901234567', sort_key: 'doc-kuchda', Date: '02.03.2026 12:00:00',
+    Posted: true, DeletionMark: false,
+    AnalysisResults: [{ Analyte: 'Kuchdagi tahlil', Result: '3' }],
+  });
+
+  const cabinet = await (await call(me, 'https://dimed.uz/api/me', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  const nomlar = cabinet.results.map((r) => r.title);
+
+  assert.ok(!nomlar.includes('Bekor qilingan tahlil'), 'Posted=false ko\'rinmasligi kerak');
+  assert.ok(!nomlar.includes('O\u2018chirilgan tahlil'), 'DeletionMark ko\'rinmasligi kerak');
+  assert.ok(nomlar.includes('Kuchdagi tahlil'), 'kuchdagi natija ko\'rinishi kerak');
+});
+
+await test('analit nomi bo\'sh bo\'lsa qator yo\'qolmaydi', async () => {
+  seed('test_analysis_results', '+998901234567|doc-nomsiz', {
+    phone: '+998901234567', sort_key: 'doc-nomsiz', Date: '03.03.2026 10:00:00',
+    AnalysisResults: [
+      { Analyte: '', Result: '5.4', AnalyteUnit: 'mmol/L', AnalyteInternationalCode: '2345-7' },
+      { Analyte: '   ', Result: '', AnalyteUnit: '' },
+    ],
+  });
+
+  const cabinet = await (await call(me, 'https://dimed.uz/api/me', {
+    headers: { cookie: sessionCookie },
+  })).json();
+
+  const kodli = cabinet.results.find((r) => r.id === 'doc-nomsiz#0');
+  assert.ok(kodli, 'nomsiz analit xalqaro kod bilan chiqishi kerak');
+  assert.equal(kodli.title, '2345-7');
+  assert.equal(kodli.value, '5.4 mmol/L');
+  assert.ok(
+    !cabinet.results.some((r) => r.id === 'doc-nomsiz#1'),
+    'nomi ham qiymati ham yo\'q qator tashlab yuboriladi',
+  );
+});
+
+await test('natijada bemor ismi bo\'ladi (bir telefon — oila)', async () => {
+  seed('test_analysis_results', '+998901234567|doc-oila', {
+    phone: '+998901234567', sort_key: 'doc-oila', Date: '04.03.2026 10:00:00',
+    PatientName: 'Yo\u2018ldosheva Nilufar Anvarovna',
+    AnalysisResults: [{ Analyte: 'Ferritin', Result: '45', AnalyteUnit: 'ng/mL' }],
+  });
+
+  const cabinet = await (await call(me, 'https://dimed.uz/api/me', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  const ferritin = cabinet.results.find((r) => r.title === 'Ferritin');
+  assert.equal(ferritin.patientName, 'Yo\u2018ldosheva Nilufar Anvarovna');
+});
+
+await test('bir telefondagi oiladan Telegram egasi tanlanadi', async () => {
+  seed('test_individuals', '+998909999999|10482', {
+    phone: '+998909999999', sort_key: '10482',
+    Surname: 'Yo\u2018ldoshev', Name: 'Anvar', Patronymic: 'Baxtiyorovich', IsMale: true,
+  });
+  seed('test_individuals', '+998909999999|10483', {
+    phone: '+998909999999', sort_key: '10483',
+    Surname: 'Yo\u2018ldosheva', Name: 'Nilufar', Patronymic: 'Anvarovna', IsMale: false,
+  });
+
+  const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: {
+        chat: { id: 555 },
+        contact: { phone_number: '998909999999', first_name: 'Nilufar', last_name: 'Yoldosheva' },
+      },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  assert.equal(res.status, 200);
+
+  const user = tableOf('test_users').get('555');
+  assert.equal(user.code, '10483', 'birinchisi emas, ism mos kelgani tanlanishi kerak');
+  assert.equal(user.gender, 'female');
+  assert.equal(user.telegram_name, 'Yoldosheva Nilufar', 'Telegram ismi 1C dan keyin ham qolishi kerak');
+});
+
+await test('o\'chirishga belgilangan bemor profil sifatida olinmaydi', async () => {
+  seed('test_individuals', '+998907777770|20001', {
+    phone: '+998907777770', sort_key: '20001', Surname: 'Eski', Name: 'Yozuv',
+    DeletionMark: true,
+  });
+  seed('test_individuals', '+998907777770|20002', {
+    phone: '+998907777770', sort_key: '20002', Surname: 'Yangi', Name: 'Yozuv',
+  });
+
+  await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: { chat: { id: 557 }, contact: { phone_number: '998907777770', first_name: 'Yozuv' } },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+
+  const user = tableOf('test_users').get('557');
+  assert.equal(user.code, '20002');
+  assert.equal(user.last_name, 'Yangi', 'o\'chirilgan yozuv o\'tkazib yuborilishi kerak');
+});
+
+await test('1C kodidagi guruh ajratkichi tozalanadi', async () => {
+  // 1C kodni son sifatida saqlaydi: String(10482) → "10 482".
+  seed('test_individuals', '+998908888888|10 482', {
+    phone: '+998908888888', sort_key: '10 482', Surname: 'Karimov', Name: 'Sardor',
+  });
+
+  await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: { chat: { id: 556 }, contact: { phone_number: '998908888888', first_name: 'Sardor' } },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+
+  assert.equal(tableOf('test_users').get('556').code, '10482', 'kod bo\'shliqsiz saqlanishi kerak');
+});
+
 await test('noto\'g\'ri API kalit bilan 1C rad etiladi', async () => {
   const res = await call(lcResults, 'https://dimed.uz/api/lc-results', {
     ...jsonBody({ phone: '+998901234567', results: [{ code: '1', title: 'X' }] }),
     headers: { 'content-type': 'application/json', 'x-api-key': 'yolgon' },
   });
   assert.equal(res.status, 401);
+});
+
+console.log('\nBemorni tanlash (bir telefon — bir oila):');
+
+await test('sessiyasiz /api/patients 401 qaytaradi', async () => {
+  const res = await call(patientsApi, 'https://dimed.uz/api/patients');
+  assert.equal(res.status, 401);
+});
+
+await test('1C dagi oila a\'zolari variant sifatida chiqadi', async () => {
+  seed('test_individuals', '+998901234567|30001', {
+    phone: '+998901234567', sort_key: '30001',
+    Surname: 'Toirov', Name: 'Rozimuhammad', Patronymic: 'Alisherovich',
+  });
+  seed('test_individuals', '+998901234567|30002', {
+    phone: '+998901234567', sort_key: '30002',
+    FullName: 'Toirova Malika Rozimuhammadovna',
+  });
+  seed('test_individuals', '+998901234567|30003', {
+    phone: '+998901234567', sort_key: '30003',
+    Surname: 'Eski', Name: 'Yozuv', DeletionMark: true,
+  });
+
+  const data = await (await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: sessionCookie },
+  })).json();
+
+  const nomlar = data.patients.map((p) => p.name);
+  assert.ok(nomlar.includes('Toirov Rozimuhammad Alisherovich'));
+  assert.ok(nomlar.includes('Toirova Malika Rozimuhammadovna'));
+  assert.ok(!nomlar.some((n) => n.includes('Eski')), 'o\'chirilgani chiqmasligi kerak');
+  assert.equal(data.activeId, null, 'hali hech kim tanlanmagan');
+});
+
+await test('yangi oila a\'zosi qo\'shiladi va tanlanadi', async () => {
+  const bad = await call(patientsApi, 'https://dimed.uz/api/patients', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ action: 'add', firstName: 'Sardor' }),
+  });
+  assert.equal(bad.status, 400, 'familiyasiz qabul qilinmaydi');
+
+  const res = await call(patientsApi, 'https://dimed.uz/api/patients', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ action: 'add', firstName: 'Sardor', lastName: 'Karimov' }),
+  });
+  assert.equal(res.status, 200);
+  const { patient, activeId } = await res.json();
+  assert.equal(patient.name, 'Karimov Sardor');
+  assert.equal(patient.source, 'local');
+  assert.equal(activeId, patient.id, 'yangi qo\'shilgani darhol tanlanadi');
+
+  const data = await (await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  assert.ok(data.patients.some((p) => p.id === patient.id));
+});
+
+await test('boshqa bemorni tanlash saqlanadi', async () => {
+  const res = await call(patientsApi, 'https://dimed.uz/api/patients', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ action: 'select', id: '30001' }),
+  });
+  assert.equal(res.status, 200);
+
+  const data = await (await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  assert.equal(data.activeId, '30001');
+
+  const yolgon = await call(patientsApi, 'https://dimed.uz/api/patients', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ action: 'select', id: 'yoq-bunday' }),
+  });
+  assert.equal(yolgon.status, 404);
+});
+
+await test('navbat tanlangan bemor nomiga olinadi', async () => {
+  const yolgon = await call(book, 'https://dimed.uz/api/book', authed({
+    doctor: 'ashurov', date: BOOK_DATE, time: '11:00', patientId: 'yoq-bunday',
+  }));
+  assert.equal(yolgon.status, 404, 'noma\'lum bemor bilan bron qilinmaydi');
+
+  const res = await call(book, 'https://dimed.uz/api/book', authed({
+    doctor: 'ashurov', date: BOOK_DATE, time: '11:00', patientId: '30002',
+  }));
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.appointment.patientName, 'Toirova Malika Rozimuhammadovna');
+
+  const appt = tableOf('test_appointments').get(`ashurov#${BOOK_DATE}|11:00`);
+  assert.equal(appt.patient_id, '30002');
+  assert.equal(appt.patient_name, 'Toirova Malika Rozimuhammadovna');
+
+  // Kabinetda ham kimniki ekani ko'rinadi.
+  const cabinet = await (await call(me, 'https://dimed.uz/api/me', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  const olingan = cabinet.appointments.find((a) => a.time === '11:00' && a.date === BOOK_DATE);
+  assert.equal(olingan.patientName, 'Toirova Malika Rozimuhammadovna');
+
+  // Keyingi testlar bemorda bitta qabul bo'lishiga tayanadi.
+  tableOf('test_appointments').delete(`ashurov#${BOOK_DATE}|11:00`);
 });
 
 console.log('\nShifokor kabineti:');

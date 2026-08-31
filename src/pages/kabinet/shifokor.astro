@@ -64,7 +64,7 @@ import Base from '../../layouts/Base.astro';
 
 <script>
   type Shift = { start: string; end: string };
-  type Appointment = { time: string; phone: string; status: string };
+  type Appointment = { time: string; phone: string; status: string; patientName: string | null };
   type Data = {
     doctor: { name: string; job: string; shifts: Shift[]; slotMinutes: number };
     today: string;
@@ -74,6 +74,9 @@ import Base from '../../layouts/Base.astro';
   };
 
   const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  const esc = (t: string) =>
+    t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
   let shifts: Shift[] = [];
   let slotMinutes = 15;
 
@@ -285,7 +288,13 @@ import Base from '../../layouts/Base.astro';
       ? data.appointments
           .map(
             (a) =>
-              `<div class="q"><span class="tm">${a.time}</span><span class="who">${a.phone}</span><span class="pill ${
+              /* Bemor ismi bo'lsa — u asosiy, telefon esa yonida.
+                 Eski bronlarda ism yo'q: faqat telefon ko'rinadi. */
+              `<div class="q"><span class="tm">${a.time}</span><span class="who">${
+                a.patientName
+                  ? `<b>${esc(a.patientName)}</b><small>${a.phone}</small>`
+                  : a.phone
+              }</span><span class="pill ${
                 a.status === 'hold' ? 'warn' : 'ok'
               }">${a.status === 'hold' ? 'kutilmoqda' : 'band'}</span></div>`,
           )
@@ -662,6 +671,21 @@ import Base from '../../layouts/Base.astro';
 
   .card :global(.who) {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .card :global(.who b) {
+    font-weight: 650;
+    font-size: 14px;
+  }
+
+  .card :global(.who small) {
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
   }
 
   .card :global(.who.empty) {

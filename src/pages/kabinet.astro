@@ -50,6 +50,8 @@ import Base from '../layouts/Base.astro';
     price: number;
     upcoming: boolean;
     canMove: boolean;
+    /* Navbat kim uchun olingani (bir telefon — bir oila). */
+    patientName: string | null;
   };
 
   type Slot = { time: string; free: boolean };
@@ -62,6 +64,8 @@ import Base from '../layouts/Base.astro';
     type: 'pdf' | 'text';
     date: string;
     seen: boolean;
+    /* Oila bitta telefondan foydalansa — natija kimniki ekani. */
+    patientName: string | null;
   };
 
   const MONTHS = [
@@ -196,6 +200,7 @@ import Base from '../layouts/Base.astro';
         <div class="nm">${a.doctorName}</div>
         <div class="dt">${a.doctorJob}</div>
         <div class="dt">${fmtDate(a.date)} · soat ${a.time}</div>
+        ${a.patientName ? `<div class="dt who">Bemor: ${a.patientName}</div>` : ''}
       </div>
       <div class="appt-foot">
         <span class="pill ${s.cls}">${s.text}</span>
@@ -338,6 +343,14 @@ import Base from '../layouts/Base.astro';
   function renderResults(results: LabResult[]) {
     lastResults = results;
 
+    /*
+      Bir telefonga oila a'zolari bog'langan bo'lishi mumkin (ota-ona
+      bolasini yozdiradi). Shunda har bir natijada kimniki ekani
+      yoziladi; bitta odam bo'lsa — ortiqcha shovqin qilmaymiz.
+    */
+    const people = new Set(results.map((r) => r.patientName).filter(Boolean));
+    const showWho = people.size > 1;
+
     el('results').innerHTML = results.length
       ? results
           .map(
@@ -345,7 +358,7 @@ import Base from '../layouts/Base.astro';
               <span class="fic text">TXT</span>
               <span class="lab-body"><span class="nm">${r.title}</span>
                 ${r.value ? `<span class="val">${r.value}${r.reference ? ` <span class="ref">(norma: ${r.reference})</span>` : ''}</span>` : ''}
-                <span class="dt">${fmtDateTime(r.date)}</span></span>
+                <span class="dt">${showWho && r.patientName ? `${r.patientName} · ` : ''}${fmtDateTime(r.date)}</span></span>
               ${r.seen ? '' : '<span class="pill new">yangi</span>'}
               <button class="pdf-btn" data-print="${i}" title="PDF qilib saqlash">PDF</button>
             </div>`,
@@ -387,10 +400,12 @@ import Base from '../layouts/Base.astro';
         table { width: 100%; border-collapse: collapse; margin-top: 24px; }
         th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #ccc; }
         th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #555; }
+        .who { margin: 18px 0 0; font-size: 13px; }
         .foot { margin-top: 32px; font-size: 12px; color: #555; }
         @media print { body { margin: 12mm; } }
       </style></head><body>
       <div class="head"><b>Dimed klinikasi</b><span>Chinoz, Navoiy ko‘chasi 18 · +998 55 9009 103</span></div>
+      ${r.patientName ? `<p class="who">Bemor: <b>${esc(r.patientName)}</b></p>` : ''}
       <table>
         <tr><th>Tahlil</th><th>Natija</th><th>Norma</th><th>Sana</th></tr>
         <tr><td>${esc(r.title)}</td><td><b>${esc(r.value ?? '—')}</b></td>
@@ -809,5 +824,10 @@ import Base from '../layouts/Base.astro';
     font-weight: 500;
     color: var(--muted);
     font-size: 12px;
+  }
+
+  .card :global(.dt.who) {
+    color: var(--leaf);
+    font-weight: 600;
   }
 </style>

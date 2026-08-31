@@ -1,5 +1,4 @@
-import { QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLES } from './db.ts';
+import { TABLES, queryAllPages } from './db.ts';
 import { doctorDayKey } from './slots.ts';
 import type { DateKey } from './time.ts';
 
@@ -37,6 +36,9 @@ export type Appointment = {
   /** hold uchun: shu vaqtdan keyin slot yana bo'shaydi (unix sekund) */
   hold_until?: number;
   payment_id?: string;
+  /** navbat kim uchun olingani (bir telefon — bir oila) */
+  patient_id?: string;
+  patient_name?: string;
   /** eslatma yuborilgan lahza — takror yuborilmasligi uchun */
   reminded_at?: string;
   created_at: string;
@@ -47,14 +49,12 @@ export async function dayAppointments(
   doctorId: string,
   dateKey: DateKey,
 ): Promise<Appointment[]> {
-  const found = await db.send(
-    new QueryCommand({
-      TableName: TABLES.appointments,
-      KeyConditionExpression: 'doctor_day = :k',
-      ExpressionAttributeValues: { ':k': doctorDayKey(doctorId, dateKey) },
-    }),
-  );
-  return (found.Items ?? []) as Appointment[];
+  const found = await queryAllPages({
+    TableName: TABLES.appointments,
+    KeyConditionExpression: 'doctor_day = :k',
+    ExpressionAttributeValues: { ':k': doctorDayKey(doctorId, dateKey) },
+  });
+  return found as Appointment[];
 }
 
 /**
@@ -86,14 +86,12 @@ export const isConfirmed = (appointment: { status: string }): boolean =>
  * Eslatmalar va kunlik xulosa uchun — ular shifokorni oldindan bilmaydi.
  */
 export async function appointmentsOnDate(dateKey: DateKey): Promise<Appointment[]> {
-  const found = await db.send(
-    new QueryCommand({
-      TableName: TABLES.appointments,
-      IndexName: 'date-index',
-      KeyConditionExpression: '#d = :d',
-      ExpressionAttributeNames: { '#d': 'date' },
-      ExpressionAttributeValues: { ':d': dateKey },
-    }),
-  );
-  return (found.Items ?? []) as Appointment[];
+  const found = await queryAllPages({
+    TableName: TABLES.appointments,
+    IndexName: 'date-index',
+    KeyConditionExpression: '#d = :d',
+    ExpressionAttributeNames: { '#d': 'date' },
+    ExpressionAttributeValues: { ':d': dateKey },
+  });
+  return found as Appointment[];
 }

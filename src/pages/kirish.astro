@@ -57,6 +57,42 @@ import { site } from '../data/site';
         Savollar bo‘lsa: <a href={site.phoneHref}>{site.phone}</a>
       </p>
     </div>
+
+    <!--
+      Kirishdan keyingi qadam: bir telefondan butun oila foydalanadi
+      (ota-ona bolasini o'z raqami bilan yozdiradi), shuning uchun
+      kim kirayotganini bir marta so'raymiz.
+    -->
+    <div class="card glass" id="whoCard" hidden>
+      <div class="eyebrow">Deyarli tayyor</div>
+      <h1 id="whoTitle">Kim kirmoqda?</h1>
+      <p class="lede" id="whoLede">Bu raqamga bogʻlangan bemorlar:</p>
+
+      <div class="who-list" id="whoList"></div>
+
+      <button class="btn btn-ghost" id="whoNew" type="button">+ Boshqa odam</button>
+
+      <div class="who-form" id="whoForm" hidden>
+        <label class="fld">
+          <span>Familiya<i>*</i></span>
+          <input id="w-last" type="text" autocomplete="family-name" placeholder="Yoʻldoshev" />
+        </label>
+        <label class="fld">
+          <span>Ism<i>*</i></span>
+          <input id="w-first" type="text" autocomplete="given-name" placeholder="Anvar" />
+        </label>
+        <label class="fld">
+          <span>Sharif</span>
+          <input id="w-mid" type="text" placeholder="Baxtiyorovich (ixtiyoriy)" />
+        </label>
+        <div class="who-actions">
+          <button class="btn btn-ghost btn-sm" id="whoCancel" type="button">Bekor qilish</button>
+          <button class="btn btn-sm" id="whoSave" type="button">Saqlash va davom etish</button>
+        </div>
+      </div>
+
+      <p class="msg" id="whoMsg" role="status" aria-live="polite"></p>
+    </div>
   </section>
 </Base>
 
@@ -132,7 +168,7 @@ import { site } from '../data/site';
 
       if (res.ok) {
         setMsg('Xush kelibsiz!', 'ok');
-        window.location.href = safeNext();
+        await askWho();
         return;
       }
 
@@ -143,6 +179,136 @@ import { site } from '../data/site';
       setMsg('Internetga ulanishda muammo. Qayta urinib ko‘ring.', 'error');
     } finally {
       submit.disabled = false;
+    }
+  });
+
+  // ---------- "Kim kirmoqda?" ----------
+
+  type Patient = { id: string; name: string; source: '1c' | 'local' };
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const go = (): void => {
+    window.location.href = safeNext();
+  };
+
+  /**
+   * Kirgandan keyin telefonga bog'langan bemorni tanlash.
+   *
+   * Bir marta so'raladi: tanlangani eslab qolinadi va keyingi
+   * kirishlarda o'tkazib yuboriladi. Ro'yxat bo'sh bo'lsa —
+   * darhol "yangi odam" formasi ochiladi (klinikada hali
+   * ro'yxatdan o'tmagan bemor).
+   */
+  async function askWho(): Promise<void> {
+    let data: { patients: Patient[]; activeId: string | null };
+    try {
+      const res = await fetch('/api/patients', { credentials: 'same-origin' });
+      if (!res.ok) return go();
+      data = await res.json();
+    } catch {
+      // Ro'yxatni olib bo'lmasa kirishni to'smaymiz.
+      return go();
+    }
+
+    if (data.activeId) return go();
+    if (data.patients.length === 1) {
+      const only = data.patients[0];
+      if (only) {
+        await select(only.id);
+        return;
+      }
+    }
+
+    el('whoCard').hidden = false;
+    el('whoCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    if (data.patients.length === 0) {
+      el('whoTitle').textContent = 'Oʻzingizni tanishtiring';
+      el('whoLede').textContent =
+        'Bu raqam boʻyicha klinikada yozuv topilmadi. Ism-familiyangizni kiriting.';
+      el('whoNew').hidden = true;
+      el('whoForm').hidden = false;
+      return;
+    }
+
+    el('whoList').innerHTML = data.patients
+      .map(
+        (p) =>
+          `<button class="who-item" data-pick="${esc(p.id)}">
+             <span class="who-nm">${esc(p.name)}</span>
+             ${p.source === '1c' ? '<span class="who-tag">klinikada bor</span>' : ''}
+           </button>`,
+      )
+      .join('');
+
+    el('whoList')
+      .querySelectorAll<HTMLButtonElement>('[data-pick]')
+      .forEach((b) => (b.onclick = () => select(b.dataset.pick ?? '')));
+  }
+
+  const esc = (t: string) =>
+    t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+
+  const setWhoMsg = (text: string, kind: 'error' | '' = '') => {
+    const box = el<HTMLParagraphElement>('whoMsg');
+    box.textContent = text;
+    box.className = `msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  async function select(id: string): Promise<void> {
+    setWhoMsg('Saqlanmoqda…');
+    try {
+      const res = await fetch('/api/patients', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'select', id }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      go();
+    } catch {
+      setWhoMsg('Saqlab boʻlmadi. Qayta urinib koʻring.', 'error');
+    }
+  }
+
+  el('whoNew').addEventListener('click', () => {
+    el('whoForm').hidden = false;
+    el('whoNew').hidden = true;
+    el<HTMLInputElement>('w-last').focus();
+  });
+
+  el('whoCancel').addEventListener('click', () => {
+    el('whoForm').hidden = true;
+    el('whoNew').hidden = false;
+    setWhoMsg('');
+  });
+
+  el('whoSave').addEventListener('click', async () => {
+    const lastName = el<HTMLInputElement>('w-last').value.trim();
+    const firstName = el<HTMLInputElement>('w-first').value.trim();
+    const patronymic = el<HTMLInputElement>('w-mid').value.trim();
+
+    if (!lastName || !firstName) {
+      setWhoMsg('Familiya va ism majburiy.', 'error');
+      return;
+    }
+
+    setWhoMsg('Saqlanmoqda…');
+    try {
+      const res = await fetch('/api/patients', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'add', firstName, lastName, patronymic }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setWhoMsg(body.error ?? 'Saqlab boʻlmadi.', 'error');
+        return;
+      }
+      go();
+    } catch {
+      setWhoMsg('Internetga ulanishda muammo.', 'error');
     }
   });
 </script>
@@ -298,5 +464,94 @@ import { site } from '../data/site';
     color: var(--rose);
     font-weight: 650;
     white-space: nowrap;
+  }
+
+  /* "Kim kirmoqda?" — kirishdan keyingi tanlov */
+  .who-list {
+    display: grid;
+    gap: 8px;
+    margin: 14px 0;
+  }
+
+  .who-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 13px 15px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--card);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .who-item:hover,
+  .who-item:focus-visible {
+    border-color: var(--leaf);
+    background: color-mix(in srgb, var(--leaf) 6%, var(--card));
+  }
+
+  .who-nm {
+    font-weight: 650;
+    font-size: 15px;
+  }
+
+  .who-tag {
+    flex: none;
+    font-size: 11.5px;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 9px;
+  }
+
+  .who-form {
+    display: grid;
+    gap: 11px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+
+  .who-form .fld {
+    display: grid;
+    gap: 5px;
+  }
+
+  .who-form .fld span {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .who-form .fld i {
+    color: var(--leaf);
+    font-style: normal;
+  }
+
+  .who-form input {
+    width: 100%;
+    padding: 11px 13px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--bg);
+    color: inherit;
+    font: inherit;
+  }
+
+  .who-form input:focus-visible {
+    outline: none;
+    border-color: var(--leaf);
+  }
+
+  .who-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 2px;
   }
 </style>

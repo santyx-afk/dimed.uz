@@ -7,13 +7,14 @@ import { doctorDayKey, isValidSlot, isBookable } from './lib/slots.ts';
 import { shiftsFor } from './lib/schedule.ts';
 import { isDateKey, isTime, toInstant, weekdayOf, type DateKey } from './lib/time.ts';
 import { createPayment } from './lib/payment.ts';
+import { listPatients } from './lib/patients.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
 /** Hold shuncha vaqt turadi — to'lov shu oraliqda tugallanishi kerak. */
 const HOLD_SECONDS = 5 * 60;
 
-type Body = { doctor?: string; date?: string; time?: string };
+type Body = { doctor?: string; date?: string; time?: string; patientId?: string };
 
 /** POST /api/book — slotni band qiladi va to'lovni boshlaydi. */
 export default async (request: Request, _context: Context): Promise<Response> => {
@@ -41,6 +42,19 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     const now = new Date();
     if (!isBookable(date, time, now)) {
       return error('Qabulga 1 soatdan kam qoldi — boshqa vaqtni tanlang');
+    }
+
+    /*
+      Navbat kim uchun olinayotgani. Bir telefondan butun oila
+      foydalanadi, shuning uchun shifokor kimni kutayotganini bilishi
+      kerak. Tanlanmagan bo'lsa — oxirgi tanlangani; u ham bo'lmasa
+      yozuv ismsiz qoladi (eski bronlar shunday edi).
+    */
+    const { patients, activeId } = await listPatients(session.phone, session.userId);
+    const wantedId = body.patientId ?? activeId;
+    const patient = wantedId ? patients.find((p) => p.id === wantedId) ?? null : null;
+    if (body.patientId && !patient) {
+      return error('Bemor topilmadi — ro‘yxatdan tanlang', 404);
     }
 
     const payment = await createPayment({
@@ -76,6 +90,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             date,
             phone: session.phone,
             telegram_id: session.userId,
+            ...(patient ? { patient_id: patient.id, patient_name: patient.name } : {}),
             starts_at: toInstant(date, time).toISOString(),
             status,
             hold_until: holdUntil,
@@ -117,7 +132,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     );
 
     if (payment.mode === 'at_clinic') {
-      await confirmAtClinic(session.userId, doctor.name, date, time, doctor.price);
+      await confirmAtClinic(session.userId, doctor.name, date, time, doctor.price, patient?.name);
     }
 
     return json({
@@ -126,7 +141,14 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       paymentId: payment.paymentId,
       redirectUrl: payment.redirectUrl,
       holdUntil,
-      appointment: { doctor: doctorId, doctorName: doctor.name, date, time, price: doctor.price },
+      appointment: {
+        doctor: doctorId,
+        doctorName: doctor.name,
+        date,
+        time,
+        price: doctor.price,
+        patientName: patient?.name ?? null,
+      },
     });
   } catch (err) {
     await logToAdmin('book', err);
@@ -141,11 +163,13 @@ async function confirmAtClinic(
   date: DateKey,
   time: string,
   price: number,
+  patientName?: string,
 ): Promise<void> {
   try {
     await sendMessage(
       telegramId,
       `✅ <b>Navbatingiz band qilindi</b>\n\n` +
+        (patientName ? `Bemor: ${patientName}\n` : '') +
         `Shifokor: ${doctorName}\n` +
         `Sana: ${date}, soat ${time}\n` +
         `Narx: ${price.toLocaleString('ru-RU')} so'm\n\n` +

@@ -1,10 +1,9 @@
 # Dimed.uz — loyiha holati va davom ettirish uchun qo'llanma (handoff)
 
 > Bu hujjat yangi seansda (yoki yangi odam) ishni davom ettirishi uchun.
-> Oxirgi yangilanish: **2026-08-28**. Sayt **jonli**: baza sozlangan,
-> @dimedcbot ishlayapti, PR #12–#19 merge qilingan, CI yashil
-> (97 mantiq + 65 API testi, typecheck 0 xato). Qolgan ishlar —
-> «Hozirgi holat» bo'limida.
+> Oxirgi yangilanish: **2026-08-31**. Sayt **jonli**: baza sozlangan,
+> @dimedcbot ishlayapti, CI yashil (97 mantiq + 77 API testi,
+> typecheck 0 xato). Qolgan ishlar — «Hozirgi holat» bo'limida.
 
 ## Loyiha nima
 
@@ -33,14 +32,16 @@ topilgan kamchiliklar tuzatilgan, test ma'lumotlar bazadan tozalangan.
 
 ### Klinika egasi zimmasida
 
-- [ ] **AWS kalitini almashtirish — eng muhim!** Joriy kalit chatda oshkor
-      bo'lgan. Tartib: IAM'da yangi kalit yaratish → Netlify'da
-      `DIMED_AWS_ACCESS_KEY_ID` / `DIMED_AWS_SECRET_ACCESS_KEY` ni yangilash →
-      **Trigger deploy** → eski kalitni IAM'da o'chirish.
-- [ ] Murtazayevani `/kabinet/admin` da faollashtirish — Ginekologiya hozir
-      bron qilinmaydi (0 shifokor).
+- [x] ~~AWS kalitini almashtirish~~ — bajarildi (2026-08-31).
 - [ ] Payme kassa ID va kalitlar → `PAYME_MERCHANT_ID`, `PAYME_KEY`,
       `PAYME_ENABLED=1` (bron mantig'i o'zgarmaydi).
+- [ ] **1C kengaytmasini o'rnatish** — qo'llanma alohida berilgan; eng
+      muhim uch nuqtasi: fayl rejimi emasligini tekshirish, `Posted` /
+      `DeletionMark` maydonlarini qo'shish, eski ikkita reglament
+      topshirig'ini o'chirish.
+- [ ] Ginekologiyaga yangi shifokor kelganda `/kabinet/admin` da qo'shish
+      (Murtazayeva ishdan bo'shagan — yozuvi saqlangan, saytdan
+      yashirilgan).
 - [ ] Mobil (375px) ko'rinishni qo'lda bir aylanib chiqish.
 - [ ] (istalganda, xavfsizlik) Telegram bot tokenini BotFather'da `/revoke`
       qilish → Netlify'da `TELEGRAM_BOT_TOKEN` → Trigger deploy →
@@ -55,6 +56,10 @@ topilgan kamchiliklar tuzatilgan, test ma'lumotlar bazadan tozalangan.
   endi `sort_key` = 1C bemor kodi (alohida `Code` maydoni kerak emas).
 - Sana formatida `DF=yyyy-MM-dd` afzal (sayt `dd.MM.yyyy H:mm:ss` ni ham
   tushunadi, bir xonali soat bilan ham).
+- **Yangi:** `Posted` va `DeletionMark` (BOOL) yuborish — bekor qilingan
+  natija kabinetda qolib ketmasligi uchun; `dimed_individuals` ga ham
+  `DeletionMark`. To'liq javob: `docs/1c-integration.md` → «Sayt
+  tomonining javobi».
 
 ### Keyingi seans uchun (so'ralganda)
 
@@ -135,8 +140,8 @@ topilgan kamchiliklar tuzatilgan, test ma'lumotlar bazadan tozalangan.
   kontakt ulashishda va **har kirishda** profilni `dimed_users` ga
   birlashtiradi (`lib/patients.ts`, best-effort — xato kirishni to'smaydi).
   `/api/me` ikkala natija jadvalini o'qiydi, begona yozuvlarga chidamli:
-  bitta jadval yiqilsa qolgani ko'rinadi (`safeQuery`), 1C adashib
-  `dimed_lab_results` ga qo'ygan 1420 hujjat ham o'qiladi (tarix saqlanadi).
+  bitta jadval yiqilsa qolgani ko'rinadi, 1C adashib `dimed_lab_results`
+  ga qo'ygan 1420 hujjat ham o'qiladi (tarix saqlanadi).
 - **CSV import**: `scripts/import-patients.mjs` — 1C ro'yxatini telefon
   bo'yicha botdan o'tgan bemorlarga biriktiradi (`--dry` rejimi bor).
 - **UX tuzatishlari**: OTP `<code>` da (bosilsa nusxalanadi), `/start`
@@ -146,6 +151,35 @@ topilgan kamchiliklar tuzatilgan, test ma'lumotlar bazadan tozalangan.
   bosh sahifada shifokor soni jonli `/api/doctors` dan.
 - **QA aylanishi** o'tkazildi, topilganlar tuzatildi, test bron/smenalar
   bazadan tozalandi.
+
+### 5-bosqich — MedHisob (1C) hisobotiga moslash ✅ (2026-08-30)
+1C dasturchisi konfiguratsiya bo'yicha to'liq hisobot berdi; unga ko'ra:
+- natijalar **oxirigacha** o'qiladi (`queryAllPages`) — eski 50 talik
+  chegara to'liq yuklashdan keyin tarixning katta qismini yashirardi;
+- cron so'rovlari ham sahifalanadi (kunlik navbat ro'yxati);
+- bir telefondagi oiladan Telegram egasi tanlanadi, natijalarda esa
+  kimniki ekani yoziladi;
+- 1C kodidagi guruh ajratkichi tozalanadi (`"10 482"` → `"10482"`);
+- bo'sh analit nomi o'rniga xalqaro kod ko'rsatiladi;
+- `Posted=false` / `DeletionMark=true` yozuvlar kabinetda ko'rinmaydi.
+
+Javob va 1C tomonidan kutilayotgan uchta yangi maydon:
+`docs/1c-integration.md` → «Sayt tomonining javobi».
+
+### 6-bosqich — bemorni tanlash va panel tozalash ✅ (2026-08-31)
+- **Navbat kim uchun?** Bir telefondan butun oila foydalanadi. Endi
+  kirishda «kim kirmoqda?» bir marta so'raladi, bron oynasida esa
+  bemorni almashtirish yoki **yangi odam qo'shish** mumkin
+  (familiya+ism majburiy, sharif ixtiyoriy). Tanlangani eslab qolinadi.
+  Ro'yxat ikki manbadan: 1C katalogi va saytda qo'shilganlar.
+- Navbat yozuviga `patient_id` / `patient_name` tushadi; shifokor
+  kabinetida telefon o'rniga **bemor ismi** ko'rinadi, bot tasdig'ida
+  va bemor kabinetida ham.
+- **Faolsiz shifokor saytdan yo'qoladi**: kartasi yashiriladi, shifokori
+  qolmagan bo'lim «vaqtincha yopiq» bo'ladi va tugmasi o'chadi.
+- **Admin panel** bo'limlar bo'yicha guruhlandi; «O'chirish» →
+  «Saytdan yashirish», teglar «saytda ko'rinadi» / «kabinetga kira
+  olmaydi» kabi tushunarli yozuvlarga almashtirildi.
 
 ---
 
@@ -177,7 +211,7 @@ legacy/         eski Jekyll sayti (kontent manbasi, deploy qilinmaydi)
 npm run dev          # lokal server
 npm run build        # dist/ ga yig'ish
 npm run typecheck    # astro check + tsc
-npm test             # 97 mantiq + 65 API tekshiruvi (haqiqiy AWS'siz)
+npm test             # 97 mantiq + 77 API tekshiruvi (haqiqiy AWS'siz)
 npm run create-tables
 npm run seed-doctors
 npm run link-doctor  # shifokorni Telegram'ga bog'lash (argumentsiz — ro'yxat)
@@ -308,7 +342,36 @@ standart nomi bilan yaratilgan `AnalysisResult` — ega tasdiqlagach o'chiriladi
     (`telegram_id` kalitini 1C bilmaydi ham). Sayt 1C jadvallarini faqat
     o'qiydi va har qanday shakldagi yozuvga chidamli bo'lishi shart:
     telefoni yo'q bemor `"+"` kaliti ostida, sana `"28.12.2024 9:30:24"`
-    kabi bir xonali soat bilan kelishi mumkin.
+    kabi bir xonali soat bilan, kod esa `"10 482"` ko'rinishida
+    (1C `String(Son)` guruh ajratkichini qo'shadi) kelishi mumkin.
+
+17. **DynamoDB javobni 1 MB da kesadi** — `Limit` so'ralmasa ham.
+    Shuning uchun ko'p yozuv qaytarishi mumkin bo'lgan har bir so'rov
+    `queryAllPages()` (lib/db.ts) orqali oxirigacha o'qiladi: bemor
+    natijalari va cron'ning kunlik navbat ro'yxati. Soxta DynamoDB ham
+    sahifalaydi (25 tadan), ya'ni sahifalashni unutgan kod testda
+    ushlanadi. Natijalarni bitta sahifa bilan cheklab bo'lmaydi: 1C
+    hujjatining sort kaliti — UUID, tartibi sanaga bog'liq emas.
+
+18. **Bekor qilingan natija ko'rinmaydi.** 1C hujjatni bekor qilsa
+    (`Posted=false`) yoki o'chirishga belgilasa (`DeletionMark=true`),
+    sayt uni kabinetda ko'rsatmaydi. Maydon umuman bo'lmasa —
+    ko'rsatiladi (eski yozuvlar ular yuborilmasdan oldin tushgan).
+    Shu yo'l tanlangani uchun 1C'ga `DeleteItem` huquqi kerak emas.
+
+20. **Bemor kimligi — `/api/patients`.** Ro'yxat 1C katalogi va
+    `dimed_users.patients` (saytda qo'shilganlar) dan yig'iladi;
+    tanlangani `active_patient_id` da turadi. Yangi odam qo'shish
+    `list_append` bilan — ikki qurilmadan bir vaqtda qo'shilsa ham
+    biri yo'qolmaydi. Bron `patientId` ni qabul qiladi, yuborilmasa
+    oxirgi tanlangani olinadi; eski bronlarda bu maydon yo'q va
+    hamma joyda shunga chidamli bo'lish kerak.
+
+19. **Bir telefon — bir oila.** Bemor profili birlashtirilayotganda
+    Telegram bergan ism bilan solishtirib mos kelgan bemor tanlanadi
+    (`telegram_name` — 1C hech qachon yozmaydigan yagona ism maydoni).
+    Natijalar esa hammasi ko'rinadi, har birida `PatientName` bilan
+    kimniki ekani yoziladi.
 
 13. **Webhook secret qoidalari** (ikki marta kuydirgan!):
     faqat harf-raqam — brauzer URL'ni `#` da kesadi, Telegram maxsus

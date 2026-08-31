@@ -111,7 +111,8 @@ const weekdays = [
         </label>
 
         <label class="chk">
-          <input id="f-active" type="checkbox" checked /> Faol (saytda ko‘rinadi)
+          <input id="f-active" type="checkbox" checked /> Saytda ko‘rinsin
+          <small>Belgi olib tashlansa, bemorlar uni ko‘rmaydi va navbat ololmaydi.</small>
         </label>
 
         <p class="msg" id="formMsg" role="status" aria-live="polite"></p>
@@ -190,32 +191,42 @@ const weekdays = [
     el('content').hidden = false;
     el('addBtn').hidden = false;
     el('logout').hidden = false;
-    el('subtitle').textContent = `${doctors.length} ta shifokor`;
+    const shown = doctors.filter((d) => d.active).length;
+    el('subtitle').textContent =
+      `${shown} ta shifokor saytda koʻrinadi` +
+      (doctors.length > shown ? ` · ${doctors.length - shown} tasi yashirilgan` : '');
     renderList();
   }
 
+  /*
+    Ro'yxat bo'limlar bo'yicha guruhlanadi: admin klinikani qanday
+    ko'rsa, ekranda ham shunday tursin. Shifokori qolmagan bo'lim
+    alohida ogohlantirish bilan chiqadi — o'sha bo'limga saytdan
+    navbat olib bo'lmaydi.
+  */
   function renderList() {
-    el('list').innerHTML = doctors
-      .map(
-        (d) => `<div class="doc-row${d.active ? '' : ' off'}">
-          <div class="doc-main">
-            <span class="nm">${esc(d.name)}</span>
-            <span class="meta">${esc(d.job)} · ${DEPT_NAMES[d.deptId] ?? d.deptId} · ${fmtPrice(d.price)} so‘m · ${d.slotMinutes} daq</span>
+    const order = Object.keys(DEPT_NAMES);
+    const groups = [...new Set([...order, ...doctors.map((d) => d.deptId)])]
+      .map((deptId) => ({
+        deptId,
+        name: DEPT_NAMES[deptId] ?? deptId,
+        rows: doctors.filter((d) => d.deptId === deptId),
+      }))
+      .filter((g) => g.rows.length);
+
+    el('list').innerHTML = groups
+      .map((g) => {
+        const shown = g.rows.filter((d) => d.active).length;
+        return `<div class="dept-group">
+          <div class="dept-head">
+            <h2>${esc(g.name)}</h2>
+            <span class="dept-note${shown ? '' : ' warn'}">${
+              shown ? `${shown} ta shifokor saytda` : 'saytda koʻrinmaydi — navbat olib boʻlmaydi'
+            }</span>
           </div>
-          <div class="doc-tags">
-            ${d.active ? '' : '<span class="tag off">faolsiz</span>'}
-            ${d.linked ? '<span class="tag ok">Telegram ✓</span>' : '<span class="tag warn">bog‘lanmagan</span>'}
-          </div>
-          <div class="doc-btns">
-            <button class="mini" data-edit="${d.id}">Tahrirlash</button>
-            ${
-              d.active
-                ? `<button class="mini danger" data-off="${d.id}">O‘chirish</button>`
-                : `<button class="mini okbtn" data-on="${d.id}">Faollashtirish</button>`
-            }
-          </div>
-        </div>`,
-      )
+          ${g.rows.map(row).join('')}
+        </div>`;
+      })
       .join('');
 
     el('list')
@@ -227,6 +238,36 @@ const weekdays = [
     el('list')
       .querySelectorAll<HTMLButtonElement>('[data-on]')
       .forEach((b) => (b.onclick = () => setActive(b.dataset.on!, true)));
+  }
+
+  /** Bitta shifokor qatori. */
+  function row(d: Doctor): string {
+    return `<div class="doc-row${d.active ? '' : ' off'}">
+      <div class="doc-main">
+        <span class="nm">${esc(d.name)}</span>
+        <span class="meta">${esc(d.job)} · ${fmtPrice(d.price)} so‘m · ${d.slotMinutes} daqiqa</span>
+      </div>
+      <div class="doc-tags">
+        ${
+          d.active
+            ? '<span class="tag ok">saytda koʻrinadi</span>'
+            : '<span class="tag off">yashirilgan</span>'
+        }
+        ${
+          d.linked
+            ? '<span class="tag ok">kabinetga kiradi</span>'
+            : '<span class="tag warn" title="Telegram bogʻlanmagan — shifokor oʻz kabinetiga kira olmaydi">kabinetga kira olmaydi</span>'
+        }
+      </div>
+      <div class="doc-btns">
+        <button class="mini" data-edit="${d.id}">Tahrirlash</button>
+        ${
+          d.active
+            ? `<button class="mini danger" data-off="${d.id}">Saytdan yashirish</button>`
+            : `<button class="mini okbtn" data-on="${d.id}">Saytda koʻrsatish</button>`
+        }
+      </div>
+    </div>`;
   }
 
   const esc = (s: string) =>
@@ -377,8 +418,10 @@ const weekdays = [
   async function setActive(id: string, active: boolean) {
     const doc = doctors.find((x) => x.id === id);
     const q = active
-      ? `"${doc?.name}" qayta faollashtirilsinmi?`
-      : `"${doc?.name}" o‘chirilsinmi? (saytdan va navbatdan yo‘qoladi, tarix saqlanadi)`;
+      ? `"${doc?.name}" saytda qayta ko‘rsatilsinmi?`
+      : `"${doc?.name}" saytdan yashirilsinmi?\n\n` +
+        `Bemorlar uni ko‘rmaydi va navbat ololmaydi. Ma’lumotlari va ` +
+        `navbatlar tarixi saqlanadi — istalgan payt qaytarasiz.`;
     if (!confirm(q)) return;
 
     try {
@@ -799,5 +842,45 @@ const weekdays = [
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+  }
+
+  /* Bo'limlar bo'yicha guruhlash — klinika tuzilishi ko'rinib tursin */
+  .dept-group {
+    margin-bottom: 22px;
+  }
+
+  .dept-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .dept-head h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .dept-note {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .dept-note.warn {
+    color: #b4690e;
+    font-weight: 600;
+  }
+
+  .chk small {
+    display: block;
+    margin-top: 3px;
+    margin-left: 25px;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 400;
   }
 </style>
