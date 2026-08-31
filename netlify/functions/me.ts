@@ -36,6 +36,7 @@ type AppointmentRow = {
   starts_at: string;
   status: string;
   price: number;
+  patient_name?: string;
 };
 
 async function loadAppointments(phone: string) {
@@ -85,6 +86,7 @@ async function loadAppointments(phone: string) {
       startsAt: a.starts_at,
       status: a.status,
       price: a.price,
+      patientName: a.patient_name ?? null,
       upcoming: a.starts_at >= nowIso,
       // Ko'chirish faqat kuchdagi bronga va 1 soat qolgunicha.
       canMove: isConfirmed(a) && isBookable(a.date, a.time, now),

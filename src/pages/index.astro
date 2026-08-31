@@ -95,7 +95,7 @@ const featuredAnalyses = featured
     <div class="dept-cards">
       {
         departments.map((d) => (
-          <div class="dept-card glass rv">
+          <div class="dept-card glass rv" data-dept-card={d.id}>
             <div class="top">
               <div class="ic">
                 <DeptIcon icon={d.icon} />
@@ -128,7 +128,7 @@ const featuredAnalyses = featured
     <div class="doc-cards">
       {
         doctors.map((d) => (
-          <div class="doc-card glass rv">
+          <div class="doc-card glass rv" data-doc-card={d.id}>
             <div class="ph">
               <img src={d.photo} alt={d.name} width="64" height="64" loading="lazy" />
               <div>
@@ -1017,5 +1017,16 @@ const featuredAnalyses = featured
     color: #b0005c;
     box-shadow: none;
     align-self: flex-start;
+  }
+
+  /* Shifokori qolmagan bo'lim — bemor bosib, bo'sh ro'yxat ko'rmasin */
+  .dept-card .cnt.none {
+    color: var(--muted);
+    opacity: 0.85;
+  }
+
+  .dept-card .go:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 </style>

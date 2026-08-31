@@ -1,8 +1,8 @@
 # Dimed.uz — loyiha holati va davom ettirish uchun qo'llanma (handoff)
 
 > Bu hujjat yangi seansda (yoki yangi odam) ishni davom ettirishi uchun.
-> Oxirgi yangilanish: **2026-08-30**. Sayt **jonli**: baza sozlangan,
-> @dimedcbot ishlayapti, CI yashil (97 mantiq + 72 API testi,
+> Oxirgi yangilanish: **2026-08-31**. Sayt **jonli**: baza sozlangan,
+> @dimedcbot ishlayapti, CI yashil (97 mantiq + 77 API testi,
 > typecheck 0 xato). Qolgan ishlar — «Hozirgi holat» bo'limida.
 
 ## Loyiha nima
@@ -32,14 +32,16 @@ topilgan kamchiliklar tuzatilgan, test ma'lumotlar bazadan tozalangan.
 
 ### Klinika egasi zimmasida
 
-- [ ] **AWS kalitini almashtirish — eng muhim!** Joriy kalit chatda oshkor
-      bo'lgan. Tartib: IAM'da yangi kalit yaratish → Netlify'da
-      `DIMED_AWS_ACCESS_KEY_ID` / `DIMED_AWS_SECRET_ACCESS_KEY` ni yangilash →
-      **Trigger deploy** → eski kalitni IAM'da o'chirish.
-- [ ] Murtazayevani `/kabinet/admin` da faollashtirish — Ginekologiya hozir
-      bron qilinmaydi (0 shifokor).
+- [x] ~~AWS kalitini almashtirish~~ — bajarildi (2026-08-31).
 - [ ] Payme kassa ID va kalitlar → `PAYME_MERCHANT_ID`, `PAYME_KEY`,
       `PAYME_ENABLED=1` (bron mantig'i o'zgarmaydi).
+- [ ] **1C kengaytmasini o'rnatish** — qo'llanma alohida berilgan; eng
+      muhim uch nuqtasi: fayl rejimi emasligini tekshirish, `Posted` /
+      `DeletionMark` maydonlarini qo'shish, eski ikkita reglament
+      topshirig'ini o'chirish.
+- [ ] Ginekologiyaga yangi shifokor kelganda `/kabinet/admin` da qo'shish
+      (Murtazayeva ishdan bo'shagan — yozuvi saqlangan, saytdan
+      yashirilgan).
 - [ ] Mobil (375px) ko'rinishni qo'lda bir aylanib chiqish.
 - [ ] (istalganda, xavfsizlik) Telegram bot tokenini BotFather'da `/revoke`
       qilish → Netlify'da `TELEGRAM_BOT_TOKEN` → Trigger deploy →
@@ -164,6 +166,21 @@ topilgan kamchiliklar tuzatilgan, test ma'lumotlar bazadan tozalangan.
 Javob va 1C tomonidan kutilayotgan uchta yangi maydon:
 `docs/1c-integration.md` → «Sayt tomonining javobi».
 
+### 6-bosqich — bemorni tanlash va panel tozalash ✅ (2026-08-31)
+- **Navbat kim uchun?** Bir telefondan butun oila foydalanadi. Endi
+  kirishda «kim kirmoqda?» bir marta so'raladi, bron oynasida esa
+  bemorni almashtirish yoki **yangi odam qo'shish** mumkin
+  (familiya+ism majburiy, sharif ixtiyoriy). Tanlangani eslab qolinadi.
+  Ro'yxat ikki manbadan: 1C katalogi va saytda qo'shilganlar.
+- Navbat yozuviga `patient_id` / `patient_name` tushadi; shifokor
+  kabinetida telefon o'rniga **bemor ismi** ko'rinadi, bot tasdig'ida
+  va bemor kabinetida ham.
+- **Faolsiz shifokor saytdan yo'qoladi**: kartasi yashiriladi, shifokori
+  qolmagan bo'lim «vaqtincha yopiq» bo'ladi va tugmasi o'chadi.
+- **Admin panel** bo'limlar bo'yicha guruhlandi; «O'chirish» →
+  «Saytdan yashirish», teglar «saytda ko'rinadi» / «kabinetga kira
+  olmaydi» kabi tushunarli yozuvlarga almashtirildi.
+
 ---
 
 ## Kod tuzilishi
@@ -194,7 +211,7 @@ legacy/         eski Jekyll sayti (kontent manbasi, deploy qilinmaydi)
 npm run dev          # lokal server
 npm run build        # dist/ ga yig'ish
 npm run typecheck    # astro check + tsc
-npm test             # 97 mantiq + 72 API tekshiruvi (haqiqiy AWS'siz)
+npm test             # 97 mantiq + 77 API tekshiruvi (haqiqiy AWS'siz)
 npm run create-tables
 npm run seed-doctors
 npm run link-doctor  # shifokorni Telegram'ga bog'lash (argumentsiz — ro'yxat)
@@ -341,6 +358,14 @@ standart nomi bilan yaratilgan `AnalysisResult` — ega tasdiqlagach o'chiriladi
     sayt uni kabinetda ko'rsatmaydi. Maydon umuman bo'lmasa —
     ko'rsatiladi (eski yozuvlar ular yuborilmasdan oldin tushgan).
     Shu yo'l tanlangani uchun 1C'ga `DeleteItem` huquqi kerak emas.
+
+20. **Bemor kimligi — `/api/patients`.** Ro'yxat 1C katalogi va
+    `dimed_users.patients` (saytda qo'shilganlar) dan yig'iladi;
+    tanlangani `active_patient_id` da turadi. Yangi odam qo'shish
+    `list_append` bilan — ikki qurilmadan bir vaqtda qo'shilsa ham
+    biri yo'qolmaydi. Bron `patientId` ni qabul qiladi, yuborilmasa
+    oxirgi tanlangani olinadi; eski bronlarda bu maydon yo'q va
+    hamma joyda shunga chidamli bo'lish kerak.
 
 19. **Bir telefon — bir oila.** Bemor profili birlashtirilayotganda
     Telegram bergan ism bilan solishtirib mos kelgan bemor tanlanadi

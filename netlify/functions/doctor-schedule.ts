@@ -67,7 +67,12 @@ export default async (request: Request, _context: Context): Promise<Response> =>
           // ko'chirilganlar slotni bo'shatgan.
           appointments: appointments
             .filter((a) => holdsSlot(a, now))
-            .map((a) => ({ time: a.time, phone: maskPhone(a.phone), status: a.status }))
+            .map((a) => ({
+              time: a.time,
+              phone: maskPhone(a.phone),
+              status: a.status,
+              patientName: a.patient_name ?? null,
+            }))
             .sort((a, b) => a.time.localeCompare(b.time)),
         },
         200,

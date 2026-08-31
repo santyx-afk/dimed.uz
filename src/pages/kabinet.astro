@@ -50,6 +50,8 @@ import Base from '../layouts/Base.astro';
     price: number;
     upcoming: boolean;
     canMove: boolean;
+    /* Navbat kim uchun olingani (bir telefon — bir oila). */
+    patientName: string | null;
   };
 
   type Slot = { time: string; free: boolean };
@@ -198,6 +200,7 @@ import Base from '../layouts/Base.astro';
         <div class="nm">${a.doctorName}</div>
         <div class="dt">${a.doctorJob}</div>
         <div class="dt">${fmtDate(a.date)} · soat ${a.time}</div>
+        ${a.patientName ? `<div class="dt who">Bemor: ${a.patientName}</div>` : ''}
       </div>
       <div class="appt-foot">
         <span class="pill ${s.cls}">${s.text}</span>
@@ -821,5 +824,10 @@ import Base from '../layouts/Base.astro';
     font-weight: 500;
     color: var(--muted);
     font-size: 12px;
+  }
+
+  .card :global(.dt.who) {
+    color: var(--leaf);
+    font-weight: 600;
   }
 </style>

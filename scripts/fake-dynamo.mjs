@@ -86,17 +86,66 @@ function evalCondition(expr, item, names, values) {
     );
 }
 
+/** Vergul bo'yicha bo'ladi, lekin qavs ichidagilarni buzmaydi. */
+function splitTop(text) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '(') depth++;
+    else if (c === ')') depth--;
+    else if (c === ',' && depth === 0) {
+      parts.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts.map((p) => p.trim()).filter(Boolean);
+}
+
+/**
+ * SET o'ng tomonidagi ifoda: qiymat, maydon yoki funksiya.
+ * DynamoDB'da ishlatadiganlarimiz — list_append va if_not_exists.
+ */
+function evalValue(expr, item, names, values) {
+  const t = expr.trim();
+  if (t.startsWith(':')) return values[t];
+
+  let m = t.match(/^list_append\((.+)\)$/s);
+  if (m) {
+    const [left, right] = splitTop(m[1]);
+    const a = evalValue(left, item, names, values) ?? [];
+    const b = evalValue(right, item, names, values) ?? [];
+    return [...(Array.isArray(a) ? a : [a]), ...(Array.isArray(b) ? b : [b])];
+  }
+
+  m = t.match(/^if_not_exists\((.+)\)$/s);
+  if (m) {
+    const [field, fallback] = splitTop(m[1]);
+    const name = field.startsWith('#') ? names[field] : field;
+    const current = item?.[name];
+    return current === undefined ? evalValue(fallback, item, names, values) : current;
+  }
+
+  const name = t.startsWith('#') ? names[t] : t;
+  return item?.[name];
+}
+
 function applyUpdate(item, expr, names, values) {
   const next = { ...item };
   const setPart = expr.match(/SET (.+?)(?: REMOVE |$)/s)?.[1];
   const removePart = expr.match(/REMOVE (.+)$/s)?.[1];
 
   if (setPart) {
-    for (const assign of setPart.split(',')) {
-      const [rawKey, rawVal] = assign.split('=').map((s) => s.trim());
+    for (const assign of splitTop(setPart)) {
+      const at = assign.indexOf('=');
+      if (at === -1) continue;
+      const rawKey = assign.slice(0, at).trim();
+      const rawVal = assign.slice(at + 1).trim();
       if (!rawKey || !rawVal) continue;
       const key = rawKey.startsWith('#') ? names[rawKey] : rawKey;
-      next[key] = values[rawVal];
+      next[key] = evalValue(rawVal, item, names, values);
     }
   }
   if (removePart) {

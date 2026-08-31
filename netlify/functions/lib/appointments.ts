@@ -36,6 +36,9 @@ export type Appointment = {
   /** hold uchun: shu vaqtdan keyin slot yana bo'shaydi (unix sekund) */
   hold_until?: number;
   payment_id?: string;
+  /** navbat kim uchun olingani (bir telefon — bir oila) */
+  patient_id?: string;
+  patient_name?: string;
   /** eslatma yuborilgan lahza — takror yuborilmasligi uchun */
   reminded_at?: string;
   created_at: string;
