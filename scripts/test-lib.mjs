@@ -124,6 +124,8 @@ const NONE = {
   DIMED_AWS_SECRET_ACCESS_KEY: undefined,
   AWS_ACCESS_KEY_ID: undefined,
   AWS_SECRET_ACCESS_KEY: undefined,
+  // Lambda ichidami — zaxira nomlarga tayanish qoidasi shunga bog'liq.
+  AWS_LAMBDA_FUNCTION_NAME: undefined,
 };
 
 test('DIMED_ nomlari o\'qiladi', () => {
@@ -162,6 +164,52 @@ test('kalit yo\'q bo\'lsa undefined — SDK o\'z zanjiriga tayanadi', () => {
 test('faqat yarmi berilsa ham undefined', () => {
   const creds = withEnv({ ...NONE, DIMED_AWS_ACCESS_KEY_ID: 'AKIA_D' }, awsCredentials);
   assert.equal(creds, undefined, 'chala kalit bilan mijoz yaratilmasin');
+});
+
+test('nusxalashda ilashgan probel va qator olib tashlanadi', () => {
+  const creds = withEnv(
+    {
+      ...NONE,
+      DIMED_AWS_ACCESS_KEY_ID: ' AKIA_D\n',
+      DIMED_AWS_SECRET_ACCESS_KEY: 'sirD ',
+    },
+    awsCredentials,
+  );
+  assert.deepEqual(creds, { accessKeyId: 'AKIA_D', secretAccessKey: 'sirD' });
+});
+
+test('Lambda ichida sozlanmagan bo\'lsa tushunarli xato', () => {
+  /*
+    Lambda o'zining vaqtinchalik kalitlarini standart nomlarga qo'yadi.
+    Ularga tayansak, AWS "security token invalid" deydi va sabab
+    (sozlama yo'qligi) yashirin qoladi.
+  */
+  assert.throws(
+    () =>
+      withEnv(
+        {
+          ...NONE,
+          AWS_LAMBDA_FUNCTION_NAME: 'dimed-slots',
+          AWS_ACCESS_KEY_ID: 'ASIA_LAMBDA',
+          AWS_SECRET_ACCESS_KEY: 'vaqtinchalik',
+        },
+        awsCredentials,
+      ),
+    /DIMED_AWS_ACCESS_KEY_ID/,
+  );
+});
+
+test('Lambda ichida DIMED_ kalitlari bo\'lsa ishlaydi', () => {
+  const creds = withEnv(
+    {
+      ...NONE,
+      AWS_LAMBDA_FUNCTION_NAME: 'dimed-slots',
+      DIMED_AWS_ACCESS_KEY_ID: 'AKIA_D',
+      DIMED_AWS_SECRET_ACCESS_KEY: 'sirD',
+    },
+    awsCredentials,
+  );
+  assert.deepEqual(creds, { accessKeyId: 'AKIA_D', secretAccessKey: 'sirD' });
 });
 
 console.log(`\n${passed} ta tekshiruv o'tdi.`);
