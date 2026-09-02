@@ -1,22 +1,9 @@
-# NPM
-node_modules
-npm-debug.log
-
-# Jekyll
-_site
-_site/
-.sass-cache/
-.jekyll-cache/
-.jekyll-metadata
-Gemfile.lock
-**/Gemfile.lock
-
-# Temporary files
-tmp
+node_modules/
+dist/
+.astro/
+.netlify/
+.env
+.env.*
+!.env.example
 .DS_Store
-Desktop.ini
-._*
-Thumbs.db
-.Spotlight-V100
-.Trashes
-.idea
+*.log
