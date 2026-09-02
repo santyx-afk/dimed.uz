@@ -170,7 +170,34 @@ const queryAll = (input: ConstructorParameters<typeof QueryCommand>[0], where: s
     return [];
   });
 
-async function loadResults(phone: string) {
+/** Kabinetda ko'rsatiladigan bitta ko'rsatkich. */
+type ResultItem = {
+  id: string;
+  code: string;
+  title: string;
+  value: string | null;
+  reference: string | null;
+};
+
+/**
+ * Bitta laboratoriya hujjati (buyurtma) va uning ko'rsatkichlari.
+ *
+ * Avval har bir ko'rsatkich alohida "tahlil" bo'lib chiqardi: umumiy
+ * qon tahlili 18 ta yozuvga bo'linib ketardi. Endi bemor bitta
+ * yozuvni ko'radi va ichini ochib ko'rsatkichlarni ko'radi — chop
+ * etilganda ham butun blank chiqadi, bitta qator emas.
+ */
+type ResultGroup = {
+  id: string;
+  date: string;
+  patientName: string | null;
+  biomaterial: string | null;
+  sampleId: string | null;
+  seen: boolean;
+  items: ResultItem[];
+};
+
+async function loadResults(phone: string): Promise<ResultGroup[]> {
   const [manual, oneC] = await Promise.all([
     queryAll(
       {
@@ -200,33 +227,52 @@ async function loadResults(phone: string) {
   */
   const manualItems = manual as (ResultRow & AnalysisDocument)[];
 
-  const rows = manualItems
-    .filter((r) => r.title)
-    .map((r) => ({
-      id: r.sort_key,
-      code: r.code ?? '',
-      title: r.title,
-      value: r.value ?? null,
-      reference: r.reference ?? null,
-      type: r.type ?? ('text' as const),
-      date: r.date ?? '',
-      seen: r.seen ?? false,
-      patientName: null as string | null,
-    }));
-
   /*
-    1C hujjatida bitta buyurtmaning hamma analitlari yotadi — kabinet
-    esa tekis ro'yxat ko'rsatadi, shuning uchun yoyamiz. "yangi"
-    belgisi qo'yilmaydi: 1C eski tarixni ham to'kib yuborishi mumkin.
+    Sayt API'si (lc-results) har bir ko'rsatkichni alohida yozadi va
+    buyurtma raqamini saqlamaydi — shuning uchun bir sanadagilar
+    bitta buyurtma deb yig'iladi.
   */
+  const byDate = new Map<string, ResultGroup>();
+  for (const row of manualItems) {
+    if (!row.title) continue;
+    const date = row.date ?? '';
+    const key = `lab-${date}`;
+    let group = byDate.get(key);
+    if (!group) {
+      group = {
+        id: key,
+        date,
+        patientName: null,
+        biomaterial: null,
+        sampleId: null,
+        seen: true,
+        items: [],
+      };
+      byDate.set(key, group);
+    }
+    // Bittasi ham ko'rilmagan bo'lsa — butun buyurtma "yangi".
+    if (!(row.seen ?? false)) group.seen = false;
+    group.items.push({
+      id: row.sort_key,
+      code: row.code ?? '',
+      title: row.title,
+      value: row.value ?? null,
+      reference: row.reference ?? null,
+    });
+  }
+
   const docs = [
     ...(oneC as AnalysisDocument[]),
     ...manualItems.filter((r) => !r.title && Array.isArray(r.AnalysisResults)),
   ].filter(isLive);
 
+  // Bir hujjat ikkala jadvalda ham bo'lsa, bir marta ko'rinadi.
+  const seenDocs = new Set<string>();
   const fromDocs = docs.flatMap((doc) => {
-    const date = fromOneCDate(doc.Date) || fromOneCDate(doc.RegisterDate);
-    return (doc.AnalysisResults ?? []).flatMap((a, i) => {
+    if (seenDocs.has(doc.sort_key)) return [];
+    seenDocs.add(doc.sort_key);
+
+    const items = (doc.AnalysisResults ?? []).flatMap((a, i) => {
       /*
         Analit nomi 1C'da bo'sh bo'lishi mumkin (PrintName to'ldirilmagan) —
         qator yo'qolmasin: xalqaro kod bilan ko'rsatiladi. Nomi ham,
@@ -246,18 +292,27 @@ async function loadResults(phone: string) {
           title: title || 'Koʻrsatkich',
           value: value || null,
           reference: null,
-          type: 'text' as const,
-          date,
-          seen: true,
-          patientName: doc.PatientName?.trim() || null,
         },
       ];
     });
+
+    if (!items.length) return [];
+
+    return [
+      {
+        id: doc.sort_key,
+        date: fromOneCDate(doc.Date) || fromOneCDate(doc.RegisterDate),
+        patientName: doc.PatientName?.trim() || null,
+        biomaterial: doc.Biomaterial?.trim() || null,
+        sampleId: doc.SampleID?.trim() || null,
+        // "yangi" belgisi qo'yilmaydi: 1C eski tarixni ham to'kishi mumkin.
+        seen: true,
+        items,
+      },
+    ];
   });
 
-  // Bir hujjat ikkala jadvalda ham bo'lsa, bir marta ko'rinadi.
-  const seen = new Set<string>();
-  return [...rows, ...fromDocs]
-    .filter((r) => !seen.has(r.id) && (seen.add(r.id), true))
-    .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+  return [...byDate.values(), ...fromDocs].sort((a, b) =>
+    (b.date ?? '').localeCompare(a.date ?? ''),
+  );
 }

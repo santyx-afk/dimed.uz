@@ -360,9 +360,10 @@ await test('1C natijasi kabinetda ko\'rinadi', async () => {
   const cabinet = await (await call(me, 'https://dimed.uz/api/me', {
     headers: { cookie: sessionCookie },
   })).json();
-  assert.equal(cabinet.results.length, 1);
-  assert.equal(cabinet.results[0].title, 'Gemoglobin');
-  assert.equal(cabinet.results[0].type, 'text');
+  assert.equal(cabinet.results.length, 1, 'bir sanadagi natijalar bitta buyurtma');
+  assert.equal(cabinet.results[0].items.length, 1);
+  assert.equal(cabinet.results[0].items[0].title, 'Gemoglobin');
+  assert.equal(cabinet.results[0].items[0].reference, '120 – 160');
 });
 
 await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async () => {
@@ -382,12 +383,15 @@ await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async
     headers: { cookie: sessionCookie },
   })).json();
 
-  const hgb = cabinet.results.find((r) => r.title === 'Gemoglobin' && r.id === 'doc-uuid-1#0');
-  assert.ok(hgb, 'hujjatdagi analit alohida qator bo\'lishi kerak');
+  const doc = cabinet.results.find((r) => r.id === 'doc-uuid-1');
+  assert.ok(doc, 'hujjat bitta yozuv bo\'lishi kerak');
+  assert.equal(doc.items.length, 2, 'ikkala analit ham bir buyurtmada');
+  assert.equal(doc.biomaterial, 'Qon');
+  assert.equal(doc.date, '2026-08-21T14:30:00', '1C sanasi ISO ga o\'girilishi kerak');
+  const hgb = doc.items.find((i) => i.title === 'Gemoglobin');
   assert.equal(hgb.value, '132 g/L');
   assert.equal(hgb.code, 'HGB');
-  assert.equal(hgb.date, '2026-08-21T14:30:00', '1C sanasi ISO ga o\'girilishi kerak');
-  assert.ok(cabinet.results.some((r) => r.title === 'Leykotsitlar'), 'ikkinchi analit ham chiqishi kerak');
+  assert.ok(doc.items.some((i) => i.title === 'Leykotsitlar'), 'ikkinchi analit ham chiqishi kerak');
 
   // 1C soatni bir xonali yuborishi mumkin: "9:05:00"
   seed('test_analysis_results', '+998901234567|doc-uuid-2', {
@@ -399,7 +403,8 @@ await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async
   const again = await (await call(me, 'https://dimed.uz/api/me', {
     headers: { cookie: sessionCookie },
   })).json();
-  const kre = again.results.find((r) => r.title === 'Kreatinin');
+  const kre = again.results.find((r) => r.id === 'doc-uuid-2');
+  assert.equal(kre.items[0].title, 'Kreatinin');
   assert.equal(kre.date, '2026-01-05T09:05:00', 'bir xonali soat ham ISO bo\'lishi kerak');
 
   // 1C adashib lab_results ga yozgan hujjat: kabinet yiqilmasin,
@@ -420,9 +425,9 @@ await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async
   const uchinchi = await (await call(me, 'https://dimed.uz/api/me', {
     headers: { cookie: sessionCookie },
   })).json();
-  const bil = uchinchi.results.filter((r) => r.title === 'Bilirubin');
+  const bil = uchinchi.results.filter((r) => r.id === 'doc-stray-1');
   assert.equal(bil.length, 1, 'takror hujjat bir marta ko\'rinishi kerak');
-  assert.equal(bil[0].value, '12 mkmol/l');
+  assert.equal(bil[0].items[0].value, '12 mkmol/l');
 });
 
 await test('natijalar bir sahifaga sig\'masa ham hammasi ko\'rinadi', async () => {
@@ -445,6 +450,7 @@ await test('natijalar bir sahifaga sig\'masa ham hammasi ko\'rinadi', async () =
 
   const yuklangan = cabinet.results.filter((r) => r.id.startsWith('ko\u2018p-'));
   assert.equal(yuklangan.length, 60, 'barcha sahifalar o\'qilishi kerak');
+  assert.equal(yuklangan[0].items.length, 1);
 });
 
 await test('bekor qilingan va o\'chirilgan natija kabinetda ko\'rinmaydi', async () => {
@@ -467,7 +473,7 @@ await test('bekor qilingan va o\'chirilgan natija kabinetda ko\'rinmaydi', async
   const cabinet = await (await call(me, 'https://dimed.uz/api/me', {
     headers: { cookie: sessionCookie },
   })).json();
-  const nomlar = cabinet.results.map((r) => r.title);
+  const nomlar = cabinet.results.flatMap((r) => r.items.map((i) => i.title));
 
   assert.ok(!nomlar.includes('Bekor qilingan tahlil'), 'Posted=false ko\'rinmasligi kerak');
   assert.ok(!nomlar.includes('O\u2018chirilgan tahlil'), 'DeletionMark ko\'rinmasligi kerak');
@@ -487,14 +493,10 @@ await test('analit nomi bo\'sh bo\'lsa qator yo\'qolmaydi', async () => {
     headers: { cookie: sessionCookie },
   })).json();
 
-  const kodli = cabinet.results.find((r) => r.id === 'doc-nomsiz#0');
-  assert.ok(kodli, 'nomsiz analit xalqaro kod bilan chiqishi kerak');
-  assert.equal(kodli.title, '2345-7');
-  assert.equal(kodli.value, '5.4 mmol/L');
-  assert.ok(
-    !cabinet.results.some((r) => r.id === 'doc-nomsiz#1'),
-    'nomi ham qiymati ham yo\'q qator tashlab yuboriladi',
-  );
+  const nomsiz = cabinet.results.find((r) => r.id === 'doc-nomsiz');
+  assert.equal(nomsiz.items.length, 1, 'nomi ham qiymati ham yo\'q qator tashlab yuboriladi');
+  assert.equal(nomsiz.items[0].title, '2345-7', 'nomsiz analit xalqaro kod bilan chiqadi');
+  assert.equal(nomsiz.items[0].value, '5.4 mmol/L');
 });
 
 await test('natijada bemor ismi bo\'ladi (bir telefon — oila)', async () => {
@@ -507,7 +509,8 @@ await test('natijada bemor ismi bo\'ladi (bir telefon — oila)', async () => {
   const cabinet = await (await call(me, 'https://dimed.uz/api/me', {
     headers: { cookie: sessionCookie },
   })).json();
-  const ferritin = cabinet.results.find((r) => r.title === 'Ferritin');
+  const ferritin = cabinet.results.find((r) => r.id === 'doc-oila');
+  assert.equal(ferritin.items[0].title, 'Ferritin');
   assert.equal(ferritin.patientName, 'Yo\u2018ldosheva Nilufar Anvarovna');
 });
 
