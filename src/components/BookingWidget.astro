@@ -20,7 +20,8 @@ import DeptIcon from './DeptIcon.astro';
     <button class="step-pill on" data-step="1"><span class="n">1</span><span class="lbl">Boʻlim</span></button>
     <button class="step-pill" data-step="2" disabled><span class="n">2</span><span class="lbl">Shifokor</span></button>
     <button class="step-pill" data-step="3" disabled><span class="n">3</span><span class="lbl">Vaqt</span></button>
-    <button class="step-pill" data-step="4" disabled><span class="n">4</span><span class="lbl">Toʻlov</span></button>
+    <button class="step-pill" data-step="4" disabled><span class="n">4</span><span class="lbl">Bemor</span></button>
+    <button class="step-pill" data-step="5" disabled><span class="n">5</span><span class="lbl">Toʻlov</span></button>
   </div>
   <div id="wBody"></div>
 
@@ -204,6 +205,8 @@ import DeptIcon from './DeptIcon.astro';
     } else if (state.step === 3) {
       renderDatesAndSlots();
     } else if (state.step === 4) {
+      renderPatient();
+    } else if (state.step === 5) {
       renderCheckout();
     }
   }
@@ -299,6 +302,120 @@ import DeptIcon from './DeptIcon.astro';
     else grid.innerHTML = '<p class="slot-empty">Bu shifokorning yaqin kunlarda qabuli yoʻq.</p>';
   }
 
+  /*
+    4-qadam — navbat kim uchun. Bir telefondan butun oila foydalanadi
+    (ota-ona bolasini o'z raqami bilan yozdiradi), shuning uchun bemor
+    alohida qadamda tanlanadi: ro'yxatdan yoki yangi odam qo'shib.
+  */
+  async function renderPatient() {
+    wBody.innerHTML = `<div class="pane-label">Navbat kim uchun?</div>
+      <div class="who-list" id="whoList"><p class="slot-empty">Yuklanmoqda…</p></div>
+      <button class="btn btn-ghost w-full" id="whoNew" type="button">+ Boshqa odam</button>
+      <div class="who-form" id="whoForm" hidden>
+        <input id="w-last" type="text" placeholder="Familiya *" autocomplete="family-name" />
+        <input id="w-first" type="text" placeholder="Ism *" autocomplete="given-name" />
+        <input id="w-mid" type="text" placeholder="Sharif (ixtiyoriy)" />
+        <button class="btn w-full" id="whoSave" type="button">Saqlash va davom etish</button>
+      </div>
+      <p class="book-msg" id="whoMsg" role="status" aria-live="polite"></p>
+      <button class="back-link">← vaqtni oʻzgartirish</button>`;
+
+    wBody.querySelector('.back-link').addEventListener('click', () => {
+      state.time = null;
+      setStep(3);
+    });
+
+    const msg = wBody.querySelector('#whoMsg');
+    const form = wBody.querySelector('#whoForm');
+    const newBtn = wBody.querySelector('#whoNew');
+
+    const openForm = () => {
+      form.hidden = false;
+      newBtn.hidden = true;
+      wBody.querySelector('#w-last').focus();
+    };
+
+    const choose = (patient) => {
+      state.patientId = patient.id;
+      state.patientName = patient.name;
+      // Tanlov eslab qolinadi — keyingi safar oldindan belgilangan turadi.
+      fetch('/api/patients', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'select', id: patient.id }),
+      }).catch(() => {});
+      setStep(5);
+    };
+
+    const data = await loadPatients();
+
+    /*
+      Kirmagan foydalanuvchida ro'yxat yo'q — savol berishning ma'nosi
+      ham yo'q: "band qilish" tugmasi uni kirish sahifasiga oladi.
+    */
+    if (!data) {
+      setStep(5);
+      return;
+    }
+
+    if (!data.patients.length) {
+      wBody.querySelector('#whoList').innerHTML =
+        '<p class="slot-empty">Klinikada yozuvingiz topilmadi — ism-familiyangizni kiriting.</p>';
+      newBtn.hidden = true;
+      form.hidden = false;
+    } else {
+      wBody.querySelector('#whoList').innerHTML = data.patients
+        .map(
+          (p) => `<button class="who-item${p.id === state.patientId ? ' on' : ''}" data-pick="${p.id}">
+            ${p.name}</button>`,
+        )
+        .join('');
+      wBody.querySelectorAll('[data-pick]').forEach((b) =>
+        b.addEventListener('click', () => {
+          const found = data.patients.find((p) => p.id === b.dataset.pick);
+          if (found) choose(found);
+        }),
+      );
+    }
+
+    newBtn.addEventListener('click', openForm);
+
+    wBody.querySelector('#whoSave').addEventListener('click', async () => {
+      const lastName = wBody.querySelector('#w-last').value.trim();
+      const firstName = wBody.querySelector('#w-first').value.trim();
+      const patronymic = wBody.querySelector('#w-mid').value.trim();
+
+      if (!lastName || !firstName) {
+        msg.textContent = 'Familiya va ism majburiy.';
+        msg.className = 'book-msg error';
+        return;
+      }
+
+      msg.textContent = 'Saqlanmoqda…';
+      msg.className = 'book-msg';
+      try {
+        const res = await fetch('/api/patients', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'add', firstName, lastName, patronymic }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          msg.textContent = body.error ?? 'Saqlab boʻlmadi.';
+          msg.className = 'book-msg error';
+          return;
+        }
+        patients.patients.push(body.patient);
+        choose(body.patient);
+      } catch {
+        msg.textContent = 'Internetga ulanishda muammo.';
+        msg.className = 'book-msg error';
+      }
+    });
+  }
+
   function renderCheckout() {
     const d = state.doc;
 
@@ -338,125 +455,23 @@ import DeptIcon from './DeptIcon.astro';
         <div class="sum-row"><span class="k">Vaqt</span><span class="v">${state.time} · ${d.slotMinutes} daqiqa</span></div>
         <div class="sum-row total"><span class="k">Qabul narxi</span><span class="v">${fmtPrice(d.price)}</span></div>
       </div>
-      <div class="who-pick" id="whoPick" hidden>
-        <div class="pane-label">Navbat kim uchun?</div>
-        <div class="who-list" id="whoList"></div>
-        <button class="btn btn-ghost btn-sm w-full" id="whoNew" type="button">+ Boshqa odam</button>
-        <div class="who-form" id="whoForm" hidden>
-          <input id="w-last" type="text" placeholder="Familiya *" autocomplete="family-name" />
-          <input id="w-first" type="text" placeholder="Ism *" autocomplete="given-name" />
-          <input id="w-mid" type="text" placeholder="Sharif (ixtiyoriy)" />
-          <button class="btn btn-sm w-full" id="whoSave" type="button">Saqlash</button>
-        </div>
-        <p class="book-msg" id="whoMsg" role="status" aria-live="polite"></p>
-      </div>
       <p class="book-msg" id="bookMsg" role="status" aria-live="polite"></p>
       <button class="btn w-full" id="wBook">Navbatni band qilish</button>
       <p class="pay-note">Band qilish uchun Telegram orqali kirgan boʻlishingiz kerak. Bekor qilish yoʻq — qabuldan 1 soat oldingacha vaqtni koʻchirish mumkin.</p>
-      <button class="back-link">← vaqtni oʻzgartirish</button>`;
+      <button class="back-link">← orqaga</button>`;
 
-    wBody.querySelector('.back-link').addEventListener('click', () => {
-      state.time = null;
-      setStep(3);
-    });
+    wBody.querySelector('.back-link').addEventListener('click', () => setStep(4));
 
     const msg = wBody.querySelector('#bookMsg');
     const btn = wBody.querySelector('#wBook');
 
-    // ---------- "Navbat kim uchun?" ----------
+    // 4-qadamda tanlangan bemor shu yerda ko'rinadi.
     const whoRow = wBody.querySelector('#whoRow');
-    const whoPick = wBody.querySelector('#whoPick');
-    const whoMsg = wBody.querySelector('#whoMsg');
-
-    const showWho = () => {
+    if (state.patientName) {
       whoRow.hidden = false;
-      wBody.querySelector('#whoName').textContent = state.patientName ?? 'tanlanmagan';
-      wBody.querySelector('#whoChange').textContent = state.patientName ? 'oʻzgartirish' : 'tanlash';
-    };
-
-    const paintWhoList = () => {
-      wBody.querySelector('#whoList').innerHTML = (patients?.patients ?? [])
-        .map(
-          (p) => `<button class="who-item${p.id === state.patientId ? ' on' : ''}" data-pick="${p.id}">
-            ${p.name}</button>`,
-        )
-        .join('');
-      wBody.querySelectorAll('[data-pick]').forEach((b) =>
-        b.addEventListener('click', () => choose(b.dataset.pick)),
-      );
-    };
-
-    const choose = async (id) => {
-      const found = (patients?.patients ?? []).find((p) => p.id === id);
-      if (!found) return;
-      state.patientId = found.id;
-      state.patientName = found.name;
-      whoPick.hidden = true;
-      showWho();
-      // Tanlov eslab qolinadi — keyingi safar qayta so'ralmaydi.
-      fetch('/api/patients', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'select', id: found.id }),
-      }).catch(() => {});
-    };
-
-    loadPatients().then((data) => {
-      if (!data) return;
-      showWho();
-      paintWhoList();
-      // Hech kim tanlanmagan bo'lsa — panel darhol ochiladi.
-      if (!state.patientId) whoPick.hidden = false;
-    });
-
-    wBody.querySelector('#whoChange').addEventListener('click', () => {
-      whoPick.hidden = !whoPick.hidden;
-      if (!whoPick.hidden) paintWhoList();
-    });
-
-    wBody.querySelector('#whoNew').addEventListener('click', () => {
-      wBody.querySelector('#whoForm').hidden = false;
-      wBody.querySelector('#whoNew').hidden = true;
-      wBody.querySelector('#w-last').focus();
-    });
-
-    wBody.querySelector('#whoSave').addEventListener('click', async () => {
-      const lastName = wBody.querySelector('#w-last').value.trim();
-      const firstName = wBody.querySelector('#w-first').value.trim();
-      const patronymic = wBody.querySelector('#w-mid').value.trim();
-
-      if (!lastName || !firstName) {
-        whoMsg.textContent = 'Familiya va ism majburiy.';
-        whoMsg.className = 'book-msg error';
-        return;
-      }
-
-      whoMsg.textContent = 'Saqlanmoqda…';
-      whoMsg.className = 'book-msg';
-      try {
-        const res = await fetch('/api/patients', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'add', firstName, lastName, patronymic }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          whoMsg.textContent = data.error ?? 'Saqlab boʻlmadi.';
-          whoMsg.className = 'book-msg error';
-          return;
-        }
-        patients.patients.push(data.patient);
-        whoMsg.textContent = '';
-        wBody.querySelector('#whoForm').hidden = true;
-        wBody.querySelector('#whoNew').hidden = false;
-        await choose(data.patient.id);
-      } catch {
-        whoMsg.textContent = 'Internetga ulanishda muammo.';
-        whoMsg.className = 'book-msg error';
-      }
-    });
+      wBody.querySelector('#whoName').textContent = state.patientName;
+      wBody.querySelector('#whoChange').addEventListener('click', () => setStep(4));
+    }
 
     btn.addEventListener('click', async () => {
       btn.disabled = true;
@@ -1059,7 +1074,7 @@ import DeptIcon from './DeptIcon.astro';
   }
 
   /* "Navbat kim uchun?" — bir telefonga bog'langan oila a'zolari */
-  .who-change {
+  .widget :global(.who-change) {
     margin-left: 8px;
     border: 0;
     background: none;
@@ -1071,7 +1086,7 @@ import DeptIcon from './DeptIcon.astro';
     cursor: pointer;
   }
 
-  .who-pick {
+  .widget :global(.who-pick) {
     margin: 12px 0;
     padding: 12px;
     border: 1px solid var(--line);
@@ -1079,13 +1094,13 @@ import DeptIcon from './DeptIcon.astro';
     background: var(--bg);
   }
 
-  .who-list {
+  .widget :global(.who-list) {
     display: grid;
     gap: 6px;
     margin: 8px 0 10px;
   }
 
-  .who-item {
+  .widget :global(.who-item) {
     padding: 10px 13px;
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -1097,17 +1112,17 @@ import DeptIcon from './DeptIcon.astro';
     cursor: pointer;
   }
 
-  .who-item:hover {
+  .widget :global(.who-item:hover) {
     border-color: var(--leaf);
   }
 
-  .who-item.on {
+  .widget :global(.who-item.on) {
     border-color: var(--leaf);
     background: color-mix(in srgb, var(--leaf) 10%, var(--card));
     font-weight: 650;
   }
 
-  .who-form {
+  .widget :global(.who-form) {
     display: grid;
     gap: 7px;
     margin-top: 10px;
@@ -1115,7 +1130,7 @@ import DeptIcon from './DeptIcon.astro';
     border-top: 1px solid var(--line);
   }
 
-  .who-form input {
+  .widget :global(.who-form input) {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--line);
@@ -1126,7 +1141,7 @@ import DeptIcon from './DeptIcon.astro';
     font-size: 14px;
   }
 
-  .who-form input:focus-visible {
+  .widget :global(.who-form input:focus-visible) {
     outline: none;
     border-color: var(--leaf);
   }
