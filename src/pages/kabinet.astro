@@ -13,6 +13,15 @@ import Base from '../layouts/Base.astro';
       <button class="btn btn-ghost btn-sm" id="logout" hidden>Chiqish</button>
     </div>
 
+    <!--
+      Bir telefonga oila a'zolari bog'langan bo'lishi mumkin. Shunda
+      kimning qabuli va tahlili ekanini ajratish uchun filtr chiqadi.
+    -->
+    <div class="who-bar" id="whoBar" hidden>
+      <span class="who-lab">Kim:</span>
+      <div class="who-chips" id="whoChips"></div>
+    </div>
+
     <div id="loading" class="state">Yuklanmoqda…</div>
 
     <div id="guest" class="state" hidden>
@@ -56,16 +65,23 @@ import Base from '../layouts/Base.astro';
 
   type Slot = { time: string; free: boolean };
 
-  type LabResult = {
+  type ResultItem = {
     id: string;
+    code: string;
     title: string;
     value: string | null;
     reference: string | null;
-    type: 'pdf' | 'text';
+  };
+
+  /* Bitta laboratoriya buyurtmasi va uning ko'rsatkichlari. */
+  type ResultGroup = {
+    id: string;
     date: string;
-    seen: boolean;
-    /* Oila bitta telefondan foydalansa — natija kimniki ekani. */
     patientName: string | null;
+    biomaterial: string | null;
+    sampleId: string | null;
+    seen: boolean;
+    items: ResultItem[];
   };
 
   const MONTHS = [
@@ -99,10 +115,55 @@ import Base from '../layouts/Base.astro';
   /** Ko'chirish oynasi ochilgan qabul: "doctorId|sana|vaqt". */
   let openMove = '';
 
+  /*
+    Tanlangan bemor (bo'sh — hammasi). Bir telefonga oila a'zolari
+    bog'langanda kimning qabuli va tahlili ekanini ajratish uchun.
+  */
+  let whoFilter = '';
+
+  const matchesWho = (name: string | null) => !whoFilter || name === whoFilter;
+
+  /** Qabul va natijalarda uchraydigan ismlar. */
+  function renderWhoBar(appointments: Appointment[], results: ResultGroup[]) {
+    const names = [
+      ...new Set(
+        [...appointments.map((a) => a.patientName), ...results.map((r) => r.patientName)].filter(
+          (n): n is string => Boolean(n),
+        ),
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+
+    // Bitta odam bo'lsa filtr ortiqcha shovqin.
+    if (names.length < 2) {
+      el('whoBar').hidden = true;
+      return;
+    }
+
+    el('whoBar').hidden = false;
+    el('whoChips').innerHTML = [
+      `<button class="who-chip${whoFilter ? '' : ' on'}" data-who="">Hammasi</button>`,
+      ...names.map(
+        (n) =>
+          `<button class="who-chip${whoFilter === n ? ' on' : ''}" data-who="${esc(n)}">${esc(n)}</button>`,
+      ),
+    ].join('');
+
+    el('whoChips')
+      .querySelectorAll<HTMLButtonElement>('[data-who]')
+      .forEach((b) =>
+        b.addEventListener('click', () => {
+          whoFilter = b.dataset.who ?? '';
+          renderWhoBar(appointments, results);
+          renderAppointments(appointments);
+          renderResults(results);
+        }),
+      );
+  }
+
   const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
   async function load() {
-    let data: { phone: string; appointments: Appointment[]; results: LabResult[] };
+    let data: { phone: string; appointments: Appointment[]; results: ResultGroup[] };
 
     try {
       const res = await fetch('/api/me', { credentials: 'same-origin' });
@@ -126,11 +187,13 @@ import Base from '../layouts/Base.astro';
     chip.textContent = data.phone;
     chip.hidden = false;
 
+    renderWhoBar(data.appointments, data.results);
     renderAppointments(data.appointments);
     renderResults(data.results);
   }
 
-  function renderAppointments(all: Appointment[]) {
+  function renderAppointments(everything: Appointment[]) {
+    const all = everything.filter((a) => matchesWho(a.patientName));
     const upcoming = all.filter((a) => a.upcoming);
     const past = all.filter((a) => !a.upcoming).reverse();
 
@@ -338,33 +401,65 @@ import Base from '../layouts/Base.astro';
     if (slot) moveTo(slot.dataset.slot ?? '', slot.dataset.time ?? '');
   });
 
-  let lastResults: LabResult[] = [];
+  let lastResults: ResultGroup[] = [];
 
-  function renderResults(results: LabResult[]) {
-    lastResults = results;
+  /*
+    Natijalar buyurtma (hujjat) bo'yicha guruhlanadi. Avval har bir
+    ko'rsatkich alohida "tahlil" bo'lib chiqardi — umumiy qon tahlili
+    18 ta yozuvga bo'linib ketardi va nimaga tegishli ekani
+    ko'rinmasdi. Endi bitta yozuv ochiladi va ichida jadval turadi.
+  */
+  function renderResults(groups: ResultGroup[]) {
+    lastResults = groups;
+    const shown = groups.filter((g) => matchesWho(g.patientName));
 
-    /*
-      Bir telefonga oila a'zolari bog'langan bo'lishi mumkin (ota-ona
-      bolasini yozdiradi). Shunda har bir natijada kimniki ekani
-      yoziladi; bitta odam bo'lsa — ortiqcha shovqin qilmaymiz.
-    */
-    const people = new Set(results.map((r) => r.patientName).filter(Boolean));
-    const showWho = people.size > 1;
-
-    el('results').innerHTML = results.length
-      ? results
-          .map(
-            (r, i) => `<div class="lab">
-              <span class="fic text">TXT</span>
-              <span class="lab-body"><span class="nm">${r.title}</span>
-                ${r.value ? `<span class="val">${r.value}${r.reference ? ` <span class="ref">(norma: ${r.reference})</span>` : ''}</span>` : ''}
-                <span class="dt">${showWho && r.patientName ? `${r.patientName} · ` : ''}${fmtDateTime(r.date)}</span></span>
-              ${r.seen ? '' : '<span class="pill new">yangi</span>'}
-              <button class="pdf-btn" data-print="${i}" title="PDF qilib saqlash">PDF</button>
-            </div>`,
-          )
+    el('results').innerHTML = shown.length
+      ? shown
+          .map((g) => {
+            const i = groups.indexOf(g);
+            const who = g.patientName ? `${esc(g.patientName)} · ` : '';
+            const n = g.items.length;
+            return `<div class="lab">
+              <button class="lab-head" data-open="${i}" aria-expanded="false">
+                <span class="fic text">TXT</span>
+                <span class="lab-body">
+                  <span class="nm">${esc(g.biomaterial ?? 'Tahlil natijalari')}</span>
+                  <span class="dt">${who}${fmtDateTime(g.date)} · ${n} ta koʻrsatkich</span>
+                </span>
+                ${g.seen ? '' : '<span class="pill new">yangi</span>'}
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="lab-items" data-items="${i}" hidden>
+                <table class="lab-table">
+                  <tr><th>Koʻrsatkich</th><th>Natija</th><th>Norma</th></tr>
+                  ${g.items
+                    .map(
+                      (it) => `<tr><td>${esc(it.title)}</td>
+                        <td><b>${esc(it.value ?? '—')}</b></td>
+                        <td>${esc(it.reference ?? '—')}</td></tr>`,
+                    )
+                    .join('')}
+                </table>
+                <button class="pdf-btn" data-print="${i}">PDF qilib saqlash</button>
+              </div>
+            </div>`;
+          })
           .join('')
       : '<p class="empty">Hozircha tahlil natijasi yoʻq. Natijalar tayyor boʻlishi bilan shu yerda paydo boʻladi.</p>';
+
+    el('results')
+      .querySelectorAll<HTMLButtonElement>('[data-open]')
+      .forEach((btn) =>
+        btn.addEventListener('click', () => {
+          const box = el('results').querySelector<HTMLDivElement>(
+            `[data-items="${btn.dataset.open}"]`,
+          );
+          if (!box) return;
+          box.hidden = !box.hidden;
+          btn.setAttribute('aria-expanded', String(!box.hidden));
+          btn.classList.toggle('open', !box.hidden);
+        }),
+      );
 
     el('results')
       .querySelectorAll<HTMLButtonElement>('[data-print]')
@@ -373,47 +468,59 @@ import Base from '../layouts/Base.astro';
       );
   }
 
+  const esc = (t: string) =>
+    t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+
   /*
     PDF serverda saqlanmaydi — brauzerning o'zi yasaydi: chop etish
     oynasida "PDF sifatida saqlash" tanlanadi. O'zbekcha harflar ham
     to'g'ri chiqadi, fayl saqlash xarajati ham yo'q.
   */
   function printResult(index: number) {
-    const r = lastResults[index];
-    if (!r) return;
+    const g = lastResults[index];
+    if (!g) return;
 
-    const esc = (s: string) =>
-      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const rows = g.items
+      .map(
+        (it) => `<tr><td>${esc(it.title)}</td><td><b>${esc(it.value ?? '—')}</b></td>
+          <td>${esc(it.reference ?? '—')}</td></tr>`,
+      )
+      .join('');
 
     /*
       Yangi oyna emas — yashirin iframe: popup-blokerlarga umuman
       duch kelmaydi. Chop oynasida "PDF sifatida saqlash" tanlanadi.
     */
-    const html = (`<!doctype html><html lang="uz"><head><meta charset="utf-8">
-      <title>Dimed — ${esc(r.title)}</title>
+    const html = `<!doctype html><html lang="uz"><head><meta charset="utf-8">
+      <title>Dimed — ${esc(g.biomaterial ?? 'Tahlil natijalari')}</title>
       <style>
         body { font: 14px/1.6 system-ui, sans-serif; color: #1a1a1a; margin: 40px; }
         .head { display: flex; justify-content: space-between; align-items: baseline;
                 border-bottom: 2px solid #1a1a1a; padding-bottom: 10px; }
         .head b { font-size: 20px; }
         .head span { font-size: 12px; color: #555; }
-        table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+        .meta { margin: 18px 0 0; font-size: 13px; }
+        .meta div { margin-bottom: 3px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 18px; }
         th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #ccc; }
         th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #555; }
-        .who { margin: 18px 0 0; font-size: 13px; }
         .foot { margin-top: 32px; font-size: 12px; color: #555; }
         @media print { body { margin: 12mm; } }
       </style></head><body>
       <div class="head"><b>Dimed klinikasi</b><span>Chinoz, Navoiy ko‘chasi 18 · +998 55 9009 103</span></div>
-      ${r.patientName ? `<p class="who">Bemor: <b>${esc(r.patientName)}</b></p>` : ''}
+      <div class="meta">
+        ${g.patientName ? `<div>Bemor: <b>${esc(g.patientName)}</b></div>` : ''}
+        <div>Sana: ${fmtDateTime(g.date)}</div>
+        ${g.biomaterial ? `<div>Biomaterial: ${esc(g.biomaterial)}</div>` : ''}
+        ${g.sampleId ? `<div>Namuna: ${esc(g.sampleId)}</div>` : ''}
+      </div>
       <table>
-        <tr><th>Tahlil</th><th>Natija</th><th>Norma</th><th>Sana</th></tr>
-        <tr><td>${esc(r.title)}</td><td><b>${esc(r.value ?? '—')}</b></td>
-            <td>${esc(r.reference ?? '—')}</td><td>${fmtDateTime(r.date)}</td></tr>
+        <tr><th>Koʻrsatkich</th><th>Natija</th><th>Norma</th></tr>
+        ${rows}
       </table>
       <p class="foot">Natija dimed.uz shaxsiy kabinetidan chop etildi.
         Savollar uchun shifokoringizga murojaat qiling.</p>
-      </body></html>`);
+      </body></html>`;
 
     const frame = document.createElement('iframe');
     frame.style.cssText = 'position:fixed;right:200%;width:720px;height:900px;';
@@ -743,9 +850,11 @@ import Base from '../layouts/Base.astro';
   }
 
   .card :global(.lab) {
+    /* Endi ichida sarlavha va ochiladigan jadval bor — ustma-ust. */
     display: flex;
-    align-items: center;
-    gap: 11px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
     width: 100%;
     text-align: left;
     padding: 10px 6px;
@@ -775,6 +884,8 @@ import Base from '../layouts/Base.astro';
   }
 
   .card :global(.lab-body) {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -829,5 +940,109 @@ import Base from '../layouts/Base.astro';
   .card :global(.dt.who) {
     color: var(--leaf);
     font-weight: 600;
+  }
+
+  /* Bemor filtri — bir telefonga oila bog'langanda chiqadi */
+  .who-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+
+  .who-lab {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .who-chips {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+
+  .who-chips :global(.who-chip) {
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    border-radius: 999px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+
+  .who-chips :global(.who-chip:hover) {
+    border-color: var(--leaf);
+  }
+
+  .who-chips :global(.who-chip.on) {
+    border-color: var(--leaf);
+    background: color-mix(in srgb, var(--leaf) 12%, var(--card));
+    font-weight: 650;
+  }
+
+  /* Natija — ochiladigan buyurtma kartochkasi */
+  .card :global(.lab-head) {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .card :global(.chev) {
+    flex: none;
+    color: var(--muted);
+    transition: transform 0.15s;
+  }
+
+  .card :global(.lab-head.open .chev) {
+    transform: rotate(180deg);
+  }
+
+  .card :global(.lab-items) {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    overflow-x: auto;
+  }
+
+  .card :global(.lab-table) {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+
+  .card :global(.lab-table th) {
+    text-align: left;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    font-weight: 600;
+    padding: 4px 8px 6px 0;
+  }
+
+  .card :global(.lab-table td) {
+    padding: 7px 8px 7px 0;
+    border-top: 1px solid var(--line);
+    vertical-align: top;
+  }
+
+  .card :global(.lab-table td:nth-child(2)) {
+    white-space: nowrap;
+  }
+
+  .card :global(.lab-table td:last-child) {
+    color: var(--muted);
+    font-size: 12.5px;
   }
 </style>

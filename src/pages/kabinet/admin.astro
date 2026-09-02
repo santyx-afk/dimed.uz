@@ -514,13 +514,20 @@ const weekdays = [
   }
 
   /* ---- ro'yxat ---- */
+  /*
+    Ro'yxat JS bilan (innerHTML) chiziladi. Astro uslublari faqat
+    shablonda turgan elementlarga qamrov (scope) belgisi qo'yadi —
+    JS qo'shgan tugunlarda u belgi bo'lmaydi va uslub qo'llanmaydi.
+    Shu sababli quyidagilar :global() bilan yozilgan; aks holda
+    butun ro'yxat bezaksiz matnga aylanadi.
+  */
   .doc-rows {
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
 
-  .doc-row {
+  .doc-rows :global(.doc-row) {
     display: flex;
     align-items: center;
     gap: 14px;
@@ -531,11 +538,11 @@ const weekdays = [
     flex-wrap: wrap;
   }
 
-  .doc-row.off {
+  .doc-rows :global(.doc-row.off) {
     opacity: 0.55;
   }
 
-  .doc-main {
+  .doc-rows :global(.doc-main) {
     flex: 1;
     min-width: 200px;
     display: flex;
@@ -543,51 +550,51 @@ const weekdays = [
     gap: 2px;
   }
 
-  .doc-main .nm {
+  .doc-rows :global(.doc-main .nm) {
     font-weight: 700;
     font-size: 15px;
   }
 
-  .doc-main .meta {
+  .doc-rows :global(.doc-main .meta) {
     font-size: 12.5px;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
 
-  .doc-tags {
+  .doc-rows :global(.doc-tags) {
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
   }
 
-  .tag {
+  .doc-rows :global(.tag) {
     font-size: 11px;
     font-weight: 700;
     border-radius: 999px;
     padding: 3px 10px;
   }
 
-  .tag.ok {
+  .doc-rows :global(.tag.ok) {
     color: var(--ok);
     background: var(--ok-bg);
   }
 
-  .tag.warn {
+  .doc-rows :global(.tag.warn) {
     color: var(--warn);
     background: var(--warn-bg);
   }
 
-  .tag.off {
+  .doc-rows :global(.tag.off) {
     color: var(--muted);
     background: var(--busy);
   }
 
-  .doc-btns {
+  .doc-rows :global(.doc-btns) {
     display: flex;
     gap: 6px;
   }
 
-  .mini {
+  .doc-rows :global(.mini) {
     border: 1px solid var(--card-brd);
     background: var(--card-bg);
     color: var(--ink);
@@ -597,20 +604,20 @@ const weekdays = [
     font-weight: 650;
   }
 
-  .mini:hover {
+  .doc-rows :global(.mini:hover) {
     border-color: var(--leaf);
   }
 
-  .mini.danger {
+  .doc-rows :global(.mini.danger) {
     color: var(--rose);
   }
 
-  .mini.danger:hover {
+  .doc-rows :global(.mini.danger:hover) {
     border-color: var(--rose);
     background: var(--rose-soft);
   }
 
-  .mini.okbtn {
+  .doc-rows :global(.mini.okbtn) {
     color: var(--leaf);
   }
 
@@ -845,11 +852,11 @@ const weekdays = [
   }
 
   /* Bo'limlar bo'yicha guruhlash — klinika tuzilishi ko'rinib tursin */
-  .dept-group {
+  .doc-rows :global(.dept-group) {
     margin-bottom: 22px;
   }
 
-  .dept-head {
+  .doc-rows :global(.dept-head) {
     display: flex;
     align-items: baseline;
     gap: 10px;
@@ -859,18 +866,18 @@ const weekdays = [
     border-bottom: 1px solid var(--line);
   }
 
-  .dept-head h2 {
+  .doc-rows :global(.dept-head h2) {
     margin: 0;
     font-size: 15px;
     font-weight: 700;
   }
 
-  .dept-note {
+  .doc-rows :global(.dept-note) {
     font-size: 12.5px;
     color: var(--muted);
   }
 
-  .dept-note.warn {
+  .doc-rows :global(.dept-note.warn) {
     color: #b4690e;
     font-weight: 600;
   }

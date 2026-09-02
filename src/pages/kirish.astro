@@ -473,7 +473,7 @@ import { site } from '../data/site';
     margin: 14px 0;
   }
 
-  .who-item {
+  .who-list :global(.who-item) {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -490,18 +490,18 @@ import { site } from '../data/site';
     transition: border-color 0.15s, background 0.15s;
   }
 
-  .who-item:hover,
-  .who-item:focus-visible {
+  .who-list :global(.who-item:hover),
+  .who-list :global(.who-item:focus-visible) {
     border-color: var(--leaf);
     background: color-mix(in srgb, var(--leaf) 6%, var(--card));
   }
 
-  .who-nm {
+  .who-list :global(.who-nm) {
     font-weight: 650;
     font-size: 15px;
   }
 
-  .who-tag {
+  .who-list :global(.who-tag) {
     flex: none;
     font-size: 11.5px;
     color: var(--muted);
