@@ -1,9 +1,10 @@
 # Dimed.uz — loyiha holati va davom ettirish uchun qo'llanma (handoff)
 
 > Bu hujjat yangi seansda (yoki yangi odam) ishni davom ettirishi uchun.
-> Oxirgi yangilanish: **2026-08-31**. Sayt **jonli**: baza sozlangan,
-> @dimedcbot ishlayapti, CI yashil (97 mantiq + 77 API testi,
-> typecheck 0 xato). Qolgan ishlar — «Hozirgi holat» bo'limida.
+> Oxirgi yangilanish: **2026-09-05** (7-bosqich — bug fix va
+> yaxshilashlar, PR #23). Sayt **jonli**: baza sozlangan, @dimedcbot
+> ishlayapti, CI yashil (113 mantiq + 102 API testi, typecheck 0 xato).
+> Qolgan ishlar — «Hozirgi holat» bo'limida.
 
 ## Loyiha nima
 
@@ -24,17 +25,28 @@ Payme (kod tayyor, kassa kutilmoqda)
 
 ---
 
-## Hozirgi holat (2026-08-28)
+## Hozirgi holat (2026-09-05)
 
 Jonli va tekshirilgan: baza (9 jadval, TTL yoqilgan), 9 shifokor yuklangan,
 webhook ulangan (kod kelyapti), admin panel ochilgan, QA aylanishi o'tkazilib
 topilgan kamchiliklar tuzatilgan, test ma'lumotlar bazadan tozalangan.
 
+7-bosqich (bug fix va yaxshilashlar) `master` ga qo'shilgach jonli bazada
+ikkita yangi jadval (`prices`, `ratings`) va bir martalik ikkita skript
+kerak — pastdagi checklist.
+
 ### Klinika egasi zimmasida
 
 - [x] ~~AWS kalitini almashtirish~~ — bajarildi (2026-08-31).
 - [ ] Payme kassa ID va kalitlar → `PAYME_MERCHANT_ID`, `PAYME_KEY`,
-      `PAYME_ENABLED=1` (bron mantig'i o'zgarmaydi).
+      `PAYMENT_ENABLED=1` (bron mantig'i o'zgarmaydi; hozir sayt
+      «qabulxona kassasida to'lash» rejimida).
+- [ ] **7-bosqich deploy'idan keyin (bir marta):** jonli bazada
+      `prices` va `ratings` jadvallarini yaratish (`bash
+      cloudshell-setup.sh` — mavjudlarini o'tkazib yuboradi), so'ng
+      `npm run migrate-slot-minutes` (60 daqiqalik slot) va
+      `npm run seed-prices` (narxlar bazaga; keyin admin → Narxlar).
+      Netlify'da `SITE_URL=https://dimed.uz` (bot havolalari uchun).
 - [ ] **1C kengaytmasini o'rnatish** — qo'llanma alohida berilgan; eng
       muhim uch nuqtasi: fayl rejimi emasligini tekshirish, `Posted` /
       `DeletionMark` maydonlarini qo'shish, eski ikkita reglament
@@ -68,7 +80,10 @@ topilgan kamchiliklar tuzatilgan, test ma'lumotlar bazadan tozalangan.
   (argumentsiz — ro'yxat).
 - Ega tasdiqlagach eski `dimed_test_table` va `AnalysisResult` jadvallarini
   o'chirish.
-- G'oya: 1C yangi natija yozganda bemorga bot-xabar (cron orqali).
+- ~~G'oya: 1C yangi natija yozganda bemorga bot-xabar (cron orqali).~~
+  Bajarildi — `notify-results` (7-bosqich).
+- Navbatlarni 1C ga o'tkazish (`docs/1c-sync.md`) — 1C dasturchisi
+  tasdiqlagach.
 - `lc-results` (`LC_API_KEY`) — eski yo'l; 1C to'g'ridan-to'g'ri yozuvi
   barqaror ishlagach olib tashlash mumkin.
 
@@ -83,7 +98,8 @@ topilgan kamchiliklar tuzatilgan, test ma'lumotlar bazadan tozalangan.
 - **Smenalar va tanaffuslar.** Har bir shifokor kuniga bir nechta smena
   belgilaydi (masalan 08:00–12:00 va 13:00–17:00). Smenalar orasidagi
   bo'shliq — tanaffus, unga slot tushmaydi. Slot davomiyligini ham shifokor
-  o'zi tanlaydi (10/15/20/30 daqiqa).
+  o'zi tanlaydi (10/15/20/30/60 daqiqa; standart — **60**, ya'ni 08:30,
+  09:30, …). Dam olish kunini shifokor kabinetidan belgilaydi.
 - **1 soat qoidasi.** Qabul boshlanishiga kamida 1 soat qolgan bo'lishi kerak —
   ham bron qilish, ham vaqtni ko'chirish uchun. Roppa-rosa 60 daqiqa —
   **ruxsat etiladi** («kamida» shartiga mos).
@@ -92,6 +108,12 @@ topilgan kamchiliklar tuzatilgan, test ma'lumotlar bazadan tozalangan.
 - **Klinika vaqti — Asia/Tashkent (UTC+5).** Server UTC'da ishlaydi, shuning
   uchun sana/vaqt hisoblari faqat `lib/time.ts` orqali qilinadi.
 - **Bir slot — bir bemor.** DynamoDB shartli yozuvi bilan kafolatlanadi.
+- **Navbat kim uchun.** Bron paytida oila a'zosi va uning tug'ilgan sanasi
+  tanlanadi (majburiy), maxfiylik siyosatiga rozilik olinadi.
+- **To'lov — qabulxona kassasida.** Onlayn to'lov `PAYMENT_ENABLED` ortida
+  o'chiq; 5-qadamda narx va «kassaga to'laysiz» matni ko'rinadi.
+- **Qabuldan keyin baho.** Shifokor «Qabul qilindi» desa bemorga botda
+  1–5 yulduz so'rovi boradi; «Kelmadi» bo'lsa so'ralmaydi.
 - **1C bazaga to'g'ridan-to'g'ri yozadi, sayt faqat o'qiydi** (quyida).
 
 ---
@@ -181,28 +203,71 @@ Javob va 1C tomonidan kutilayotgan uchta yangi maydon:
   «Saytdan yashirish», teglar «saytda ko'rinadi» / «kabinetga kira
   olmaydi» kabi tushunarli yozuvlarga almashtirildi.
 
+### 7-bosqich — bug fix va yaxshilashlar ✅ (2026-09-05, PR #23)
+
+Egasining 2026-09-05 spetsifikatsiyasi bo'yicha, har blok alohida commit:
+- **A1/A2/A3/A4** — mobil burger-menyu (Kabinet tugmasi doim ko'rinadi),
+  yopishqoq header'ga yaxlit/blur fon, oraliqlar 4/8/16/24/32/48/64
+  tizimiga (`--sp-*`, `--wrap-pad`, `--section-pad`, `--card-pad`
+  tokenlari), manzil Google Maps havolasi.
+- **B1–B4** — bron: bemor tug'ilgan sanasi majburiy (kun/oy/yil,
+  yozuvga ham tushadi), maxfiylik roziligi (`/maxfiylik`), 5-qadam
+  «kassada to'laysiz» tasdig'i (onlayn to'lov `PAYMENT_ENABLED` ortida
+  o'chiq), standart slot 60 daqiqa (`migrate-slot-minutes`).
+- **C1–C3** — header'da Kabinet dropdown (ism, telefon; Navbatlarim,
+  Tahlillarim, Navbat olish, Sozlamalar, Chiqish), kabinet alohida
+  yo'llarga bo'lindi (`Cabinet.astro` qolipi), natijalar ro'yxati
+  (nom, holat, Ko'rish), `/tahlillar` da «Mening tahlillarim».
+- **D1/D2** — `/natija?id=` sahifasi (`sampledesign.html` asosida, Dimed
+  palitrasi, A4 chop etish), PDF brauzerda (html2pdf.js, CDN), ulashish
+  (Web Share API / nusxalash, HMAC token, `lib/share.ts`); `noindex`.
+- **E1–E3** — shifokor kabineti qayta ishlandi (kun chip'lari, dam olish
+  kunlari, aniq smena yozuvlari), «Qabul qilindi / Kelmadi»
+  (`appointment-status`, `no_show` holati), Murtazayeva `active:false`
+  bilan yashirildi (yozuv saqlanadi, admin paneldan qaytariladi).
+- **F1–F3** — admin: shifokorlar (`/kabinet/admin`, faollik/narx/
+  davomiylik), **Narxlar** (`prices` jadvali, `seed-prices`, `/api/prices`
+  — sayt narxlarni jonli oladi, faolsiz tahlil yashiriladi), **Baholar**
+  (ro'yxat, yashirish → o'rtachadan chiqadi).
+- **G1/G2** — bot: yangi natija tushganda havola (`notify-results`),
+  qabuldan keyin 1–5 yulduz + izoh (`ask-ratings`, `lib/ratings.ts`,
+  `ratings` jadvali, `doctors.rating_sum/rating_count`).
+- **H1–H3** — `robots.txt` (admin/kabinet/api/natija yopiq) va
+  `sitemap.xml`, `/maxfiylik` (uz/ru/en), `docs/1c-sync.md`.
+- Yangi matnlar uch tilda: sayt lug'ati `src/data/i18n.ts` (`t()`,
+  `getLang`: `?lang=` → localStorage → `<html lang>`), bot lug'ati
+  `lib/i18n.ts` (`users.lang`, Sozlamalar sahifasidan).
+
 ---
 
 ## Kod tuzilishi
 
 ```
 src/
-  components/   Nav, Footer, Logo, DeptIcon, BookingWidget
-  data/         doctors.ts, departments.ts, site.ts, analyses.json (43 ta tahlil)
-  layouts/      Base.astro
-  pages/        index, tahlillar, kirish, kabinet, kabinet/shifokor,
-                kabinet/admin, robots.txt.ts, sitemap.xml.ts
-  styles/       global.css (dizayn tokenlari), fonts.css
+  components/   Nav (burger + Kabinet menyusi), Footer, Logo, DeptIcon, BookingWidget
+  data/         doctors.ts, departments.ts, site.ts, analyses.json (43 ta tahlil),
+                i18n.ts (sayt matnlari uz/ru/en)
+  layouts/      Base.astro, Cabinet.astro (kabinet bo'limlari: tablar, sarlavha)
+  lib/          lang (til tanlash), birthdate (kun/oy/yil select), dates,
+                doctor-cabinet, live-prices (/api/prices dan narx yangilash)
+  pages/        index, tahlillar, kirish, natija, maxfiylik, kabinet (→ navbatlar),
+                kabinet/{navbatlar,tahlillar,sozlamalar},
+                kabinet/shifokor/{index,jadval,dam,sozlamalar},
+                kabinet/admin/{index,narxlar,baholar}, robots.txt.ts, sitemap.xml.ts
+  styles/       global.css (rang + oraliq tokenlari), fonts.css
 netlify/functions/
-  lib/          db, env, http, session, telegram, time, slots, appointments,
-                schedule, auth, payment, patients (1C profil birlashtirish)
+  lib/          db, env, http, session, telegram (inline tugmalar ham), time, slots,
+                appointments, schedule, auth, payment, patients (1C profil),
+                results (natija hujjatlari, me'yor), analyte-info (ko'rsatkich izohlari),
+                share (ulashish tokeni), ratings (baho oqimi), i18n (bot matnlari)
   *.ts          har bir fayl — bitta /api/<nom> endpoint
-  remind-patients.ts, doctor-daily.ts — cron (config.schedule)
-scripts/        create-tables, seed-doctors, link-doctor, import-patients,
-                build-analyses, cloudshell-setup.sh (+ gen-cloudshell-setup),
+  remind-patients, doctor-daily, notify-results, ask-ratings — cron (config.schedule)
+scripts/        create-tables, seed-doctors, seed-prices, migrate-slot-minutes,
+                link-doctor, import-patients, build-analyses,
+                cloudshell-setup.sh (+ gen-cloudshell-setup),
                 fake-dynamo (testlar uchun), test-*.mjs
-docs/           HANDOFF (shu fayl), 1c-integration, payme-integration,
-                ISHGA-TUSHIRISH
+docs/           HANDOFF (shu fayl), ISHGA-TUSHIRISH, 1c-integration, 1c-sync,
+                payme-integration
 legacy/         eski Jekyll sayti (kontent manbasi, deploy qilinmaydi)
 ```
 
@@ -211,9 +276,11 @@ legacy/         eski Jekyll sayti (kontent manbasi, deploy qilinmaydi)
 npm run dev          # lokal server
 npm run build        # dist/ ga yig'ish
 npm run typecheck    # astro check + tsc
-npm test             # 97 mantiq + 77 API tekshiruvi (haqiqiy AWS'siz)
+npm test             # 113 mantiq + 102 API tekshiruvi (haqiqiy AWS'siz)
 npm run create-tables
 npm run seed-doctors
+npm run seed-prices  # tahlil narxlarini prices jadvaliga (--dry, --force)
+npm run migrate-slot-minutes  # bazadagi shifokorlarni 60 daqiqalik slotga (--dry)
 npm run link-doctor  # shifokorni Telegram'ga bog'lash (argumentsiz — ro'yxat)
 npm run gen-cloudshell  # scripts/cloudshell-setup.sh ni qayta yaratish
 node scripts/import-patients.mjs bemorlar.csv --dry  # 1C CSV import sinovi
@@ -269,10 +336,21 @@ to'g'ridan-to'g'ri import qilinadi — shuning uchun `lib/` ichidagi importlar
 | `analysis_results` | `phone` / `sort_key` | **1C yozadi.** `sort_key` = hujjat UID, ichida `AnalysisResults` ro'yxati |
 | `payments` | `payment_id` | |
 | `lab_results` | `phone` / `sort_key` | sayt yozuvi (`"<sana>#<kod>"`); 1C adashib qo'ygan hujjatlar ham o'qiladi |
+| `prices` | `item_id` | `analysis#<kod>` — tahlil turi narxi, muddati, `active` (F2); admin tahrirlaydi, `/api/prices` o'qiydi |
+| `ratings` | `doctor_id` / `created_at` | bemor bahosi 1–5, izoh, `hidden` (G2/F3); yig'indi `doctors.rating_sum/rating_count` da |
+
+Qo'shimcha maydonlar (7-bosqich): `users` — `lang`, `birth_dates` (1C
+bemori uchun saytda kiritilgan sana), `patients` (saytda qo'shilgan oila
+a'zolari, `birth_date` bilan), `privacy_accepted_at`, `results_notified`,
+`pending_rating`; `appointments` — `patient_birth_date`,
+`privacy_accepted_at`, `marked_at`, `rating_asked_at`, `rating`,
+`rated_at`; `doctors` — `active`, `rating_sum`, `rating_count`;
+`schedules` — `day_off`, `off_reason`.
 
 **Bron holatlari:** `hold` (5 daqiqa, onlayn to'lov uchun) → `paid`;
-`booked` (klinikada to'lash — darhol kuchga kiradi); `done`; `moved`;
-`cancelled`; `cancelled_by_clinic` (shifokor chiqmadi).
+`booked` (klinikada to'lash — darhol kuchga kiradi); `done` (qabul
+qilindi); `no_show` (kelmadi); `moved`; `cancelled`;
+`cancelled_by_clinic` (shifokor chiqmadi).
 
 Holatlar bilan ishlash `lib/appointments.ts` da markazlashgan:
 - `holdsSlot()` — yozuv slotni band qilib turibdimi (muddati o'tgan hold —
@@ -397,15 +475,71 @@ standart nomi bilan yaratilgan `AnalysisResult` — ega tasdiqlagach o'chiriladi
     Xatosi kirishni to'smaydi (catch → log-bot). Kontakt saqlash **Put emas
     Update** — 1C sinxronlagan maydonlar o'chib ketmasin.
 
+21. **Onlayn to'lov global `PAYMENT_ENABLED` ortida** (`lib/payment.ts`,
+    `paymentEnabled()`; eski `PAYME_ENABLED` ham tan olinadi). Bo'sh —
+    bron `booked` bo'ladi, 5-qadamda «Qabulxona kassasiga X so'm
+    to'laysiz». Payme kodi saqlangan; `1` + kalitlar — onlayn rejim.
+    Bo'shatilgan slot (`moved`/`cancelled*`) qayta band qilinadi —
+    `book` va `reschedule` shartida shu holatlar bor.
+
+22. **Kabinet — alohida yo'llar, bitta qolip.** `layouts/Cabinet.astro`
+    sarlavha + tablar (bemor / shifokor / admin) beradi; header'dagi
+    Kabinet menyusi `/api/session` dan rollarni oladi va sessionStorage'da
+    5 daqiqa keshlaydi (chiqishda `kirish.astro` uni tozalaydi).
+    `/kabinet` → `/kabinet/navbatlar` ga yo'naltiradi.
+
+23. **Uch til — faqat yangi matnlar uchun lug'at.** Sayt o'zbekcha
+    qoladi; yangi bo'limlar (`natija`, `maxfiylik`, bron 4–5 qadam,
+    kabinet menyusi) `src/data/i18n.ts` dan `t(key, lang)` bilan
+    chiziladi, til `?lang=` → `localStorage.dimed_lang` → `<html lang>`.
+    Bot `users.lang` bo'yicha (`lib/i18n.ts`, `botText`).
+
+24. **Natija sahifasi (`/natija?id=`)** ma'lumotni `/api/result` dan
+    oladi (`lib/results.ts` — ikkala natija jadvali, me'yoriy oraliq va
+    holat `parseReference`/`statusOf`, ko'rsatkich izohlari
+    `analyte-info.ts`). PDF **brauzerda** (html2pdf.js, cdnjs; fayl nomi
+    `Dimed_{FISh}_{sana}.pdf`), server PDF yo'q. Ulashish havolasi —
+    HMAC token (`lib/share.ts`, 30 kun), sessiyasiz ochiladi.
+    1C hozircha panel nomi, shifokor va me'yor chegaralarini yubormaydi —
+    sayt bir nechta ehtimoliy nomni o'qiydi (`docs/1c-sync.md` 4.3).
+
+25. **Baho oqimi (`lib/ratings.ts`).** `askRating` — `rating_asked_at`
+    shartli yoziladi (bir marta), so'ng inline tugmalar
+    (`r:<doctor>|<sana>|<vaqt>:<n>`, 64 baytdan oshmaydi). Callback'da
+    navbat egasi tekshiriladi, `ratings` ga yoziladi, `doctors` da
+    `rating_sum`/`rating_count` `if_not_exists(...) + :n` bilan
+    yig'iladi; admin yashirsa ayiriladi (ikki marta emas — `hidden`
+    shartli). Izoh 24 soat `users.pending_rating` orqali kutiladi;
+    `/start` va `/help` undan ustun.
+
+26. **Narxlar jonli.** Sahifalar statik `analyses.json` bilan chiziladi,
+    yuklangach `applyLivePrices()` (`src/lib/live-prices.ts`)
+    `/api/prices` dan narxni almashtiradi, faolsiz tahlil qatorini va
+    bo'sh qolgan guruhni yashiradi, «N ta tahlil» hisobini qayta sanaydi.
+    Baza bo'sh bo'lsa statik narxlar qoladi — `seed-prices` bir marta.
+
+27. **Oraliq tokenlari (A3).** `global.css`: `--sp-1…7` = 4/8/16/24/32/
+    48/64, `--wrap-pad` (24/16), `--section-pad` (64/48), `--card-pad`
+    (24/16 — mobilda bir qadam kichik). Yangi CSS'da padding/margin/gap
+    faqat shu qiymatlardan; hizalash offsetlari `calc(ikon + token)`.
+
+28. **Soxta DynamoDB kengaytmalari (testlar):** `SET a = if_not_exists(a,
+    :z) + :n` arifmetikasi, `ReturnValues: 'ALL_NEW'`, `Query` indekslar
+    bo'yicha. Shart ifodalari avval ` OR `, keyin ` AND ` bo'yicha
+    bo'linadi — murakkab qavsli shartlar yozilmaydi (`appointment-status`
+    shartiga qarang).
+
 ---
 
 ## Muhit o'zgaruvchilari (Netlify)
 
 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_LOG_BOT_TOKEN`,
-`TELEGRAM_LOG_CHAT_ID`, `ADMIN_TELEGRAM_IDS`, `SESSION_SECRET`,
+`TELEGRAM_LOG_CHAT_ID`, `ADMIN_TELEGRAM_IDS`, `SESSION_SECRET`, `SITE_URL`
+(bot xabarlaridagi havolalar; bo'sh bo'lsa so'rov manzili),
 `DIMED_AWS_REGION`, `DIMED_TABLE_PREFIX`, `DIMED_AWS_ACCESS_KEY_ID`,
 `DIMED_AWS_SECRET_ACCESS_KEY`, `LC_API_KEY` (meros),
-`PAYME_MERCHANT_ID`, `PAYME_KEY`, `PAYME_TEST_KEY`, `PAYME_ENABLED`
+`PAYMENT_ENABLED` (bo'sh = kassada to'lash), `PAYME_MERCHANT_ID`,
+`PAYME_KEY`, `PAYME_TEST_KEY`
 
 To'liq izohlar bilan — `.env.example`. Har o'zgarishdan keyin —
 **Trigger deploy** (14-tuzoq).
@@ -430,5 +564,7 @@ To'liq izohlar bilan — `.env.example`. Har o'zgarishdan keyin —
 - Sahifa o'zgarsa — brauzerda (Playwright, Chromium `/opt/pw-browsers/chromium`)
   light/dark va mobil rejimda tekshiriladi
 - Commit xabarlari o'zbekcha, nima o'zgargani va nima uchun tushuntiriladi
-- Ish `claude/dimed-github-push-lu8cfu` branch'ida boradi, PR ochiladi;
-  ega «merge» desa — merge qilinadi.
+- Har ish alohida `claude/*` branch'ida boradi (oxirgisi —
+  `claude/dimed-bug-fixes-improvements-7u2pat`, PR #23), har blok
+  alohida conventional commit (`feat:` / `fix:` / `docs:`), PR
+  `master` ga ochiladi; ega «merge» desa — merge qilinadi.
