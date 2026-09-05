@@ -31,7 +31,7 @@ import Base from '../../layouts/Base.astro';
 
         <h2 class="mt">Qabul davomiyligi</h2>
         <div class="seg" id="slotSeg">
-          {[10, 15, 20, 30].map((m) => <button type="button" data-min={m}>{m} daq</button>)}
+          {[10, 15, 20, 30, 60].map((m) => <button type="button" data-min={m}>{m} daq</button>)}
         </div>
 
         <p class="note">
@@ -78,7 +78,7 @@ import Base from '../../layouts/Base.astro';
   const esc = (t: string) =>
     t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
   let shifts: Shift[] = [];
-  let slotMinutes = 15;
+  let slotMinutes = 60;
 
   /*
     Sana brauzer kalendarisiz tanlanadi: brauzerniki qurilma tilida

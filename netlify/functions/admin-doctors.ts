@@ -3,7 +3,12 @@ import { ScanCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, isAdmin, type DoctorRecord } from './lib/auth.ts';
-import { checkShifts, isAllowedSlotMinutes, ALLOWED_SLOT_MINUTES } from './lib/schedule.ts';
+import {
+  checkShifts,
+  isAllowedSlotMinutes,
+  ALLOWED_SLOT_MINUTES,
+  DEFAULT_SLOT_MINUTES,
+} from './lib/schedule.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error, normalizePhone } from './lib/http.ts';
 
@@ -111,7 +116,9 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
     return error('Narx butun musbat son bo‘lishi kerak');
   }
 
-  if (!isAllowedSlotMinutes(body.slotMinutes)) {
+  // Berilmasa — standart (60 daqiqa); berilsa ro'yxatdan biri bo'lishi shart.
+  const slotMinutes = body.slotMinutes ?? DEFAULT_SLOT_MINUTES;
+  if (!isAllowedSlotMinutes(slotMinutes)) {
     return error(`Qabul davomiyligi ${ALLOWED_SLOT_MINUTES.join(', ')} daqiqadan biri bo‘lishi kerak`);
   }
 
@@ -148,7 +155,7 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
     ':job': job,
     ':dept': deptId,
     ':price': body.price,
-    ':slot': body.slotMinutes,
+    ':slot': slotMinutes,
     ':workdays': workdays,
     ':shifts': checked.shifts,
     ':exp': String(body.experience ?? '').trim(),

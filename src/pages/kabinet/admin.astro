@@ -2,7 +2,7 @@
 import Base from '../../layouts/Base.astro';
 import { departments } from '../../data/departments';
 
-const slotOptions = [10, 15, 20, 30];
+const slotOptions = [10, 15, 20, 30, 60];
 const weekdays = [
   { n: 1, label: 'Du' },
   { n: 2, label: 'Se' },
@@ -158,7 +158,7 @@ const weekdays = [
 
   let doctors: Doctor[] = [];
   let shifts: Shift[] = [];
-  let slotMinutes = 15;
+  let slotMinutes = 60;
 
   // ---------- yuklash ----------
   async function load() {
@@ -293,7 +293,7 @@ const weekdays = [
     el<HTMLInputElement>('f-tg').value = d?.telegramId ?? '';
     el<HTMLInputElement>('f-active').checked = d ? d.active : true;
 
-    slotMinutes = d?.slotMinutes ?? 15;
+    slotMinutes = d?.slotMinutes ?? 60;
     renderSlotSeg();
 
     const days = d?.workdays ?? [1, 2, 3, 4, 5, 6];

@@ -10,7 +10,7 @@ export type Doctor = {
   hours: string;
   /** Kunlik smenalar. Smenalar orasidagi bo'shliq — tanaffus. */
   shifts: Shift[];
-  /** Bitta qabul davomiyligi, daqiqada. */
+  /** Bitta qabul davomiyligi, daqiqada. Standart — 60 (bir soatlik slotlar: 08:30, 09:30, …). */
   slotMinutes: number;
   /** Ish kunlari: 0 = yakshanba ... 6 = shanba */
   workdays: number[];
@@ -42,7 +42,7 @@ export const doctors: Doctor[] = [
       { start: '08:30', end: '12:30' },
       { start: '13:30', end: '16:00' },
     ],
-    slotMinutes: 15,
+    slotMinutes: 60,
     workdays: [1, 2, 3, 4, 5, 6],
     price: 60000,
   },
@@ -58,7 +58,7 @@ export const doctors: Doctor[] = [
       { start: '08:30', end: '12:00' },
       { start: '13:00', end: '15:00' },
     ],
-    slotMinutes: 15,
+    slotMinutes: 60,
     workdays: [1, 2, 3, 4, 5, 6],
     price: 70000,
   },
@@ -74,7 +74,7 @@ export const doctors: Doctor[] = [
       { start: '08:00', end: '12:00' },
       { start: '13:00', end: '17:00' },
     ],
-    slotMinutes: 15,
+    slotMinutes: 60,
     workdays: [1, 2, 3, 4, 5, 6],
     price: 70000,
   },
@@ -87,7 +87,7 @@ export const doctors: Doctor[] = [
     photo: '/images/team/ilxomov-laziz.webp',
     hours: 'Du–Sh · 09:00–14:00',
     shifts: [{ start: '09:00', end: '14:00' }],
-    slotMinutes: 20,
+    slotMinutes: 60,
     workdays: [1, 2, 3, 4, 5, 6],
     price: 60000,
   },
@@ -103,7 +103,7 @@ export const doctors: Doctor[] = [
       { start: '09:30', end: '12:30' },
       { start: '13:30', end: '16:00' },
     ],
-    slotMinutes: 20,
+    slotMinutes: 60,
     workdays: [1, 2, 3, 4, 5],
     price: 80000,
     // Ishdan bo'shagan — saytda ko'rinmaydi (E3). Yangi ginekolog kelganda
@@ -119,7 +119,7 @@ export const doctors: Doctor[] = [
     photo: '/images/team/mansurov-qobil.webp',
     hours: 'Du–Sh · 09:00–13:00',
     shifts: [{ start: '09:00', end: '13:00' }],
-    slotMinutes: 15,
+    slotMinutes: 60,
     workdays: [1, 2, 3, 4, 5, 6],
     price: 65000,
   },
@@ -132,7 +132,7 @@ export const doctors: Doctor[] = [
     photo: '/images/team/umatqulov-husan.webp',
     hours: 'Du–Sh · 08:00–13:00',
     shifts: [{ start: '08:00', end: '13:00' }],
-    slotMinutes: 15,
+    slotMinutes: 60,
     workdays: [1, 2, 3, 4, 5, 6],
     price: 65000,
   },
@@ -148,7 +148,7 @@ export const doctors: Doctor[] = [
       { start: '16:00', end: '19:00' },
       { start: '19:30', end: '22:00' },
     ],
-    slotMinutes: 20,
+    slotMinutes: 60,
     workdays: [0, 1, 2, 3, 4, 5, 6],
     price: 70000,
   },
@@ -164,7 +164,7 @@ export const doctors: Doctor[] = [
       { start: '08:30', end: '12:30' },
       { start: '14:00', end: '17:30' },
     ],
-    slotMinutes: 30,
+    slotMinutes: 60,
     workdays: [1, 2, 3, 4, 5, 6],
     price: 55000,
   },

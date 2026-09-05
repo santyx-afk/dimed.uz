@@ -10,11 +10,12 @@
     "preview": "astro preview",
     "typecheck": "astro check && tsc --noEmit -p netlify/tsconfig.json",
     "test": "npm run test:unit && npm run test:api",
-    "test:unit": "node --experimental-strip-types scripts/test-lib.mjs && node --experimental-strip-types scripts/test-slots.mjs && node --experimental-strip-types scripts/test-appointments.mjs && node --experimental-strip-types scripts/test-schedule.mjs && node scripts/test-link-doctor.mjs && node --experimental-strip-types scripts/test-tables.mjs && node scripts/test-import-patients.mjs",
+    "test:unit": "node --experimental-strip-types scripts/test-lib.mjs && node --experimental-strip-types scripts/test-slots.mjs && node --experimental-strip-types scripts/test-appointments.mjs && node --experimental-strip-types scripts/test-schedule.mjs && node scripts/test-link-doctor.mjs && node scripts/test-migrate-slot-minutes.mjs && node --experimental-strip-types scripts/test-tables.mjs && node scripts/test-import-patients.mjs",
     "test:api": "node --experimental-strip-types scripts/test-api.mjs",
     "create-tables": "node scripts/create-tables.mjs",
     "seed-doctors": "node --experimental-strip-types scripts/seed-doctors.mjs",
     "link-doctor": "node scripts/link-doctor.mjs",
+    "migrate-slot-minutes": "node scripts/migrate-slot-minutes.mjs",
     "import-patients": "node scripts/import-patients.mjs",
     "gen-cloudshell": "node --experimental-strip-types scripts/gen-cloudshell-setup.mjs",
     "build-analyses": "node scripts/build-analyses.mjs"
