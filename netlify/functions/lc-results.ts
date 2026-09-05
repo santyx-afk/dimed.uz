@@ -5,6 +5,8 @@ import { db, TABLES } from './lib/db.ts';
 import { required } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { json, error, normalizePhone } from './lib/http.ts';
+import { botText, isLang } from './lib/i18n.ts';
+import { siteOrigin } from './result.ts';
 
 /**
  * 1C laboratoriya tizimidan tahlil natijalarini qabul qiladi.
@@ -73,7 +75,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       );
     }
 
-    await notifyPatient(phone, body.results.length);
+    await notifyPatient(phone, body.results, date, request);
     return json({ ok: true, saved: body.results.length });
   } catch (err) {
     await logToAdmin('lc-results', err);
@@ -81,8 +83,17 @@ export default async (request: Request, _context: Context): Promise<Response> =>
   }
 };
 
-/** Bemorga xabar. Bot xatosi natijalarni saqlashni bekor qilmaydi. */
-async function notifyPatient(phone: string, count: number): Promise<void> {
+/**
+ * Bemorga xabar — natija sahifasi havolasi bilan (G1). Bot xatosi
+ * natijalarni saqlashni bekor qilmaydi. Sayt yozgan natijalar bir
+ * sanaga "lab-<sana>" guruhi bo'lib yig'iladi — havola shunga.
+ */
+async function notifyPatient(
+  phone: string,
+  results: ResultItem[],
+  date: string,
+  request: Request,
+): Promise<void> {
   try {
     const users = await db.send(
       new QueryCommand({
@@ -94,12 +105,20 @@ async function notifyPatient(phone: string, count: number): Promise<void> {
       }),
     );
 
-    const telegramId = (users.Items?.[0] as { telegram_id?: string } | undefined)?.telegram_id;
-    if (!telegramId) return;
+    const user = users.Items?.[0] as { telegram_id?: string; lang?: string } | undefined;
+    if (!user?.telegram_id) return;
 
+    const lang = isLang(user.lang) ? user.lang : 'uz';
+    const first = results[0];
+    const title =
+      results.length === 1 && first ? first.title : `${first?.title ?? 'Tahlil'} +${results.length - 1}`;
     await sendMessage(
-      telegramId,
-      `🧪 <b>Tahlil natijangiz tayyor</b>\n\n${count} ta natija shaxsiy kabinetingizga yuklandi:\nhttps://dimed.uz/kabinet`,
+      user.telegram_id,
+      botText('result.ready', lang, {
+        title,
+        date: date.slice(0, 10),
+        link: `${siteOrigin(request)}/natija?id=${encodeURIComponent(`lab-${date}`)}`,
+      }),
     );
   } catch (err) {
     await logToAdmin('lc-results/notify', err);

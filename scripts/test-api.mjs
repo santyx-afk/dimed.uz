@@ -67,6 +67,7 @@ const patientsApi = await load('patients.ts');
 const sessionApi = await load('session.ts');
 const settingsApi = await load('settings.ts');
 const resultApi = await load('result.ts');
+const notifyResults = await load('notify-results.ts');
 const { createShareToken } = await import(pathToFileURL(join(fnDir, 'lib', 'share.ts')).href);
 
 const { toTashkent, toInstant, addDays } = await import(
@@ -390,6 +391,7 @@ await test('bemor o\'z qabulini ko\'radi', async () => {
 });
 
 await test('1C natijasi kabinetda ko\'rinadi', async () => {
+  telegramCalls.length = 0;
   const res = await call(lcResults, 'https://dimed.uz/api/lc-results', {
     ...jsonBody({
       phone: '+998901234567',
@@ -407,6 +409,9 @@ await test('1C natijasi kabinetda ko\'rinadi', async () => {
   assert.equal(cabinet.results[0].items[0].title, 'Gemoglobin');
   assert.equal(cabinet.results[0].items[0].reference, '120 – 160');
   assert.equal(cabinet.results[0].items[0].status, 'normal', 'matnli me\'yordan holat chiqadi');
+
+  const xabar = telegramCalls.find((c) => c.body.chat_id === '777');
+  assert.ok(xabar?.body.text.includes('/natija?id=lab-'), 'bot natija sahifasi havolasini yuboradi (G1)');
 });
 
 await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async () => {
@@ -821,6 +826,45 @@ await test('ulashish havolasi sessiyasiz ochiladi, buzuq va eskirgan token 404',
   const eskirgan = createShareToken('+998901234567', 'doc-meyor', -1);
   const old = await call(resultApi, `https://dimed.uz/api/result?t=${encodeURIComponent(eskirgan)}`);
   assert.equal(old.status, 404);
+});
+
+console.log('\nYangi natija haqida bot xabari (G1):');
+await test('birinchi ishga tushish tarixni jimgina belgilaydi', async () => {
+  telegramCalls.length = 0;
+  const res = await call(notifyResults, 'https://dimed.uz/api/notify-results', { method: 'POST' });
+  assert.equal(res.status, 200);
+  const user = tableOf('test_users').get('777');
+  assert.ok(Array.isArray(user.results_notified), 'ro\'yxat yaratilishi kerak');
+  assert.ok(user.results_notified.includes('doc-uuid-1'));
+  assert.ok(!user.results_notified.includes('doc-kutish'), 'kutilayotgan natija belgilanmaydi');
+  assert.equal(telegramCalls.filter((c) => c.body.chat_id === '777').length, 0, 'tarix uchun xabar yo\'q');
+});
+
+await test('yangi tayyor natija tushganda havola bilan xabar ketadi, takrorlanmaydi', async () => {
+  telegramCalls.length = 0;
+  await call(notifyResults, 'https://dimed.uz/api/notify-results', { method: 'POST' });
+  assert.equal(telegramCalls.filter((c) => c.body.chat_id === '777').length, 0, 'yangisi yo\'q — xabar yo\'q');
+
+  seed('test_analysis_results', '+998901234567|doc-yangi', {
+    phone: '+998901234567', sort_key: 'doc-yangi', Date: '09.03.2026 10:15:00',
+    AnalysisName: 'Umumiy siydik tahlili',
+    AnalysisResults: [{ Analyte: 'Oqsil', Result: 'manfiy' }],
+  });
+  await call(notifyResults, 'https://dimed.uz/api/notify-results', { method: 'POST' });
+  const xabar = telegramCalls.find((c) => c.body.chat_id === '777');
+  assert.ok(xabar, 'bemorga xabar ketishi kerak');
+  assert.ok(xabar.body.text.includes('Tahlil natijangiz tayyor'));
+  assert.ok(xabar.body.text.includes('Umumiy siydik tahlili'));
+  assert.ok(xabar.body.text.includes('09.03.2026'));
+  assert.ok(xabar.body.text.includes('https://dimed.uz/natija?t='), 'natija sahifasi havolasi');
+
+  const token = xabar.body.text.match(/natija\?t=([^\s]+)/)[1];
+  const open = await call(resultApi, `https://dimed.uz/api/result?t=${encodeURIComponent(token)}`);
+  assert.equal(open.status, 200, 'havola sessiyasiz ochiladi');
+
+  telegramCalls.length = 0;
+  await call(notifyResults, 'https://dimed.uz/api/notify-results', { method: 'POST' });
+  assert.equal(telegramCalls.filter((c) => c.body.chat_id === '777').length, 0, 'ikkinchi marta yuborilmaydi');
 });
 
 console.log('\nBemorni tanlash (bir telefon — bir oila):');
