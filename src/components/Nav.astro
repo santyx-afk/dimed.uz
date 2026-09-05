@@ -10,33 +10,96 @@ const links = [
 ];
 ---
 
-<nav class="nav wrap">
-  <div class="nav-in glass">
-    <a class="nav-logo" href="/" aria-label="Dimed bosh sahifa">
-      <Logo height={26} label="Dimed logotipi" />
-    </a>
-    <div class="nav-links">
-      {links.map((l) => <a href={l.href}>{l.label}</a>)}
+<!--
+  Header ikki qatlamli: tashqi `.nav-bar` butun kenglikda yopishqoq turadi
+  va orqasidagi kontentni yopadigan fon beradi; ichidagi `.nav-in` esa
+  odatdagi shisha kartochka. Avval faqat kartochka bor edi — uning
+  atrofidagi 12px bo'shliqdan sarlavhalar ko'rinib qolardi.
+-->
+<header class="nav-bar" id="siteHeader">
+  <nav class="nav wrap" aria-label="Asosiy navigatsiya">
+    <div class="nav-in glass">
+      <a class="nav-logo" href="/" aria-label="Dimed bosh sahifa">
+        <Logo height={26} label="Dimed logotipi" />
+      </a>
+      <div class="nav-links">
+        {links.map((l) => <a href={l.href}>{l.label}</a>)}
+      </div>
+      <div class="nav-cta">
+        <a class="btn btn-ghost btn-sm nav-kabinet" href="/kabinet" data-kabinet>Kabinet</a>
+        <a class="btn btn-sm nav-book" href="/#navbat-widget">Navbat olish</a>
+        <button
+          class="burger"
+          id="navBurger"
+          type="button"
+          aria-label="Menyuni ochish"
+          aria-expanded="false"
+          aria-controls="navMenu"
+        >
+          <span></span><span></span><span></span>
+        </button>
+      </div>
     </div>
-    <div class="nav-cta">
-      <a class="btn btn-ghost btn-sm" href="/kabinet">Kabinet</a>
-      <a class="btn btn-sm" href="/#navbat-widget">Navbat olish</a>
+
+    <!-- Mobil menyu: burger ostida ochiladi. Kabinet tugmasi bu yerga kirmaydi — u headerda doim ko'rinadi. -->
+    <div class="nav-menu glass" id="navMenu" hidden>
+      {links.map((l) => <a class="nav-menu-link" href={l.href}>{l.label}</a>)}
+      <a class="btn nav-menu-book" href="/#navbat-widget">Navbat olish</a>
     </div>
-  </div>
-</nav>
+  </nav>
+</header>
+
+<script>
+  const header = document.getElementById('siteHeader');
+  const burger = document.getElementById('navBurger') as HTMLButtonElement | null;
+  const menu = document.getElementById('navMenu');
+
+  if (header && burger && menu) {
+    const setOpen = (open: boolean) => {
+      menu.hidden = !open;
+      header.classList.toggle('open', open);
+      burger.setAttribute('aria-expanded', String(open));
+      burger.setAttribute('aria-label', open ? 'Menyuni yopish' : 'Menyuni ochish');
+    };
+
+    burger.addEventListener('click', () => setOpen(menu.hidden));
+
+    // Havola bosilganda, tashqariga bosilganda yoki Esc'da yopiladi.
+    menu.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('a')) setOpen(false);
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.hidden && !header.contains(e.target as Node)) setOpen(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !menu.hidden) {
+        setOpen(false);
+        burger.focus();
+      }
+    });
+    // Desktop kenglikka o'tilsa ochiq menyu qolib ketmasin.
+    window.matchMedia('(min-width: 901px)').addEventListener('change', (e) => {
+      if (e.matches) setOpen(false);
+    });
+  }
+</script>
 
 <style>
-  .nav {
+  .nav-bar {
     position: sticky;
     top: 0;
     z-index: 50;
-    padding: 12px 0;
+  }
+
+  .nav {
+    position: relative;
+    padding: 12px 24px;
   }
 
   .nav-in {
     display: flex;
     align-items: center;
-    gap: 26px;
+    gap: 24px;
     border-radius: 16px;
     padding: 10px 18px;
   }
@@ -68,23 +131,119 @@ const links = [
 
   .nav-cta {
     display: flex;
-    gap: 9px;
+    align-items: center;
+    gap: 8px;
     margin-left: auto;
-  }
-
-  @media (max-width: 460px) {
-    .nav-cta .btn-ghost {
-      display: none;
-    }
   }
 
   .nav-links + .nav-cta {
     margin-left: 0;
   }
 
+  /* --- burger --- */
+  .burger {
+    display: none;
+    width: 40px;
+    height: 36px;
+    border: 1.5px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    padding: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .burger span {
+    display: block;
+    width: 16px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--ink);
+    transition:
+      transform 0.2s,
+      opacity 0.2s;
+  }
+
+  .burger:focus-visible {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
+  }
+
+  .open .burger span:nth-child(1) {
+    transform: translateY(6px) rotate(45deg);
+  }
+
+  .open .burger span:nth-child(2) {
+    opacity: 0;
+  }
+
+  .open .burger span:nth-child(3) {
+    transform: translateY(-6px) rotate(-45deg);
+  }
+
+  .nav-menu {
+    position: absolute;
+    left: 24px;
+    right: 24px;
+    top: calc(100% - 4px);
+    border-radius: 16px;
+    padding: 8px;
+    /* Shisha emas, deyarli yaxlit fon: ostidagi matn menyu orqali o'qilmasin. */
+    background: color-mix(in srgb, var(--card-solid) 96%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .nav-menu[hidden] {
+    display: none;
+  }
+
+  .nav-menu-link {
+    padding: 12px 14px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--ink);
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .nav-menu-link:hover,
+  .nav-menu-link:focus-visible {
+    background: var(--rose-soft);
+    color: var(--rose);
+  }
+
+  .nav-menu-book {
+    margin: 6px 6px 4px;
+  }
+
   @media (max-width: 900px) {
-    .nav-links {
+    .nav-links,
+    .nav-book {
       display: none;
+    }
+
+    .burger {
+      display: flex;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .nav {
+      padding: 8px 16px;
+    }
+
+    .nav-in {
+      padding: 8px 12px;
+      gap: 12px;
+    }
+
+    .nav-menu {
+      left: 16px;
+      right: 16px;
     }
   }
 </style>
