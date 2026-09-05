@@ -1,0 +1,184 @@
+---
+import { site } from '../data/site';
+import { t, type Lang } from '../data/i18n';
+
+/*
+  Kirish talab qilinadigan sahifalarning mehmon holati.
+
+  Avval har sahifada bitta quruq qator va tugma turardi: kirmagan
+  odam nima uchun kirishi kerakligini va u yerda nima ko'rishini
+  bilmasdi. Endi hamma joyda bir xil, o'zini tushuntiradigan panel.
+
+  `what` — shu sahifada nima ochilishi (har sahifa o'ziniki beradi).
+  `next` — kirgandan keyin qaytiladigan manzil.
+  `role` — 'guest': kirish kerak; 'doctor'/'admin': kirgan, lekin
+  huquqi yo'q (bunda kirish tugmasi o'rniga izoh ko'rsatiladi).
+*/
+interface Props {
+  what: string;
+  next: string;
+  lang?: Lang;
+  id?: string;
+  hidden?: boolean;
+}
+
+const { what, next, lang = 'uz', id = 'guest', hidden = false } = Astro.props;
+const tr = (key: Parameters<typeof t>[0]) => t(key, lang);
+---
+
+<div class="signin" id={id} hidden={hidden}>
+  <div class="signin-card glass">
+    <div class="signin-ic" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="10" width="16" height="10" rx="2.5"></rect>
+        <path d="M8 10V7.5a4 4 0 0 1 8 0V10"></path>
+        <circle cx="12" cy="15" r="1.4"></circle>
+      </svg>
+    </div>
+
+    <h2>{tr('signin.title')}</h2>
+    <p class="signin-what" data-signin-what>{what}</p>
+    <p class="signin-lede">{tr('signin.lede')}</p>
+
+    <ol class="signin-steps">
+      <li>{tr('signin.step1')}</li>
+      <li>{tr('signin.step2')}</li>
+    </ol>
+
+    <div class="signin-btns">
+      <a class="btn" href={`/kirish?next=${next}`}>{tr('signin.button')}</a>
+      <a class="btn btn-ghost tg" href={site.telegramBot} target="_blank" rel="noopener">{tr('signin.bot')}</a>
+    </div>
+
+    <p class="signin-note" data-signin-note hidden></p>
+  </div>
+</div>
+
+<style>
+  .signin {
+    display: flex;
+    justify-content: center;
+    padding: 32px 0 48px;
+  }
+
+  .signin-card {
+    border-radius: 24px;
+    padding: 32px;
+    max-width: 480px;
+    width: 100%;
+    text-align: center;
+  }
+
+  .signin-ic {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 16px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--rose);
+    background: var(--rose-soft);
+  }
+
+  .signin-ic svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 750;
+  }
+
+  .signin-what {
+    margin-top: 8px;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--rose);
+    line-height: 1.5;
+  }
+
+  .signin-lede {
+    margin-top: 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--muted);
+  }
+
+  .signin-steps {
+    margin: 24px 0 0;
+    padding: 16px;
+    list-style: none;
+    counter-reset: signin-step;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 16px;
+    text-align: left;
+  }
+
+  .signin-steps li {
+    counter-increment: signin-step;
+    position: relative;
+    padding-left: 32px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+
+  .signin-steps li + li {
+    margin-top: 8px;
+  }
+
+  .signin-steps li::before {
+    content: counter(signin-step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    background: var(--rose-soft);
+    color: var(--rose);
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .signin-btns {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 24px;
+  }
+
+  .signin-btns .tg {
+    border-color: var(--color-tg, #2aabee);
+    color: var(--color-tg, #2aabee);
+  }
+
+  /* Kirgan, lekin huquqi yo'q (403) — kirish tugmalari o'rniga izoh */
+  .signin-note {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 16px;
+    background: var(--warn-bg);
+    color: var(--warn);
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 600px) {
+    .signin {
+      padding: 16px 0 32px;
+    }
+
+    .signin-card {
+      padding: 24px;
+    }
+  }
+</style>
