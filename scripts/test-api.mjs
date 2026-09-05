@@ -67,6 +67,7 @@ const patientsApi = await load('patients.ts');
 const sessionApi = await load('session.ts');
 const settingsApi = await load('settings.ts');
 const resultApi = await load('result.ts');
+const appointmentStatus = await load('appointment-status.ts');
 const notifyResults = await load('notify-results.ts');
 const { createShareToken } = await import(pathToFileURL(join(fnDir, 'lib', 'share.ts')).href);
 
@@ -1052,6 +1053,10 @@ await test('shifokor kelgusi kun navbatini ?date bilan ko\'radi', async () => {
   assert.equal(data.date, BOOK_DATE);
   assert.ok(data.appointments.length >= 1, 'kelgusi kunning navbati ko\'rinishi kerak');
   assert.ok(data.appointments[0].phone.includes('•'), 'telefon niqoblangan bo\'lishi kerak');
+  assert.equal(data.appointments[0].patientName, 'Azizova');
+  assert.equal(data.appointments[0].patientBirthDate, '1990-04-25', 'shifokor bemor yoshini ko\'radi');
+  assert.equal(data.dayOff, false);
+  assert.equal(data.isWorkday, true);
 
   const bad = await call(doctorSchedule, 'https://dimed.uz/api/doctor-schedule?date=21-08-2026', {
     headers: { cookie: doctorCookie },
@@ -1072,6 +1077,56 @@ await test('shifokor smenalari va slot davomiyligini o\'zgartiradi', async () =>
   const doctor = tableOf('test_doctors').get('ashurov');
   assert.equal(doctor.slot_minutes, 30);
   assert.equal(doctor.shifts[0].start, '09:00');
+});
+
+await test('shifokor navbatni "qabul qilindi" / "kelmadi" deb belgilaydi (E2)', async () => {
+  const bemor = await call(appointmentStatus, 'https://dimed.uz/api/appointment-status', {
+    ...jsonBody({ date: BOOK_DATE, time: '09:00', status: 'done' }),
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+  });
+  assert.equal(bemor.status, 403, 'bemor belgilay olmaydi');
+
+  const yomon = await call(appointmentStatus, 'https://dimed.uz/api/appointment-status', {
+    ...jsonBody({ date: BOOK_DATE, time: '09:00', status: 'keldi' }),
+    headers: { 'content-type': 'application/json', cookie: doctorCookie },
+  });
+  assert.equal(yomon.status, 400);
+
+  const yoq = await call(appointmentStatus, 'https://dimed.uz/api/appointment-status', {
+    ...jsonBody({ date: BOOK_DATE, time: '15:00', status: 'done' }),
+    headers: { 'content-type': 'application/json', cookie: doctorCookie },
+  });
+  assert.equal(yoq.status, 404, 'bo\'sh slotni belgilab bo\'lmaydi');
+
+  const res = await call(appointmentStatus, 'https://dimed.uz/api/appointment-status', {
+    ...jsonBody({ date: BOOK_DATE, time: '09:00', status: 'no_show' }),
+    headers: { 'content-type': 'application/json', cookie: doctorCookie },
+  });
+  assert.equal(res.status, 200);
+  const appt = tableOf('test_appointments').get(`ashurov#${BOOK_DATE}|09:00`);
+  assert.equal(appt.status, 'no_show');
+  assert.ok(appt.marked_at);
+
+  // Tuzatish: kelmadi → qabul qilindi
+  const fix = await call(appointmentStatus, 'https://dimed.uz/api/appointment-status', {
+    ...jsonBody({ date: BOOK_DATE, time: '09:00', status: 'done' }),
+    headers: { 'content-type': 'application/json', cookie: doctorCookie },
+  });
+  assert.equal(fix.status, 200);
+  assert.equal(tableOf('test_appointments').get(`ashurov#${BOOK_DATE}|09:00`).status, 'done');
+
+  // Bemor kabinetida ham ko'rinadi, navbat ro'yxatida ham qoladi.
+  const cabinet = await (await call(me, 'https://dimed.uz/api/me?include=appointments', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  assert.equal(cabinet.appointments.find((a) => a.time === '09:00' && a.date === BOOK_DATE).status, 'done');
+  const queue = await (await call(doctorSchedule, `https://dimed.uz/api/doctor-schedule?date=${BOOK_DATE}`, {
+    headers: { cookie: doctorCookie },
+  })).json();
+  assert.equal(queue.appointments.find((a) => a.time === '09:00').status, 'done');
+
+  // Keyingi testlar (ko'chirish) kuchdagi bronga tayanadi — qaytaramiz.
+  seed('test_appointments', `ashurov#${BOOK_DATE}|09:00`, { ...appt, status: 'booked' });
 });
 
 await test('ustma-ust smenalar rad etiladi', async () => {
@@ -1293,7 +1348,7 @@ await test('yopilgan kunda slot qolmaydi', async () => {
   assert.equal(data.slots.length, 0);
 });
 
-await test('dam olish kuni belgilansa slot qolmaydi', async () => {
+await test('dam olish kuni belgilansa slot qolmaydi, kabinet buni ko\'rsatadi', async () => {
   const res = await call(doctorSchedule, 'https://dimed.uz/api/doctor-schedule', {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie: doctorCookie },
@@ -1303,6 +1358,25 @@ await test('dam olish kuni belgilansa slot qolmaydi', async () => {
 
   const after = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${BOOK_DATE}`)).json();
   assert.equal(after.slots.length, 0);
+
+  const day = await (await call(doctorSchedule, `https://dimed.uz/api/doctor-schedule?date=${BOOK_DATE}`, {
+    headers: { cookie: doctorCookie },
+  })).json();
+  assert.equal(day.dayOff, true, 'kabinet kun yopiqligini bilishi kerak');
+  assert.deepEqual(day.slots, []);
+
+  // Kunni qayta ochish — slotlar qaytadi.
+  const open = await call(doctorSchedule, 'https://dimed.uz/api/doctor-schedule', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: doctorCookie },
+    body: JSON.stringify({ date: BOOK_DATE, dayOff: false }),
+  });
+  assert.equal(open.status, 200);
+  const reopened = await (await call(doctorSchedule, `https://dimed.uz/api/doctor-schedule?date=${BOOK_DATE}`, {
+    headers: { cookie: doctorCookie },
+  })).json();
+  assert.equal(reopened.dayOff, false);
+  assert.ok(reopened.slots.length > 0, 'qayta ochilgach slotlar ko\'rinadi');
 });
 
 // ================= Admin panel =================

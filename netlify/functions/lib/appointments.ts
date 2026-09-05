@@ -9,8 +9,10 @@ export type AppointmentStatus =
   | 'paid'
   /** klinikada to'lash — bron darhol kuchga kiradi */
   | 'booked'
-  /** qabul bo'lib o'tdi */
+  /** qabul bo'lib o'tdi (shifokor belgiladi yoki vaqti o'tdi) */
   | 'done'
+  /** bemor kelmadi (shifokor belgiladi) */
+  | 'no_show'
   /** bemor boshqa vaqtga ko'chirdi */
   | 'moved'
   | 'cancelled'
@@ -45,6 +47,8 @@ export type Appointment = {
   privacy_accepted_at?: string;
   /** eslatma yuborilgan lahza — takror yuborilmasligi uchun */
   reminded_at?: string;
+  /** shifokor done / no_show deb belgilagan lahza (E2) */
+  marked_at?: string;
   created_at: string;
 };
 
