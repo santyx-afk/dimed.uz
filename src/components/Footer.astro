@@ -8,7 +8,11 @@ const year = new Date().getFullYear();
 <footer class="wrap">
   <div class="foot-in">
     <Logo height={22} />
-    <p>© {year} Dimed klinikasi · {site.address}</p>
+    <p>
+      © {year} Dimed klinikasi · {site.address}
+      <span class="sep" aria-hidden="true">·</span>
+      <a class="foot-link" href="/maxfiylik">Maxfiylik siyosati</a>
+    </p>
     <div class="foot-soc">
       <a href={site.telegramBot} target="_blank" rel="noopener" aria-label="Telegram">
         <svg viewBox="0 0 24 24" aria-hidden="true"
@@ -53,6 +57,20 @@ const year = new Date().getFullYear();
   .foot-in p {
     font-size: 13px;
     color: var(--muted);
+  }
+
+  .sep {
+    margin: 0 6px;
+  }
+
+  .foot-link {
+    color: var(--muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .foot-link:hover {
+    color: var(--rose);
   }
 
   .foot-soc {
