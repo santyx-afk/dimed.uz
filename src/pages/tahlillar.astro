@@ -15,13 +15,20 @@ for (const a of analyses) {
   description={`Dimed klinikasi laboratoriyasida ${analyses.length} ta tahlil turi. Narxlar, guruhlar va natija tayyor bo'lish muddati.`}
 >
   <section class="wrap page">
-    <div class="sec-head">
-      <div class="eyebrow">Laboratoriya</div>
-      <h2>Tahlillar va narxlar</h2>
-      <p>
-        Jami {analyses.length} ta tahlil. Koʻpchilik natijalar 30–60 daqiqada tayyor va shaxsiy
-        kabinetingizga avtomatik tushadi — PDF va matn koʻrinishida.
-      </p>
+    <div class="head">
+      <div class="sec-head">
+        <div class="eyebrow">Laboratoriya</div>
+        <h2>Tahlillar va narxlar</h2>
+        <p>
+          Jami {analyses.length} ta tahlil. Koʻpchilik natijalar 30–60 daqiqada tayyor va shaxsiy
+          kabinetingizga avtomatik tushadi — PDF va matn koʻrinishida.
+        </p>
+      </div>
+      <!-- Kirgan bemor → Tahlillarim; kirmagan → kirish, keyin Tahlillarim (C3) -->
+      <a class="btn mine" href="/kabinet/tahlillar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6v5.5l4.5 8A2 2 0 0 1 17.8 20H6.2a2 2 0 0 1-1.7-3.5L9 8.5V3z"/><path d="M8 3h8"/></svg>
+        Mening tahlillarim
+      </a>
     </div>
 
     {
@@ -64,6 +71,26 @@ for (const a of analyses) {
 <style>
   .page {
     padding: 48px 0 64px;
+  }
+
+  .head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .mine svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  @media (max-width: 600px) {
+    .mine {
+      width: 100%;
+      margin-bottom: 24px;
+    }
   }
 
   .group {
