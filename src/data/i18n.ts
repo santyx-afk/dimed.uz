@@ -182,6 +182,9 @@ export const messages = {
     ru: 'Чтобы посмотреть результат, войдите через Telegram.',
     en: 'Sign in via Telegram to view the result.',
   },
+
+  // --- shifokor kartasi: bemor baholari (G2) ---
+  'doctor.rating': { uz: '★ {avg} · {n} ta baho', ru: '★ {avg} · {n} оцен.', en: '★ {avg} · {n} ratings' },
 } satisfies Record<string, Entry>;
 
 export type MessageKey = keyof typeof messages;

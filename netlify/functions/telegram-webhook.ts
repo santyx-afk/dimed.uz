@@ -5,6 +5,7 @@ import { required } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { generateOtp } from './lib/session.ts';
 import { mergeIndividualProfile } from './lib/patients.ts';
+import { handleRatingCallback, handleRatingComment, type CallbackQuery } from './lib/ratings.ts';
 import { json, normalizePhone } from './lib/http.ts';
 
 const OTP_TTL_SECONDS = 5 * 60;
@@ -12,7 +13,7 @@ const OTP_TTL_SECONDS = 5 * 60;
 type TelegramUpdate = {
   message?: {
     chat: { id: number };
-    from?: { id: number; first_name?: string };
+    from?: { id: number; first_name?: string; language_code?: string };
     text?: string;
     contact?: {
       phone_number: string;
@@ -21,6 +22,8 @@ type TelegramUpdate = {
       last_name?: string;
     };
   };
+  /** Inline tugma bosildi — baho (G2). */
+  callback_query?: CallbackQuery;
 };
 
 const shareContactKeyboard = {
@@ -54,6 +57,15 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     update = (await request.json()) as TelegramUpdate;
   } catch {
     return json({ error: 'JSON o‘qib bo‘lmadi' }, 400);
+  }
+
+  if (update.callback_query) {
+    try {
+      await handleRatingCallback(update.callback_query);
+    } catch (err) {
+      await logToAdmin('telegram-webhook/baho', err);
+    }
+    return json({ ok: true });
   }
 
   const message = update.message;
@@ -91,6 +103,14 @@ export default async (request: Request, _context: Context): Promise<Response> =>
         message.chat.id,
         'Buyruqlar:\n/start — kirish kodini olish\n\n' +
           'Savollar uchun: +998 55 9009 103',
+      );
+    } else if (message.text && !message.text.startsWith('/')) {
+      // Baho qo'yilgach yozilgan matn — o'sha bahoga izoh (G2).
+      await handleRatingComment(
+        message.chat.id,
+        String(message.from?.id ?? message.chat.id),
+        message.text,
+        message.from?.language_code,
       );
     }
   } catch (err) {

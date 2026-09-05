@@ -139,6 +139,7 @@ const featuredAnalyses = featured
             <div class="meta">
               {d.experience && <span class="m-chip exp">{d.experience} tajriba</span>}
               <span class="m-chip">{d.hours}</span>
+              <span class="m-chip rating" data-doc-rating hidden></span>
             </div>
             <div class="foot">
               <span class="slotlen">
@@ -643,6 +644,13 @@ const featuredAnalyses = featured
   .doc-card .m-chip.exp {
     color: var(--leaf);
     background: var(--leaf-soft);
+    border-color: transparent;
+  }
+
+  /* Bemor baholari — /api/doctors kelgach to'ldiriladi (G2) */
+  .doc-card .m-chip.rating {
+    color: var(--warn);
+    background: var(--warn-bg);
     border-color: transparent;
   }
 

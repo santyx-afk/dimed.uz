@@ -20,6 +20,7 @@ const keySchema = {
   test_payments: ['payment_id'],
   test_lab_results: ['phone', 'sort_key'],
   test_prices: ['item_id'],
+  test_ratings: ['doctor_id', 'created_at'],
 };
 for (const t of Object.keys(keySchema)) tables.set(t, new Map());
 
@@ -105,6 +106,18 @@ function splitTop(text) {
   return parts.map((p) => p.trim()).filter(Boolean);
 }
 
+/** Qavs tashqarisidagi birinchi + yoki - belgisining o'rni. */
+function topLevelOperator(text) {
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '(') depth++;
+    else if (c === ')') depth--;
+    else if (depth === 0 && (c === '+' || c === '-')) return { at: i, sign: c };
+  }
+  return null;
+}
+
 /**
  * SET o'ng tomonidagi ifoda: qiymat, maydon yoki funksiya.
  * DynamoDB'da ishlatadiganlarimiz — list_append va if_not_exists.
@@ -112,6 +125,14 @@ function splitTop(text) {
 function evalValue(expr, item, names, values) {
   const t = expr.trim();
   if (t.startsWith(':')) return values[t];
+
+  // Yig'indilar: `if_not_exists(rating_sum, :z) + :n` — qavs tashqarisidagi + / -.
+  const op = topLevelOperator(t);
+  if (op) {
+    const a = Number(evalValue(t.slice(0, op.at), item, names, values) ?? 0);
+    const b = Number(evalValue(t.slice(op.at + 1), item, names, values) ?? 0);
+    return op.sign === '+' ? a + b : a - b;
+  }
 
   let m = t.match(/^list_append\((.+)\)$/s);
   if (m) {
@@ -207,7 +228,11 @@ const server = createServer((req, res) => {
       if (!evalCondition(payload.ConditionExpression, existing, names, values)) {
         return fail('ConditionalCheckFailedException');
       }
-      store.set(id, applyUpdate(existing ?? key, payload.UpdateExpression, names, values));
+      const updated = applyUpdate(existing ?? key, payload.UpdateExpression, names, values);
+      store.set(id, updated);
+      if (payload.ReturnValues === 'ALL_NEW') {
+        return send({ Attributes: Object.fromEntries(Object.entries(updated).map(([k, v]) => [k, marshal(v)])) });
+      }
       return send({});
     }
 

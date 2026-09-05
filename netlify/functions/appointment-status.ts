@@ -5,6 +5,8 @@ import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, doctorFor } from './lib/auth.ts';
 import { doctorDayKey } from './lib/slots.ts';
 import { isDateKey, isTime } from './lib/time.ts';
+import type { Appointment } from './lib/appointments.ts';
+import { askRating } from './lib/ratings.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
@@ -14,8 +16,8 @@ import { json, error } from './lib/http.ts';
  *
  * Faqat o'z navbati; faqat kuchdagi (paid/booked) yoki avval
  * belgilangan (done/no_show — tuzatish uchun) yozuv. Belgilangan lahza
- * `marked_at` da qoladi; baho so'rovi (G2) `done` ga tayanadi,
- * `no_show` bo'lsa baho so'ralmaydi.
+ * `marked_at` da qoladi. `done` bo'lsa bemordan darhol baho so'raladi
+ * (G2, bir marta); `no_show` bo'lsa so'ralmaydi.
  */
 type Body = { date?: string; time?: string; status?: string };
 
@@ -39,8 +41,9 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     }
 
     const now = new Date().toISOString();
+    let updated: Appointment | undefined;
     try {
-      await db.send(
+      const res = await db.send(
         new UpdateCommand({
           TableName: TABLES.appointments,
           Key: { doctor_day: doctorDayKey(doctor.doctor_id, date), time },
@@ -56,8 +59,10 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             ':done': 'done',
             ':noShow': 'no_show',
           },
+          ReturnValues: 'ALL_NEW',
         }),
       );
+      updated = res.Attributes as Appointment | undefined;
     } catch (err) {
       if (err instanceof ConditionalCheckFailedException) {
         return error('Bunday navbat yo‘q yoki uni belgilab bo‘lmaydi', 404);
@@ -65,7 +70,16 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       throw err;
     }
 
-    return json({ ok: true, date, time, status });
+    // Baho so'rovi ketmasa ham belgilash muvaffaqiyatli — xato faqat logga.
+    let ratingAsked = false;
+    if (status === 'done' && updated) {
+      ratingAsked = await askRating(updated, doctor).catch(async (err) => {
+        await logToAdmin('appointment-status/baho', err);
+        return false;
+      });
+    }
+
+    return json({ ok: true, date, time, status, ratingAsked });
   } catch (err) {
     await logToAdmin('appointment-status', err);
     return error('Navbatni belgilashda xatolik', 500);

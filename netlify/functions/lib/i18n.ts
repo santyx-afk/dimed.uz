@@ -48,6 +48,12 @@ const messages = {
     en: 'Your comment has been saved. Thank you! 🙏',
   },
   'rate.skip': { uz: 'Izohsiz', ru: 'Без комментария', en: 'Skip' },
+  'rate.comment.skipped': {
+    uz: 'Rahmat! Fikringiz biz uchun muhim. 🙏',
+    ru: 'Спасибо! Ваше мнение важно для нас. 🙏',
+    en: 'Thank you! Your feedback matters to us. 🙏',
+  },
+  'rate.saved.short': { uz: 'Bahoyingiz qabul qilindi', ru: 'Оценка принята', en: 'Rating saved' },
   'rate.expired': {
     uz: 'Bu baho so‘rovi eskirgan yoki allaqachon baholangan.',
     ru: 'Этот запрос оценки устарел или уже оценён.',

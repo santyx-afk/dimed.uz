@@ -221,7 +221,9 @@ const widgetData = JSON.stringify({ departments, doctors });
             (d) => `<button class="doc-btn" data-id="${d.id}">
               <img src="${d.photo}" alt="" width="42" height="42" loading="lazy">
               <span><span class="nm">${d.name}</span><br><span class="jb">${d.job}</span></span>
-              <span class="slot-tag">${d.slotMinutes} daq</span>
+              <span class="tags">${
+                d.ratingCount ? `<span class="rate-tag" title="${d.ratingCount} ta baho">★ ${d.ratingAvg}</span>` : ''
+              }<span class="slot-tag">${d.slotMinutes} daq</span></span>
             </button>`,
           )
           .join('') +
@@ -689,6 +691,14 @@ const widgetData = JSON.stringify({ departments, doctors });
           card.hidden = !liveIds.has(card.dataset.docCard);
         });
 
+        // Bemor baholari (G2): o'rtacha va soni shifokor kartasida.
+        docs.forEach((d) => {
+          const chip = document.querySelector(`[data-doc-card="${d.id}"] [data-doc-rating]`);
+          if (!chip) return;
+          chip.hidden = !d.ratingCount;
+          if (d.ratingCount) chip.textContent = tr('doctor.rating', { avg: d.ratingAvg, n: d.ratingCount });
+        });
+
         // Shifokori qolmagan bo'lim: son o'rniga izoh, tugma o'chiq.
         document.querySelectorAll('[data-dept-cnt]').forEach((el) => {
           const n = docs.filter((d) => d.deptId === el.dataset.deptCnt).length;
@@ -961,8 +971,25 @@ const widgetData = JSON.stringify({ departments, doctors });
     color: var(--muted);
   }
 
-  .widget :global(.doc-btn .slot-tag) {
+  .widget :global(.doc-btn .tags) {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .widget :global(.doc-btn .rate-tag) {
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--warn);
+    background: var(--warn-bg);
+    border-radius: 999px;
+    padding: 4px 8px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.doc-btn .slot-tag) {
     font-size: 11px;
     font-weight: 650;
     color: var(--leaf);

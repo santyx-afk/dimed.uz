@@ -1,7 +1,11 @@
 import { required, optional } from './env.ts';
 
-type ReplyMarkup = {
+export type InlineButton = { text: string; callback_data: string };
+
+export type ReplyMarkup = {
   keyboard?: { text: string; request_contact?: boolean }[][];
+  /** Xabar ostidagi tugmalar — bosilsa `callback_query` keladi (baho so'rovi, G2). */
+  inline_keyboard?: InlineButton[][];
   resize_keyboard?: boolean;
   one_time_keyboard?: boolean;
   remove_keyboard?: boolean;
@@ -30,6 +34,39 @@ export async function sendMessage(
 
   if (!res.ok) {
     throw new Error(`Telegram sendMessage muvaffaqiyatsiz (${res.status}): ${await res.text()}`);
+  }
+}
+
+/**
+ * Inline tugma bosilganiga javob: Telegram tugma ustidagi "soat"ni
+ * to'xtatadi, `text` bo'lsa kichik bildirishnoma ko'rsatadi.
+ * Javob kechiksa Telegram uni rad etadi — bu asosiy ishni buzmasin.
+ */
+export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+  try {
+    await callBot(required('TELEGRAM_BOT_TOKEN'), 'answerCallbackQuery', {
+      callback_query_id: callbackQueryId,
+      text,
+    });
+  } catch (err) {
+    console.error('[answerCallbackQuery]', err);
+  }
+}
+
+/** Yuborilgan xabar ostidagi tugmalarni almashtiradi (yoki olib tashlaydi). */
+export async function editMessageReplyMarkup(
+  chatId: number | string,
+  messageId: number,
+  replyMarkup?: ReplyMarkup,
+): Promise<void> {
+  try {
+    await callBot(required('TELEGRAM_BOT_TOKEN'), 'editMessageReplyMarkup', {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: replyMarkup ?? { inline_keyboard: [] },
+    });
+  } catch (err) {
+    console.error('[editMessageReplyMarkup]', err);
   }
 }
 

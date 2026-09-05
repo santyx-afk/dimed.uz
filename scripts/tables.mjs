@@ -101,4 +101,12 @@ export const tables = [
     attrs: [S('item_id')],
     keys: [HASH('item_id')],
   },
+  {
+    // Bemor baholari (G2/F3): PK shifokor, SK baho qo'yilgan lahza (ISO).
+    // O'rtacha baho va soni doctors jadvalida (rating_sum, rating_count)
+    // yig'ilib turadi — sayt kartasi shu yerdan o'qiydi.
+    name: 'ratings',
+    attrs: [S('doctor_id'), S('created_at')],
+    keys: [HASH('doctor_id'), RANGE('created_at')],
+  },
 ];

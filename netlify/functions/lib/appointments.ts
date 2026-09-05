@@ -49,6 +49,11 @@ export type Appointment = {
   reminded_at?: string;
   /** shifokor done / no_show deb belgilagan lahza (E2) */
   marked_at?: string;
+  /** bemordan baho so'ralgan lahza (G2) — bir marta so'raladi */
+  rating_asked_at?: string;
+  /** bemor qo'ygan baho 1–5 va lahzasi (G2) */
+  rating?: number;
+  rated_at?: string;
   created_at: string;
 };
 
