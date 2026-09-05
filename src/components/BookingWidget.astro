@@ -26,7 +26,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     <button class="step-pill" data-step="2" disabled><span class="n">2</span><span class="lbl">Shifokor</span></button>
     <button class="step-pill" data-step="3" disabled><span class="n">3</span><span class="lbl">Vaqt</span></button>
     <button class="step-pill" data-step="4" disabled><span class="n">4</span><span class="lbl">Bemor</span></button>
-    <button class="step-pill" data-step="5" disabled><span class="n">5</span><span class="lbl">Toʻlov</span></button>
+    <button class="step-pill" data-step="5" disabled><span class="n">5</span><span class="lbl">Tasdiqlash</span></button>
   </div>
   <div id="wBody"></div>
 
@@ -531,19 +531,22 @@ const widgetData = JSON.stringify({ departments, doctors });
   function renderCheckout() {
     const d = state.doc;
 
+    // Narx faqat raqam (so'msiz) — "… X soʻm toʻlaysiz" matniga qo'yish uchun.
+    const priceNumber = d.price.toLocaleString('ru-RU').replace(/,/g, ' ');
+
     if (state.booked) {
       const b = state.booked;
       wBody.innerHTML = `<div class="success">
         <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></div>
-        <h4>Navbatingiz band qilindi!</h4>
-        <p>${b.mode === 'at_clinic' ? 'Toʻlov qabulxonada amalga oshiriladi.' : 'Toʻlov qabul qilindi.'}</p>
+        <h4>${esc(tr('booking.success.title'))}</h4>
+        <p>${b.mode === 'at_clinic' ? esc(tr('booking.confirm.payAtDesk', { price: priceNumber })) : 'Toʻlov qabul qilindi.'}</p>
         <div class="sum-card" style="margin-top:14px;text-align:left">
           ${state.patientName ? `<div class="sum-row"><span class="k">Bemor</span><span class="v">${esc(state.patientName)}</span></div>` : ''}
           <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
           <div class="sum-row"><span class="k">Sana · vaqt</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
-          <div class="sum-row total"><span class="k">Narx</span><span class="v">${fmtPrice(d.price)}</span></div>
+          <div class="sum-row total"><span class="k">${esc(tr('booking.confirm.price'))}</span><span class="v">${fmtPrice(d.price)}</span></div>
         </div>
-        <p class="pay-note">Tasdiq Telegram botga yuborildi. Qabulga 1 soat qolganda eslatma keladi.</p>
+        <p class="pay-note">${esc(tr('booking.success.telegram'))}</p>
         <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap">
           <a class="btn sm" href="/kabinet">Kabinetda koʻrish</a>
           <button class="btn btn-ghost btn-sm" id="resetBtn">Yana navbat olish</button>
@@ -556,7 +559,18 @@ const widgetData = JSON.stringify({ departments, doctors });
       return;
     }
 
-    wBody.innerHTML = `<div class="pane-label">Bron maʼlumotlari</div>
+    /*
+      Tasdiqlash qadami (B2): onlayn to'lov yo'q — narx katta ko'rsatiladi,
+      "qabulxona kassasiga to'laysiz" matni va Tasdiqlash tugmasi. Server
+      PAYMENT_ENABLED bilan onlayn rejimga o'tsa, javobdagi redirectUrl
+      quyida avvalgidek ishlaydi.
+    */
+    wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.confirm.title'))}</div>
+      <div class="price-box">
+        <div class="price-lab">${esc(tr('booking.confirm.price'))}</div>
+        <div class="price-big">${fmtPrice(d.price)}</div>
+        <div class="price-note">${esc(tr('booking.confirm.payAtDesk', { price: priceNumber }))}</div>
+      </div>
       <div class="sum-card">
         <div class="sum-row" id="whoRow" hidden><span class="k">Bemor</span>
           <span class="v"><b id="whoName"></b>
@@ -565,11 +579,10 @@ const widgetData = JSON.stringify({ departments, doctors });
         <div class="sum-row"><span class="k">Yoʻnalish</span><span class="v">${d.job}</span></div>
         <div class="sum-row"><span class="k">Sana</span><span class="v">${state.dateLabel}</span></div>
         <div class="sum-row"><span class="k">Vaqt</span><span class="v">${state.time} · ${d.slotMinutes} daqiqa</span></div>
-        <div class="sum-row total"><span class="k">Qabul narxi</span><span class="v">${fmtPrice(d.price)}</span></div>
       </div>
       <p class="book-msg" id="bookMsg" role="status" aria-live="polite"></p>
-      <button class="btn w-full" id="wBook">Navbatni band qilish</button>
-      <p class="pay-note">Band qilish uchun Telegram orqali kirgan boʻlishingiz kerak. Bekor qilish yoʻq — qabuldan 1 soat oldingacha vaqtni koʻchirish mumkin.</p>
+      <button class="btn w-full" id="wBook">${esc(tr('booking.confirm.button'))}</button>
+      <p class="pay-note">${esc(tr('booking.confirm.note'))}</p>
       <button class="back-link">← orqaga</button>`;
 
     wBody.querySelector('.back-link').addEventListener('click', () => setStep(4));
@@ -587,7 +600,7 @@ const widgetData = JSON.stringify({ departments, doctors });
 
     btn.addEventListener('click', async () => {
       btn.disabled = true;
-      msg.textContent = 'Band qilinmoqda…';
+      msg.textContent = tr('booking.confirm.working');
       msg.className = 'book-msg';
 
       try {
@@ -1114,6 +1127,40 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   .widget :global(.w-full) {
     width: 100%;
+  }
+
+  /* Tasdiqlash qadami: narx katta, to'lov kassada (B2) */
+  .widget :global(.price-box) {
+    text-align: center;
+    padding: 16px 12px;
+    margin-bottom: 12px;
+    border-radius: 14px;
+    background: var(--rose-soft);
+  }
+
+  .widget :global(.price-lab) {
+    font-size: 11.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+  }
+
+  .widget :global(.price-big) {
+    font-family: var(--font-display);
+    font-size: 34px;
+    font-weight: 800;
+    color: var(--rose);
+    line-height: 1.15;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.price-note) {
+    margin-top: 6px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
   }
 
   .widget :global(.pay-note) {

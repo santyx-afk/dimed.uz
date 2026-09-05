@@ -4,11 +4,11 @@ import { optional } from './env.ts';
 /**
  * To'lov tizimi adapteri — Payme (paycom.uz).
  *
- * Payme kassasi ulangunicha sayt "klinikada to'lash" rejimida ishlaydi:
- * slot band qilinadi, to'lov qabulxonada amalga oshiriladi. Kassa
- * ochilib PAYME_MERCHANT_ID olingach PAYME_ENABLED=1 qilinadi va bir
- * xil interfeys orqali onlayn to'lovga o'tiladi — bron mantig'i
- * o'zgarmaydi. Batafsil: docs/payme-integration.md
+ * Onlayn to'lov saytda ishlatilmaydi (B2): bemor navbatni band qiladi,
+ * to'lov qabulxona kassasida. Payme integratsiya kodi saqlangan, lekin
+ * global `PAYMENT_ENABLED` sozlamasi ortida o'chiq turadi (standart —
+ * o'chiq). Kelajakda qaytarish: PAYMENT_ENABLED=1 va Payme kalitlari —
+ * bron mantig'i o'zgarmaydi. Batafsil: docs/payme-integration.md
  */
 
 export type PaymentMode = 'online' | 'at_clinic';
@@ -20,8 +20,13 @@ export type PaymentIntent = {
   redirectUrl?: string;
 };
 
+/** Onlayn to'lov yoqilganmi (global sozlama, standart — yo'q). */
+export const paymentEnabled = (): boolean =>
+  // PAYME_ENABLED — eski nom, moslik uchun qoldirilgan.
+  optional('PAYMENT_ENABLED') === '1' || optional('PAYME_ENABLED') === '1';
+
 export const paymentMode = (): PaymentMode =>
-  optional('PAYME_ENABLED') === '1' && optional('PAYME_MERCHANT_ID') ? 'online' : 'at_clinic';
+  paymentEnabled() && optional('PAYME_MERCHANT_ID') ? 'online' : 'at_clinic';
 
 /** Payme summani tiyinda yuboradi va kutadi: 1 so'm = 100 tiyin. */
 export const toTiyin = (som: number): number => Math.round(som * 100);

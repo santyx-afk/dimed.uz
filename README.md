@@ -53,8 +53,8 @@ legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
 | `POST /api/logout` | Sessiyani tugatish | ✅ 2-hafta |
 | `POST /api/lc-results` | 1C dan tahlil natijalari | ✅ 1-hafta |
 | `GET /api/slots` | Bo'sh slotlar (shifokor + sana) | ✅ 2-hafta |
-| `POST /api/book` | Slotni atomik band qilish + to'lov | ✅ 2-hafta |
-| `POST /api/payment-webhook` | To'lov tasdig'i → bron yoki bo'shatish | ✅ 2-hafta |
+| `POST /api/book` | Slotni atomik band qilish (to'lov kassada) | ✅ 2-hafta |
+| `POST /api/payment-webhook` | Payme webhook (PAYMENT_ENABLED=1 bo'lsagina) | ⏸ o'chiq |
 | `GET /api/me` | Bemor: qabullari va tahlillari | ✅ 2-hafta |
 | `GET /api/result-file` | Tahlil PDF'iga vaqtinchalik havola | ✅ 2-hafta |
 | `GET,POST /api/doctor-schedule` | Shifokor: smenalar, slot davomiyligi, navbat | ✅ 2-hafta |
@@ -80,9 +80,9 @@ xulosa esa `schedules` dagi `summary_sent_at` bilan bir martaga bog'langan.
 - Qabul boshlanishiga **kamida 1 soat** qolgan bo'lishi kerak.
 - Slot DynamoDB shartli yozuvi bilan band qilinadi — ikki bemor bitta
   slotni ola olmaydi (ikkinchisiga 409 qaytadi).
-- Onlayn to'lovda slot 5 daqiqaga *hold* qilinadi; to'lov o'tmasa
-  avtomatik bo'shaydi. "Klinikada to'lash" rejimida bron darhol kuchga
-  kiradi.
+- Bron darhol kuchga kiradi, to'lov qabulxona kassasida. (Onlayn
+  to'lov yoqilsa slot 5 daqiqaga *hold* qilinadi va to'lov o'tmasa
+  avtomatik bo'shaydi.)
 - Klinika vaqti — Asia/Tashkent (UTC+5), server UTC'da ishlasa ham.
 - **Bekor qilish yo'q** — bemor faqat vaqtni ko'chira oladi, shifokor
   o'zgarmaydi. Eski yozuv `moved` bo'ladi va sloti bo'shaydi.
@@ -92,11 +92,13 @@ xulosa esa `schedules` dagi `summary_sent_at` bilan bir martaga bog'langan.
 
 ### To'lov rejimi
 
-RHMT kalitlari kelgunicha `RHMT_ENABLED` bo'sh qoldiriladi va sayt
-**"klinikada to'lash"** rejimida ishlaydi: bemor slotni band qiladi,
-to'lov qabulxonada amalga oshiriladi. Kalitlar sozlangach
-`netlify/functions/lib/payment.ts` dagi `createPayment` to'ldiriladi va
-`RHMT_ENABLED=1` qilinadi — bron mantig'i o'zgarmaydi.
+Onlayn to'lov ishlatilmaydi: sayt **"qabulxona kassasida to'lash"**
+rejimida ishlaydi — bemor slotni band qiladi, tasdiqlash qadamida
+narx va «Qabulxona kassasiga X so'm to'laysiz» matni ko'rinadi, to'lov
+klinikada. Payme integratsiya kodi (`lib/payment.ts`,
+`payment-webhook.ts`) saqlangan, lekin global `PAYMENT_ENABLED`
+sozlamasi ortida o'chiq (standart — bo'sh). Kelajakda qaytarish:
+`PAYMENT_ENABLED=1` + Payme kalitlari — bron mantig'i o'zgarmaydi.
 
 ## Sozlash (bir martalik)
 

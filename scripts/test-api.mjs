@@ -1198,8 +1198,8 @@ await test('kalitsiz so\'rov rad etiladi (-32504)', async () => {
   assert.equal(res.error.code, -32504);
 });
 
-await test('onlayn bron Payme havolasini qaytaradi', async () => {
-  process.env.PAYME_ENABLED = '1';
+await test('onlayn bron Payme havolasini qaytaradi (faqat PAYMENT_ENABLED=1 bo\'lsa)', async () => {
+  process.env.PAYMENT_ENABLED = '1';
 
   const free = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${PAY_DATE}`)).json();
   const time = free.slots.find((s) => s.free).time;
@@ -1284,7 +1284,17 @@ await test('CancelTransaction to\'lovni qaytaradi va slotni bo\'shatadi', async 
   const slot = free.slots.find((s) => s.time === payOrder.time);
   assert.equal(slot.free, true, 'slot yana bo\'sh bo\'lishi kerak');
 
-  delete process.env.PAYME_ENABLED;
+  delete process.env.PAYMENT_ENABLED;
+});
+
+await test('PAYMENT_ENABLED o\'chiq bo\'lsa bron yana kassada to\'lash rejimida', async () => {
+  const free = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${PAY_DATE}`)).json();
+  const time = free.slots.find((s) => s.free).time;
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({ doctor: 'ashurov', date: PAY_DATE, time }));
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.mode, 'at_clinic');
+  assert.equal(data.redirectUrl, undefined, 'to\'lov havolasi bo\'lmasligi kerak');
 });
 
 stopFakeDynamo();
