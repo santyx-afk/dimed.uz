@@ -294,7 +294,16 @@ const authed = (obj) => ({
   Bron uchun bemor (tug'ilgan sanasi bilan) majburiy (B1). Azizova
   (555A) 1C dan Birthday bilan kelgan — bron shu bemor nomiga olinadi.
 */
-const bookAs = (obj) => authed({ patientId: '555A', ...obj });
+const bookAs = (obj) => authed({ patientId: '555A', privacyAccepted: true, ...obj });
+
+await test('maxfiylik siyosatiga rozilik bo\'lmasa bron qilinmaydi', async () => {
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: BOOK_DATE, time: '09:00', privacyAccepted: false,
+  }));
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /Maxfiylik/);
+  assert.equal(tableOf('test_appointments').has(`ashurov#${BOOK_DATE}|09:00`), false);
+});
 
 await test('bemorsiz yoki tug\'ilgan sanasiz bron qilinmaydi', async () => {
   const noPatient = await call(book, 'https://dimed.uz/api/book', authed({
@@ -328,6 +337,8 @@ await test('bron qilinadi va botga tasdiq ketadi', async () => {
   assert.equal(appt.status, 'booked', 'klinikada to\'lash — darhol band');
   assert.equal(appt.hold_until, undefined, 'bunda hold muddati bo\'lmasligi kerak');
   assert.equal(appt.patient_birth_date, '1990-04-25', 'tug\'ilgan sana navbat yozuviga tushadi');
+  assert.ok(appt.privacy_accepted_at, 'rozilik lahzasi navbat yozuvida qoladi');
+  assert.ok(tableOf('test_users').get('777').privacy_accepted_at, 'rozilik bemor yozuvida ham qoladi');
   assert.ok(telegramCalls.some((c) => c.body.text.includes('band qilindi')));
 });
 
@@ -746,7 +757,7 @@ await test('navbat tanlangan bemor nomiga olinadi', async () => {
   }));
   assert.equal(yolgon.status, 404, 'noma\'lum bemor bilan bron qilinmaydi');
 
-  const res = await call(book, 'https://dimed.uz/api/book', authed({
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({
     doctor: 'ashurov', date: BOOK_DATE, time: '11:00', patientId: '30002',
   }));
   assert.equal(res.status, 200);

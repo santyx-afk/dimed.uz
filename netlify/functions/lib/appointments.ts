@@ -41,6 +41,8 @@ export type Appointment = {
   patient_name?: string;
   /** YYYY-MM-DD — bron paytidagi bemor yozuvidan (B1) */
   patient_birth_date?: string;
+  /** maxfiylik siyosatiga rozilik berilgan lahza (B4) */
+  privacy_accepted_at?: string;
   /** eslatma yuborilgan lahza — takror yuborilmasligi uchun */
   reminded_at?: string;
   created_at: string;

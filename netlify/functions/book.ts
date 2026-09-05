@@ -1,5 +1,5 @@
 import type { Context } from '@netlify/functions';
-import { PutCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, getDoctor } from './lib/auth.ts';
@@ -14,7 +14,14 @@ import { json, error } from './lib/http.ts';
 /** Hold shuncha vaqt turadi — to'lov shu oraliqda tugallanishi kerak. */
 const HOLD_SECONDS = 5 * 60;
 
-type Body = { doctor?: string; date?: string; time?: string; patientId?: string };
+type Body = {
+  doctor?: string;
+  date?: string;
+  time?: string;
+  patientId?: string;
+  /** Maxfiylik siyosatiga rozilik (B4) — usiz bron qilinmaydi. */
+  privacyAccepted?: boolean;
+};
 
 /** POST /api/book — slotni band qiladi va to'lovni boshlaydi. */
 export default async (request: Request, _context: Context): Promise<Response> => {
@@ -63,6 +70,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     */
     if (!patient) return error('Navbat kim uchun ekanini tanlang');
     if (!patient.birthDate) return error('Bemorning tug‘ilgan sanasi kiritilmagan');
+    if (body.privacyAccepted !== true) return error('Maxfiylik siyosatiga rozilik kerak');
 
     const payment = await createPayment({
       amount: doctor.price,
@@ -100,6 +108,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             patient_id: patient.id,
             patient_name: patient.name,
             patient_birth_date: patient.birthDate,
+            privacy_accepted_at: now.toISOString(),
             starts_at: toInstant(date, time).toISOString(),
             status,
             hold_until: holdUntil,
@@ -139,6 +148,18 @@ export default async (request: Request, _context: Context): Promise<Response> =>
         },
       }),
     );
+
+    // Rozilik birinchi marta qachon berilgani bemor yozuvida ham qoladi (best-effort).
+    await db
+      .send(
+        new UpdateCommand({
+          TableName: TABLES.users,
+          Key: { telegram_id: session.userId },
+          UpdateExpression: 'SET privacy_accepted_at = if_not_exists(privacy_accepted_at, :now)',
+          ExpressionAttributeValues: { ':now': now.toISOString() },
+        }),
+      )
+      .catch((err) => logToAdmin('book/rozilik', err));
 
     if (payment.mode === 'at_clinic') {
       await confirmAtClinic(session.userId, doctor.name, date, time, doctor.price, patient.name);

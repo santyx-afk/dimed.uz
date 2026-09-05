@@ -53,12 +53,17 @@ export const messages = {
     ru: 'Чтобы продолжить, укажите дату рождения пациента.',
     en: 'Enter the patient’s date of birth to continue.',
   },
-  'booking.privacy.label': {
-    uz: 'Maxfiylik siyosatiga roziman',
-    ru: 'Я согласен(на) с политикой конфиденциальности',
-    en: 'I agree to the privacy policy',
+  // {link} o'rniga maxfiylik siyosatiga havola qo'yiladi (matni — linkText).
+  'booking.privacy.text': {
+    uz: '{link}ga roziman',
+    ru: 'Я согласен(на) с {link}',
+    en: 'I agree to the {link}',
   },
-  'booking.privacy.link': { uz: 'Maxfiylik siyosati', ru: 'Политика конфиденциальности', en: 'Privacy policy' },
+  'booking.privacy.linkText': {
+    uz: 'Maxfiylik siyosati',
+    ru: 'политикой конфиденциальности',
+    en: 'privacy policy',
+  },
   'booking.privacy.required': {
     uz: 'Davom etish uchun maxfiylik siyosatiga rozilik bering.',
     ru: 'Чтобы продолжить, примите политику конфиденциальности.',

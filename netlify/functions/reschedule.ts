@@ -97,6 +97,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             patient_id: appointment.patient_id,
             patient_name: appointment.patient_name,
             patient_birth_date: appointment.patient_birth_date,
+            privacy_accepted_at: appointment.privacy_accepted_at,
             starts_at: toInstant(toDate, toTime).toISOString(),
             status: appointment.status,
             price: appointment.price,

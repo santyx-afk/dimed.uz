@@ -105,8 +105,22 @@ const widgetData = JSON.stringify({ departments, doctors });
     return out;
   };
 
+  /*
+    Maxfiylik siyosatiga rozilik (B4). Bir marta berilgani brauzerda
+    eslab qolinadi — checkbox oldindan belgilangan turadi, lekin har
+    bronda ko'rinadi va serverga ham yuboriladi.
+  */
+  const PRIVACY_KEY = 'dimed_privacy_ok';
+  const readPrivacy = () => {
+    try {
+      return localStorage.getItem(PRIVACY_KEY) === '1';
+    } catch {
+      return false;
+    }
+  };
+
   const state = { step: 1, deptId: null, doc: null, date: null, dateLabel: null, time: null, booked: null,
-    patientId: null, patientName: null, patientBirthDate: null };
+    patientId: null, patientName: null, patientBirthDate: null, privacyAccepted: readPrivacy() };
 
   /*
     Telefonga bog'langan bemorlar. Bir raqamdan butun oila foydalanadi
@@ -354,6 +368,12 @@ const widgetData = JSON.stringify({ departments, doctors });
         ${birthDateSelectsHtml('fix', lang)}
         <button class="btn w-full" id="whoBirthSave" type="button">Saqlash va davom etish</button>
       </div>
+      <label class="consent">
+        <input type="checkbox" id="privacyOk"${state.privacyAccepted ? ' checked' : ''} />
+        <span>${tr('booking.privacy.text', {
+          link: `<a href="/maxfiylik" target="_blank" rel="noopener">${esc(tr('booking.privacy.linkText'))}</a>`,
+        })}</span>
+      </label>
       <p class="book-msg" id="whoMsg" role="status" aria-live="polite"></p>
       <button class="back-link">← vaqtni oʻzgartirish</button>`;
 
@@ -378,7 +398,27 @@ const widgetData = JSON.stringify({ departments, doctors });
       wBody.querySelector('#w-last').focus();
     };
 
+    const privacyBox = wBody.querySelector('#privacyOk');
+    privacyBox.addEventListener('change', () => {
+      state.privacyAccepted = privacyBox.checked;
+      try {
+        localStorage.setItem(PRIVACY_KEY, privacyBox.checked ? '1' : '0');
+      } catch {
+        /* xotira yopiq bo'lsa ham joriy bronda ishlaydi */
+      }
+      if (privacyBox.checked) setMsg('');
+    });
+
+    /** Rozilik bo'lmasa davom etilmaydi (B4). */
+    const privacyOk = () => {
+      if (state.privacyAccepted) return true;
+      setMsg(tr('booking.privacy.required'), 'error');
+      privacyBox.focus();
+      return false;
+    };
+
     const proceed = (patient) => {
+      if (!privacyOk()) return;
       state.patientId = patient.id;
       state.patientName = patient.name;
       state.patientBirthDate = patient.birthDate;
@@ -453,6 +493,7 @@ const widgetData = JSON.stringify({ departments, doctors });
 
       if (!lastName || !firstName) return setMsg('Familiya va ism majburiy.', 'error');
       if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
+      if (!privacyOk()) return;
 
       setMsg('Saqlanmoqda…');
       try {
@@ -470,6 +511,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       if (!fixing) return;
       const birthDate = readBirthDate(birthForm, 'fix');
       if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
+      if (!privacyOk()) return;
 
       setMsg('Saqlanmoqda…');
       try {
@@ -558,6 +600,7 @@ const widgetData = JSON.stringify({ departments, doctors });
             date: state.date,
             time: state.time,
             ...(state.patientId ? { patientId: state.patientId } : {}),
+            privacyAccepted: state.privacyAccepted,
           }),
         });
         const data = await res.json();
@@ -1221,6 +1264,29 @@ const widgetData = JSON.stringify({ departments, doctors });
   .widget :global(.birth-sel:focus-visible) {
     outline: none;
     border-color: var(--leaf);
+  }
+
+  .widget :global(.consent) {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 12px 0 4px;
+    font-size: 13px;
+    line-height: 1.45;
+    cursor: pointer;
+  }
+
+  .widget :global(.consent input) {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+    accent-color: var(--rose);
+  }
+
+  .widget :global(.consent a) {
+    color: var(--rose);
+    font-weight: 650;
   }
 
   .widget :global(.fld-label) {
