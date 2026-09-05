@@ -1,0 +1,381 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+---
+
+<Cabinet
+  title="Ishga chiqa olmayman — Shifokor kabineti"
+  description="Kunni yopish: navbatlar bekor qilinadi, bemorlarga xabar boradi."
+  eyebrow="Shifokor kabineti"
+  heading="Ishga chiqa olmayman"
+  area="doctor"
+  active="dam"
+>
+  <span class="sub" id="subtitle" slot="sub"></span>
+
+  <div id="loading" class="state">Yuklanmoqda…</div>
+
+  <div id="denied" class="state" hidden>
+    <p id="deniedText">Bu bo‘lim faqat shifokorlar uchun.</p>
+    <a class="btn" href="/kirish?next=/kabinet/shifokor/dam">Kirish</a>
+  </div>
+
+  <div id="content" hidden>
+    <div class="card glass">
+      <h2>Sanani tanlang</h2>
+      <p class="hint">
+        Kun yopiladi, o‘sha kundagi barcha navbatlar bekor qilinadi va har bir bemorga Telegram
+        orqali xabar boradi. Bemorlar boshqa kunga yozila oladi.
+      </p>
+
+      <!-- 14 kunlik chip-kalendar: har kun alohida tugma, yopiq kunlar belgilangan -->
+      <div class="days" id="days" role="tablist" aria-label="Sana"></div>
+
+      <div class="day-info" id="dayInfo"></div>
+
+      <div id="openForm">
+        <label class="fld">
+          <span>Sabab (ixtiyoriy — bemorlarga yuboriladi)</span>
+          <input id="reason" type="text" maxlength="120" placeholder="Masalan: kasal bo‘lib qoldim" />
+        </label>
+        <p class="msg" id="msg" role="status" aria-live="polite"></p>
+        <button class="btn danger" id="offBtn" type="button">Ishga chiqa olmayman</button>
+      </div>
+
+      <div id="closedForm" hidden>
+        <p class="msg" id="msg2" role="status" aria-live="polite"></p>
+        <button class="btn btn-ghost" id="openBtn" type="button">Kunni qayta ochish</button>
+        <p class="note">
+          Qayta ochilganda bekor qilingan navbatlar qaytmaydi — bemorlar yangidan yozilishi kerak.
+        </p>
+      </div>
+    </div>
+  </div>
+</Cabinet>
+
+<script>
+  import { fetchDoctor, showDenied, type DoctorData } from '../../../lib/doctor-cabinet';
+  import { addDaysKey, fmtKey, fromKey, OYLAR, WD } from '../../../lib/dates';
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  let todayKey = '';
+  let current = '';
+  const closed = new Set<string>();
+
+  function renderDays() {
+    let html = '';
+    for (let i = 0; i < 14; i++) {
+      const key = addDaysKey(todayKey, i);
+      const d = fromKey(key);
+      html += `<button class="day${key === current ? ' on' : ''}${closed.has(key) ? ' closed' : ''}" role="tab"
+        aria-selected="${key === current}" data-day="${key}" title="${closed.has(key) ? 'yopiq' : ''}">
+        <span class="lab">${i === 0 ? 'Bugun' : i === 1 ? 'Ertaga' : WD[d.getDay()]}</span>
+        <b>${d.getDate()}</b><small>${OYLAR[d.getMonth()]}</small>
+      </button>`;
+    }
+    const box = el('days');
+    box.innerHTML = html;
+    box.querySelectorAll<HTMLButtonElement>('[data-day]').forEach((b) =>
+      b.addEventListener('click', () => loadDay(b.dataset.day ?? todayKey)),
+    );
+  }
+
+  const setMsg = (id: string, text: string, kind: 'error' | 'ok' | '' = '') => {
+    const msg = el(id);
+    msg.textContent = text;
+    msg.className = `msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  function renderDay(data: DoctorData) {
+    if (data.dayOff) closed.add(data.date);
+    else closed.delete(data.date);
+    renderDays();
+
+    const n = data.appointments.filter((a) => a.status !== 'done' && a.status !== 'no_show').length;
+    const info = el('dayInfo');
+    info.className = `day-info ${data.dayOff ? 'closed' : n ? 'busy' : 'free'}`;
+    info.textContent = data.dayOff
+      ? `${fmtKey(data.date)} — kun yopiq${data.offReason ? ` (${data.offReason})` : ''}.`
+      : !data.isWorkday
+        ? `${fmtKey(data.date)} — jadval bo‘yicha dam olish kuni.`
+        : n
+          ? `${fmtKey(data.date)} — ${n} ta navbat bor. Yopilsa hammasi bekor qilinadi.`
+          : `${fmtKey(data.date)} — navbat yo‘q.`;
+
+    el('openForm').hidden = data.dayOff;
+    el('closedForm').hidden = !data.dayOff;
+    setMsg('msg', '');
+    setMsg('msg2', '');
+  }
+
+  async function loadDay(date: string) {
+    current = date;
+    renderDays();
+    const res = await fetchDoctor(date);
+    if (!res.ok) return setMsg('msg', 'Maʼlumotni yuklab boʻlmadi.', 'error');
+    renderDay(res.data);
+  }
+
+  el('offBtn').addEventListener('click', async () => {
+    const btn = el<HTMLButtonElement>('offBtn');
+    const reason = el<HTMLInputElement>('reason').value.trim();
+    if (!confirm(`${fmtKey(current)} kunidagi barcha navbatlar bekor qilinsinmi?\nBemorlarga xabar boradi.`)) return;
+
+    btn.disabled = true;
+    setMsg('msg', 'Bajarilmoqda…');
+    try {
+      const res = await fetch('/api/doctor-off', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ date: current, ...(reason ? { reason } : {}) }),
+      });
+      const data = (await res.json()) as { cancelled?: number; notified?: number; error?: string };
+      if (!res.ok) return setMsg('msg', data.error ?? 'Bajarib boʻlmadi.', 'error');
+      await loadDay(current);
+      setMsg(
+        'msg2',
+        `Kun yopildi. Bekor qilingan navbatlar: ${data.cancelled ?? 0}, xabar berildi: ${data.notified ?? 0}.`,
+        'ok',
+      );
+    } catch {
+      setMsg('msg', 'Internetga ulanishda muammo.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  el('openBtn').addEventListener('click', async () => {
+    const btn = el<HTMLButtonElement>('openBtn');
+    btn.disabled = true;
+    setMsg('msg2', 'Ochilmoqda…');
+    try {
+      const res = await fetch('/api/doctor-schedule', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ date: current, dayOff: false }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) return setMsg('msg2', data.error ?? 'Ochib boʻlmadi.', 'error');
+      await loadDay(current);
+      setMsg('msg', 'Kun qayta ochildi — slotlar yana ko‘rinadi.', 'ok');
+    } catch {
+      setMsg('msg2', 'Internetga ulanishda muammo.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function init() {
+    const res = await fetchDoctor();
+    if (!res.ok) return showDenied(res.status);
+    const data = res.data;
+    todayKey = data.today;
+    current = data.date;
+    el('subtitle').textContent = `${data.doctor.name} · ${data.doctor.job}`;
+    el('loading').hidden = true;
+    el('content').hidden = false;
+    renderDay(data);
+  }
+
+  init();
+</script>
+
+<style>
+  .sub {
+    display: block;
+    color: var(--rose);
+    font-weight: 650;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  .state {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 720px;
+  }
+
+  .card h2 {
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    font-family: var(--font-sans);
+    margin-bottom: 8px;
+  }
+
+  .hint {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+
+  .days :global(.day) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    color: var(--muted);
+    border-radius: 10px;
+    font-size: 10.5px;
+    font-weight: 650;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+
+  .days :global(.day b) {
+    font-size: 16px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .days :global(.day small) {
+    font-size: 9.5px;
+    font-weight: 600;
+  }
+
+  .days :global(.day.closed) {
+    background: var(--busy);
+    text-decoration: line-through;
+  }
+
+  .days :global(.day:hover) {
+    border-color: var(--rose);
+  }
+
+  .days :global(.day.on) {
+    border-color: var(--rose);
+    background: var(--rose-soft);
+    color: var(--rose);
+  }
+
+  .days :global(.day.on b) {
+    color: var(--rose);
+  }
+
+  .days :global(.day:focus-visible) {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
+  }
+
+  .day-info {
+    font-size: 13.5px;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+  }
+
+  .day-info.free {
+    background: var(--ok-bg);
+    color: var(--ok);
+  }
+
+  .day-info.busy {
+    background: var(--warn-bg);
+    color: var(--warn);
+  }
+
+  .day-info.closed {
+    background: var(--busy);
+    color: var(--muted);
+  }
+
+  .fld {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .fld span {
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--muted);
+  }
+
+  .fld input {
+    width: 100%;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 14px;
+  }
+
+  .fld input:focus {
+    border-color: var(--rose);
+    outline: none;
+  }
+
+  .msg {
+    min-height: 20px;
+    margin: 12px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .msg.error {
+    color: var(--rose);
+  }
+
+  .msg.ok {
+    color: var(--leaf);
+  }
+
+  .danger {
+    width: 100%;
+    background: transparent;
+    color: var(--rose);
+    border: 1.5px solid var(--rose);
+    box-shadow: none;
+  }
+
+  .danger:hover {
+    background: var(--rose-soft);
+  }
+
+  #openBtn {
+    width: 100%;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 16px;
+    line-height: 1.55;
+  }
+
+  @media (max-width: 600px) {
+    .card {
+      padding: 16px;
+    }
+  }
+</style>
