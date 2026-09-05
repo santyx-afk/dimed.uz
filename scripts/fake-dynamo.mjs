@@ -19,6 +19,7 @@ const keySchema = {
   test_appointments: ['doctor_day', 'time'],
   test_payments: ['payment_id'],
   test_lab_results: ['phone', 'sort_key'],
+  test_prices: ['item_id'],
 };
 for (const t of Object.keys(keySchema)) tables.set(t, new Map());
 

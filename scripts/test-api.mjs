@@ -68,6 +68,8 @@ const sessionApi = await load('session.ts');
 const settingsApi = await load('settings.ts');
 const resultApi = await load('result.ts');
 const appointmentStatus = await load('appointment-status.ts');
+const pricesApi = await load('prices.ts');
+const adminPrices = await load('admin-prices.ts');
 const notifyResults = await load('notify-results.ts');
 const { createShareToken } = await import(pathToFileURL(join(fnDir, 'lib', 'share.ts')).href);
 
@@ -1493,6 +1495,89 @@ await test('admin shifokorni o\'chiradi — u faolsizlanadi', async () => {
   ).json();
   const yd = doctors.find((d) => d.id === 'yangidoc');
   assert.ok(yd && yd.active === false, 'faolsiz holatda ro\'yxatda qoladi');
+});
+
+console.log('\nNarxlar (F2):');
+await test('/api/prices ommaviy: bo\'sh jadval — bo\'sh ro\'yxat, shifokor narxlari bor', async () => {
+  const res = await call(pricesApi, 'https://dimed.uz/api/prices');
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.deepEqual(data.analyses, []);
+  assert.ok(data.doctors.some((d) => d.id === 'ashurov' && d.price === 70000));
+  assert.ok(!data.doctors.some((d) => d.id === 'yangidoc'), 'faolsiz shifokor chiqmaydi');
+});
+
+await test('admin-prices: ruxsat, tekshiruv va tahlil narxini saqlash', async () => {
+  const anon = await call(adminPrices, 'https://dimed.uz/api/admin-prices');
+  assert.equal(anon.status, 401);
+  const bemor = await call(adminPrices, 'https://dimed.uz/api/admin-prices', { headers: { cookie: sessionCookie } });
+  assert.equal(bemor.status, 403);
+
+  const bad = await call(adminPrices, 'https://dimed.uz/api/admin-prices', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ kind: 'analysis', code: '19', title: 'Glyukoza', price: -5 }),
+  });
+  assert.equal(bad.status, 400);
+
+  const res = await call(adminPrices, 'https://dimed.uz/api/admin-prices', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      kind: 'analysis', code: '19', title: 'Glyukoza', group: 'Biokimyoviy qon tahlillari',
+      duration: '30-60 daqiqa', price: 48000,
+    }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_prices').get('analysis#19').price, 48000);
+
+  const list = await (await call(adminPrices, 'https://dimed.uz/api/admin-prices', {
+    headers: { cookie: adminCookie },
+  })).json();
+  assert.equal(list.analyses.find((a) => a.code === '19').price, 48000);
+  assert.ok(list.doctors.some((d) => d.id === 'ashurov'));
+
+  const pub = await (await call(pricesApi, 'https://dimed.uz/api/prices')).json();
+  assert.equal(pub.analyses.find((a) => a.code === '19').price, 48000, 'ommaviy API ham yangi narxni beradi');
+  assert.equal(pub.analyses[0].active, true);
+
+  // Saytdan yashirish
+  const hide = await call(adminPrices, 'https://dimed.uz/api/admin-prices', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ kind: 'analysis', code: '19', title: 'Glyukoza', price: 48000, active: false }),
+  });
+  assert.equal(hide.status, 200);
+  const pub2 = await (await call(pricesApi, 'https://dimed.uz/api/prices')).json();
+  assert.equal(pub2.analyses.find((a) => a.code === '19').active, false);
+});
+
+await test('admin-prices: shifokor qabuli narxi', async () => {
+  const yoq = await call(adminPrices, 'https://dimed.uz/api/admin-prices', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ kind: 'doctor', id: 'yoq-shifokor', price: 50000 }),
+  });
+  assert.equal(yoq.status, 404);
+
+  const res = await call(adminPrices, 'https://dimed.uz/api/admin-prices', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ kind: 'doctor', id: 'ashurov', price: 80000 }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_doctors').get('ashurov').price, 80000);
+  assert.equal(tableOf('test_doctors').get('ashurov').telegram_id, '555', 'bog\'lanish tegilmaydi');
+
+  const pub = await (await call(pricesApi, 'https://dimed.uz/api/prices')).json();
+  assert.equal(pub.doctors.find((d) => d.id === 'ashurov').price, 80000);
+
+  // Payme testlari 70 000 so'mga tayanadi — qaytaramiz.
+  await call(adminPrices, 'https://dimed.uz/api/admin-prices', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ kind: 'doctor', id: 'ashurov', price: 70000 }),
+  });
 });
 
 console.log('\nPayme to\'lovi:');

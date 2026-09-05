@@ -30,7 +30,7 @@ const featuredAnalyses = featured
         <div class="hero-stats">
           <div class="stat-chip"><b>{departments.length}</b> boʻlim</div>
           <div class="stat-chip"><b class="g" id="statDoctors">{activeDoctors.length}</b> shifokor</div>
-          <div class="stat-chip"><b>{analyses.length}</b> tahlil turi</div>
+          <div class="stat-chip"><b data-analyses-count>{analyses.length}</b> tahlil turi</div>
           <div class="stat-chip"><b class="g">08:00–22:00</b> har kuni</div>
         </div>
       </div>
@@ -254,13 +254,13 @@ const featuredAnalyses = featured
         <tbody>
           {
             featuredAnalyses.map((a) => (
-              <tr>
+              <tr data-analysis-row>
                 <td>{a.title}</td>
                 <td>
                   <span class="g-chip">{a.group}</span>
                 </td>
                 <td class="dur">{a.duration}</td>
-                <td class="price">{a.price} soʻm</td>
+                <td class="price" data-price-code={a.code}>{a.price} soʻm</td>
               </tr>
             ))
           }
@@ -268,7 +268,7 @@ const featuredAnalyses = featured
       </table>
     </div>
     <div class="tbl-note rv">
-      <a class="btn btn-ghost btn-sm" href="/tahlillar">Barcha {analyses.length} ta tahlilni koʻrish</a>
+      <a class="btn btn-ghost btn-sm" href="/tahlillar">Barcha <span data-analyses-count>{analyses.length}</span> ta tahlilni koʻrish</a>
       <span>Narxlar amaldagi pricelistdan olingan.</span>
     </div>
   </section>
@@ -326,6 +326,12 @@ const featuredAnalyses = featured
     </div>
   </section>
 </Base>
+
+<script>
+  // Tahlil narxlari bazadan (admin panel) yangilanadi (F2).
+  import { applyLivePrices } from '../lib/live-prices';
+  applyLivePrices();
+</script>
 
 <style>
   section {

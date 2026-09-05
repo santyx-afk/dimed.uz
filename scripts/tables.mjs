@@ -93,4 +93,12 @@ export const tables = [
     attrs: [S('phone'), S('sort_key')],
     keys: [HASH('phone'), RANGE('sort_key')],
   },
+  {
+    // Saytdagi narxlar (F2): item_id = "analysis#<kod>" — tahlil turlari.
+    // Shifokor qabuli narxi doctors jadvalida (price). Admin paneldan
+    // tahrirlanadi; sayt /api/prices dan o'qiydi.
+    name: 'prices',
+    attrs: [S('item_id')],
+    keys: [HASH('item_id')],
+  },
 ];

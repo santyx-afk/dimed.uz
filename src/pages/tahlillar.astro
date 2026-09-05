@@ -20,8 +20,8 @@ for (const a of analyses) {
         <div class="eyebrow">Laboratoriya</div>
         <h2>Tahlillar va narxlar</h2>
         <p>
-          Jami {analyses.length} ta tahlil. Koʻpchilik natijalar 30–60 daqiqada tayyor va shaxsiy
-          kabinetingizga avtomatik tushadi — PDF va matn koʻrinishida.
+          Jami <span data-analyses-count>{analyses.length}</span> ta tahlil. Koʻpchilik natijalar 30–60
+          daqiqada tayyor va shaxsiy kabinetingizga avtomatik tushadi — PDF va matn koʻrinishida.
         </p>
       </div>
       <!-- Kirgan bemor → Tahlillarim; kirmagan → kirish, keyin Tahlillarim (C3) -->
@@ -33,9 +33,9 @@ for (const a of analyses) {
 
     {
       [...groups].map(([group, items]) => (
-        <div class="group rv">
+        <div class="group rv" data-analysis-group>
           <h3>
-            {group} <span class="count">{items.length} ta</span>
+            {group} <span class="count" data-group-count>{items.length} ta</span>
           </h3>
           <div class="table-wrap glass">
             <table>
@@ -48,10 +48,10 @@ for (const a of analyses) {
               </thead>
               <tbody>
                 {items.map((a) => (
-                  <tr>
+                  <tr data-analysis-row>
                     <td>{a.title}</td>
                     <td class="dur">{a.duration}</td>
-                    <td class="price">{a.price} soʻm</td>
+                    <td class="price" data-price-code={a.code}>{a.price} soʻm</td>
                   </tr>
                 ))}
               </tbody>
@@ -67,6 +67,12 @@ for (const a of analyses) {
     </p>
   </section>
 </Base>
+
+<script>
+  // Narxlar bazadan (admin panel) — statik jadval yuklangach yangilanadi (F2).
+  import { applyLivePrices } from '../lib/live-prices';
+  applyLivePrices();
+</script>
 
 <style>
   .page {
