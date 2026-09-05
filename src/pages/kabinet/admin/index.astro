@@ -1,6 +1,6 @@
 ---
-import Base from '../../layouts/Base.astro';
-import { departments } from '../../data/departments';
+import Cabinet from '../../../layouts/Cabinet.astro';
+import { departments } from '../../../data/departments';
 
 const slotOptions = [10, 15, 20, 30, 60];
 const weekdays = [
@@ -14,35 +14,28 @@ const weekdays = [
 ];
 ---
 
-<Base
+<Cabinet
   title="Admin — Dimed klinikasi"
-  description="Shifokorlarni boshqarish: qo‘shish, tahrirlash, o‘chirish."
+  description="Shifokorlarni boshqarish: qo‘shish, tahrirlash, yashirish."
+  eyebrow="Administrator"
+  heading="Shifokorlarni boshqarish"
+  area="admin"
+  active="shifokorlar"
 >
-  <section class="wrap page">
-    <div class="head">
-      <div>
-        <div class="eyebrow">Administrator</div>
-        <h1>Shifokorlarni boshqarish</h1>
-        <span class="sub" id="subtitle"></span>
-      </div>
-      <div class="head-actions">
-        <button class="btn btn-sm" id="addBtn" hidden>+ Yangi shifokor</button>
-        <button class="btn btn-ghost btn-sm" id="logout" hidden>Chiqish</button>
-      </div>
-    </div>
+  <span class="sub" id="subtitle" slot="sub"></span>
+  <button class="btn btn-sm" id="addBtn" slot="actions" hidden>+ Yangi shifokor</button>
 
-    <div id="loading" class="state">Yuklanmoqda…</div>
+  <div id="loading" class="state">Yuklanmoqda…</div>
 
-    <div id="denied" class="state" hidden>
-      <p id="deniedText">Bu bo‘lim faqat administrator uchun.</p>
-      <p id="idHint" class="id-hint" hidden></p>
-      <a class="btn" href="/kirish">Kirish</a>
-    </div>
+  <div id="denied" class="state" hidden>
+    <p id="deniedText">Bu bo‘lim faqat administrator uchun.</p>
+    <p id="idHint" class="id-hint" hidden></p>
+    <a class="btn" href="/kirish?next=/kabinet/admin">Kirish</a>
+  </div>
 
-    <div id="content" hidden>
-      <div id="list" class="doc-rows"></div>
-    </div>
-  </section>
+  <div id="content" hidden>
+    <div id="list" class="doc-rows"></div>
+  </div>
 
   <!-- Tahrirlash / qo'shish oynasi -->
   <div id="modal" class="modal" hidden>
@@ -123,7 +116,7 @@ const weekdays = [
       </div>
     </div>
   </div>
-</Base>
+</Cabinet>
 
 <script>
   type Shift = { start: string; end: string };
@@ -190,7 +183,6 @@ const weekdays = [
     el('loading').hidden = true;
     el('content').hidden = false;
     el('addBtn').hidden = false;
-    el('logout').hidden = false;
     const shown = doctors.filter((d) => d.active).length;
     el('subtitle').textContent =
       `${shown} ta shifokor saytda koʻrinadi` +
@@ -449,39 +441,10 @@ const weekdays = [
   el('modal').addEventListener('click', (e) => {
     if (e.target === el('modal')) closeForm();
   });
-  el('logout').addEventListener('click', async () => {
-    await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
-    window.location.href = '/';
-  });
-
   load();
 </script>
 
 <style>
-  .page {
-    padding: 48px 0 64px;
-    min-height: 60vh;
-  }
-
-  .head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 28px;
-  }
-
-  .head-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  h1 {
-    font-size: clamp(24px, 3.2vw, 34px);
-    font-weight: 750;
-  }
-
   .sub {
     display: block;
     color: var(--rose);
