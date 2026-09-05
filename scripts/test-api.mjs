@@ -64,6 +64,8 @@ const doctorsList = await load('doctors.ts');
 const adminDoctors = await load('admin-doctors.ts');
 const paymentWebhook = await load('payment-webhook.ts');
 const patientsApi = await load('patients.ts');
+const sessionApi = await load('session.ts');
+const settingsApi = await load('settings.ts');
 
 const { toTashkent, toInstant, addDays } = await import(
   pathToFileURL(join(fnDir, 'lib', 'time.ts')).href
@@ -622,6 +624,101 @@ await test('noto\'g\'ri API kalit bilan 1C rad etiladi', async () => {
     headers: { 'content-type': 'application/json', 'x-api-key': 'yolgon' },
   });
   assert.equal(res.status, 401);
+});
+
+console.log('\nSessiya va sozlamalar (kabinet menyusi):');
+await test('/api/session mehmonga guest, kirganga ism va rollar', async () => {
+  const guest = await (await call(sessionApi, 'https://dimed.uz/api/session')).json();
+  assert.equal(guest.role, 'guest');
+
+  const res = await call(sessionApi, 'https://dimed.uz/api/session', { headers: { cookie: sessionCookie } });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('cache-control'), 'private, no-store');
+  const me = await res.json();
+  assert.equal(me.role, 'patient');
+  assert.equal(me.phone, '+998901234567');
+  assert.equal(me.admin, false);
+  assert.equal(me.doctor, null);
+  // last_name 1C dan (Azizova), first_name Telegram kontaktidan (Aziza).
+  assert.equal(me.name, 'Azizova Aziza', '1C profili + Telegram ismi ko\'rinadi');
+  assert.equal(me.lang, 'uz');
+});
+
+await test('/api/settings tilni saqlaydi, noto\'g\'ri til rad etiladi', async () => {
+  const bad = await call(settingsApi, 'https://dimed.uz/api/settings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ lang: 'de' }),
+  });
+  assert.equal(bad.status, 400);
+
+  const res = await call(settingsApi, 'https://dimed.uz/api/settings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ lang: 'ru' }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_users').get('777').lang, 'ru');
+
+  const got = await (await call(settingsApi, 'https://dimed.uz/api/settings', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  assert.equal(got.lang, 'ru');
+
+  const session = await (await call(sessionApi, 'https://dimed.uz/api/session', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  assert.equal(session.lang, 'ru', 'sessiya javobida ham til bor');
+
+  const anon = await call(settingsApi, 'https://dimed.uz/api/settings');
+  assert.equal(anon.status, 401);
+});
+
+await test('/api/me?include= faqat so\'ralganini yuklaydi', async () => {
+  const only = await (await call(me, 'https://dimed.uz/api/me?include=appointments', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  assert.ok(only.appointments.length >= 1);
+  assert.deepEqual(only.results, [], 'natijalar so\'ralmagan');
+
+  const res = await (await call(me, 'https://dimed.uz/api/me?include=results', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  assert.deepEqual(res.appointments, []);
+  assert.ok(res.results.length >= 1);
+});
+
+await test('natija ro\'yxatida tahlil nomi, holati va shifokor bor (C2)', async () => {
+  seed('test_analysis_results', '+998901234567|doc-nomli', {
+    phone: '+998901234567', sort_key: 'doc-nomli', Date: '06.03.2026 10:00:00',
+    AnalysisName: 'Umumiy qon tahlili', Doctor: 'Ashurov T.',
+    AnalysisResults: [
+      { Analyte: 'Gemoglobin', Result: '132', AnalyteUnit: 'g/L' },
+      { Analyte: 'Leykotsitlar', Result: '6.2', AnalyteUnit: '10^9/L' },
+    ],
+  });
+  seed('test_analysis_results', '+998901234567|doc-kutish', {
+    phone: '+998901234567', sort_key: 'doc-kutish', Date: '07.03.2026 10:00:00',
+    Biomaterial: 'Siydik',
+    AnalysisResults: [{ Analyte: 'Oqsil', Result: '' }, { Analyte: 'Glyukoza', Result: '' }],
+  });
+
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=results', {
+    headers: { cookie: sessionCookie },
+  })).json();
+
+  const nomli = data.results.find((r) => r.id === 'doc-nomli');
+  assert.equal(nomli.title, 'Umumiy qon tahlili', '1C bergan nom');
+  assert.equal(nomli.doctor, 'Ashurov T.');
+  assert.equal(nomli.status, 'ready');
+
+  const kutish = data.results.find((r) => r.id === 'doc-kutish');
+  assert.equal(kutish.title, 'Siydik tahlili', 'nom bo\'lmasa biomaterial bo\'yicha');
+  assert.equal(kutish.status, 'pending', 'qiymatlar bo\'sh — kutilmoqda');
+  assert.equal(kutish.doctor, null);
+
+  const bitta = data.results.find((r) => r.id === 'doc-uuid-2');
+  assert.equal(bitta.title, 'Kreatinin', 'bitta ko\'rsatkich — uning nomi');
 });
 
 console.log('\nBemorni tanlash (bir telefon — bir oila):');

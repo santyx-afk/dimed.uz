@@ -7,17 +7,25 @@ import { isBookable } from './lib/slots.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
-/** GET /api/me — bemorning qabullari va tahlil natijalari. */
+/**
+ * GET /api/me — bemorning qabullari va tahlil natijalari.
+ * ?include=appointments | results | appointments,results (standart — ikkalasi):
+ * kabinet bo'limlarga ajratilgan (C1), har sahifa faqat o'zinikini so'raydi.
+ */
 export default async (request: Request, _context: Context): Promise<Response> => {
   if (request.method !== 'GET') return error('Faqat GET', 405);
 
   const session = sessionFrom(request);
   if (!session) return error('Avval Telegram orqali kiring', 401);
 
+  const include = new Set(
+    (new URL(request.url).searchParams.get('include') ?? 'appointments,results').split(','),
+  );
+
   try {
     const [appointments, results] = await Promise.all([
-      loadAppointments(session.phone),
-      loadResults(session.phone),
+      include.has('appointments') ? loadAppointments(session.phone) : [],
+      include.has('results') ? loadResults(session.phone) : [],
     ]);
 
     return json({ phone: session.phone, appointments, results }, 200, {
@@ -61,6 +69,7 @@ async function loadAppointments(phone: string) {
       a.status === 'paid' ||
       a.status === 'booked' ||
       a.status === 'done' ||
+      a.status === 'no_show' ||
       a.status === 'cancelled_by_clinic',
   );
 
@@ -119,6 +128,22 @@ type AnalysisDocument = {
      kabinetda qolib ketmasligi kerak. */
   Posted?: boolean;
   DeletionMark?: boolean;
+  /*
+    Tahlil (panel) nomi va yuborgan shifokor — 1C hozircha yubormaydi,
+    lekin ro'yxatda "Umumiy qon tahlili" ko'rinishi uchun kerak (C2).
+    Bir nechta ehtimoliy nom qabul qilinadi; docs/1c-sync.md da
+    AnalysisName / Doctor so'ralgan.
+  */
+  AnalysisName?: string;
+  Analysis?: string;
+  PanelName?: string;
+  Nomenclature?: string;
+  ServiceName?: string;
+  Title?: string;
+  Doctor?: string;
+  ReferringDoctor?: string;
+  DoctorName?: string;
+  Physician?: string;
   AnalysisResults?: {
     Analyte?: string;
     Result?: string;
@@ -126,6 +151,29 @@ type AnalysisDocument = {
     AnalyteInternationalCode?: string;
   }[];
 };
+
+const firstText = (...values: (string | undefined)[]): string | null => {
+  for (const v of values) {
+    const text = v?.trim();
+    if (text) return text;
+  }
+  return null;
+};
+
+/**
+ * Ro'yxatdagi sarlavha: 1C bergan tahlil nomi; bo'lmasa bitta
+ * ko'rsatkich bo'lsa uning nomi; ko'p bo'lsa biomaterial bo'yicha.
+ */
+function titleOf(explicit: string | null, biomaterial: string | null, items: { title: string }[]): string {
+  if (explicit) return explicit;
+  if (items.length === 1 && items[0]) return items[0].title;
+  if (biomaterial) return `${biomaterial} tahlili`;
+  return items.length ? `${items[0]?.title ?? 'Tahlil'} +${items.length - 1}` : 'Tahlil natijalari';
+}
+
+/** Kamida bitta qiymat bo'lsa — tayyor; hammasi bo'sh — laboratoriya hali kiritmagan. */
+const statusOf = (items: { value: string | null }[]): 'ready' | 'pending' =>
+  items.some((i) => i.value) ? 'ready' : 'pending';
 
 /**
  * Hujjat bemorga hali ham ko'rsatiladimi.
@@ -189,10 +237,15 @@ type ResultItem = {
  */
 type ResultGroup = {
   id: string;
+  /** Tahlil (panel) nomi — ro'yxatda ko'rinadi (C2). */
+  title: string;
   date: string;
   patientName: string | null;
+  /** Yuborgan shifokor (1C bersa). */
+  doctor: string | null;
   biomaterial: string | null;
   sampleId: string | null;
+  status: 'ready' | 'pending';
   seen: boolean;
   items: ResultItem[];
 };
@@ -241,10 +294,13 @@ async function loadResults(phone: string): Promise<ResultGroup[]> {
     if (!group) {
       group = {
         id: key,
+        title: '',
         date,
         patientName: null,
+        doctor: null,
         biomaterial: null,
         sampleId: null,
+        status: 'pending',
         seen: true,
         items: [],
       };
@@ -298,19 +354,33 @@ async function loadResults(phone: string): Promise<ResultGroup[]> {
 
     if (!items.length) return [];
 
+    const biomaterial = doc.Biomaterial?.trim() || null;
     return [
       {
         id: doc.sort_key,
+        title: titleOf(
+          firstText(doc.AnalysisName, doc.Analysis, doc.PanelName, doc.Nomenclature, doc.ServiceName, doc.Title),
+          biomaterial,
+          items,
+        ),
         date: fromOneCDate(doc.Date) || fromOneCDate(doc.RegisterDate),
         patientName: doc.PatientName?.trim() || null,
-        biomaterial: doc.Biomaterial?.trim() || null,
+        doctor: firstText(doc.Doctor, doc.ReferringDoctor, doc.DoctorName, doc.Physician),
+        biomaterial,
         sampleId: doc.SampleID?.trim() || null,
+        status: statusOf(items),
         // "yangi" belgisi qo'yilmaydi: 1C eski tarixni ham to'kishi mumkin.
         seen: true,
         items,
       },
     ];
   });
+
+  // Sayt API'si orqali kelganlarga ham sarlavha va holat.
+  for (const group of byDate.values()) {
+    group.title = titleOf(null, null, group.items);
+    group.status = statusOf(group.items);
+  }
 
   return [...byDate.values(), ...fromDocs].sort((a, b) =>
     (b.date ?? '').localeCompare(a.date ?? ''),

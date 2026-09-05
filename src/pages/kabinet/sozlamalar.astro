@@ -1,0 +1,500 @@
+---
+import Cabinet from '../../layouts/Cabinet.astro';
+import { LANGS, LANG_NAMES } from '../../data/i18n';
+---
+
+<Cabinet
+  title="Sozlamalar — Dimed klinikasi"
+  description="Hisob, oila a‘zolari va til sozlamalari."
+  eyebrow="Shaxsiy kabinet"
+  heading="Sozlamalar"
+  area="patient"
+  active="sozlamalar"
+>
+  <div id="loading" class="state">Yuklanmoqda…</div>
+
+  <div id="guest" class="state" hidden>
+    <p>Sozlamalar uchun Telegram orqali kiring.</p>
+    <a class="btn" href="/kirish?next=/kabinet/sozlamalar">Kirish</a>
+  </div>
+
+  <div id="content" class="grid" hidden>
+    <div class="card glass">
+      <h2>Hisob</h2>
+      <div class="kv"><span class="k">Ism</span><span class="v" id="accName">—</span></div>
+      <div class="kv"><span class="k">Telefon</span><span class="v" id="accPhone">—</span></div>
+      <p class="note">
+        Kirish Telegram orqali — parol yoʻq. Telefon raqami botga ulashgan kontaktdan olinadi.
+      </p>
+      <button class="btn btn-ghost btn-sm" id="logout" type="button">Chiqish</button>
+    </div>
+
+    <div class="card glass">
+      <h2>Til</h2>
+      <p class="note top">Sayt va bot xabarlari tili.</p>
+      <div class="seg" id="langSeg">
+        {LANGS.map((l) => <button type="button" data-lang-pick={l}>{LANG_NAMES[l]}</button>)}
+      </div>
+      <p class="msg" id="langMsg" role="status" aria-live="polite"></p>
+    </div>
+
+    <div class="card glass full">
+      <h2>Bemorlar (oila a‘zolari)</h2>
+      <p class="note top">
+        Bir telefondan butun oila foydalanishi mumkin. Navbat va tahlillar tanlangan bemor nomiga
+        boradi — uni shu yerda yoki navbat olishda almashtirasiz.
+      </p>
+      <div class="who-list" id="whoList"></div>
+      <button class="btn btn-ghost btn-sm" id="whoNew" type="button">+ Boshqa odam qoʻshish</button>
+      <div class="who-form" id="whoForm" hidden>
+        <div class="two">
+          <input id="w-last" type="text" placeholder="Familiya *" autocomplete="family-name" />
+          <input id="w-first" type="text" placeholder="Ism *" autocomplete="given-name" />
+        </div>
+        <input id="w-mid" type="text" placeholder="Sharif (ixtiyoriy)" />
+        <div class="fld-label">Tugʻilgan sana *</div>
+        <div id="w-birth"></div>
+        <div class="actions">
+          <button class="btn btn-ghost btn-sm" id="whoCancel" type="button">Bekor qilish</button>
+          <button class="btn btn-sm" id="whoSave" type="button">Saqlash</button>
+        </div>
+      </div>
+      <p class="msg" id="whoMsg" role="status" aria-live="polite"></p>
+    </div>
+
+    <p class="foot full">
+      <a href="/maxfiylik">Maxfiylik siyosati</a> — qanday maʼlumotlar saqlanadi va huquqlaringiz.
+    </p>
+  </div>
+</Cabinet>
+
+<script>
+  import { birthDateSelectsHtml, readBirthDate, formatBirthDate } from '../../lib/birthdate';
+  import { getLang, setLang, applyLang } from '../../lib/lang';
+  import { isLang } from '../../data/i18n';
+
+  type Patient = { id: string; name: string; source: '1c' | 'local'; birthDate: string | null };
+  type SessionInfo = { role: string; name?: string; phone?: string; lang?: string };
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) =>
+    s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+
+  const setMsg = (id: string, text: string, kind: 'error' | 'ok' | '' = '') => {
+    const m = el(id);
+    m.textContent = text;
+    m.className = `msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  const post = (url: string, body: unknown) =>
+    fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  let lang = getLang();
+
+  // ---------- til ----------
+  function bindLang() {
+    applyLang(lang, el('langSeg'));
+    el('langSeg')
+      .querySelectorAll<HTMLButtonElement>('[data-lang-pick]')
+      .forEach((btn) =>
+        btn.addEventListener('click', async () => {
+          const picked = btn.dataset.langPick;
+          if (!isLang(picked)) return;
+          lang = picked;
+          setLang(picked);
+          applyLang(picked, el('langSeg'));
+          setMsg('langMsg', 'Saqlanmoqda…');
+          try {
+            const res = await post('/api/settings', { lang: picked });
+            setMsg('langMsg', res.ok ? 'Til saqlandi.' : 'Saqlab boʻlmadi.', res.ok ? 'ok' : 'error');
+          } catch {
+            setMsg('langMsg', 'Internetga ulanishda muammo.', 'error');
+          }
+          renderPatients();
+        }),
+      );
+  }
+
+  // ---------- bemorlar ----------
+  let patients: Patient[] = [];
+  let activeId: string | null = null;
+
+  function renderPatients() {
+    el('whoList').innerHTML = patients.length
+      ? patients
+          .map(
+            (p) => `<button class="who-item${p.id === activeId ? ' on' : ''}" data-pick="${esc(p.id)}" type="button">
+              <span class="who-nm">${esc(p.name)}</span>
+              <span class="who-meta">${
+                p.birthDate ? esc(formatBirthDate(p.birthDate, lang)) : 'tugʻilgan sana kiritilmagan'
+              }${p.source === '1c' ? ' · klinikada roʻyxatda' : ''}</span>
+              ${p.id === activeId ? '<span class="who-tag">tanlangan</span>' : ''}
+            </button>`,
+          )
+          .join('')
+      : '<p class="empty">Hali bemor qoʻshilmagan.</p>';
+
+    el('whoList')
+      .querySelectorAll<HTMLButtonElement>('[data-pick]')
+      .forEach((b) =>
+        b.addEventListener('click', async () => {
+          const id = b.dataset.pick ?? '';
+          setMsg('whoMsg', 'Saqlanmoqda…');
+          try {
+            const res = await post('/api/patients', { action: 'select', id });
+            if (!res.ok) throw new Error(String(res.status));
+            activeId = id;
+            setMsg('whoMsg', 'Tanlangan bemor saqlandi.', 'ok');
+            renderPatients();
+          } catch {
+            setMsg('whoMsg', 'Saqlab boʻlmadi. Qayta urinib koʻring.', 'error');
+          }
+        }),
+      );
+  }
+
+  async function loadPatients() {
+    const res = await fetch('/api/patients', { credentials: 'same-origin' });
+    if (!res.ok) throw new Error(String(res.status));
+    const data = (await res.json()) as { patients: Patient[]; activeId: string | null };
+    patients = data.patients;
+    activeId = data.activeId;
+    renderPatients();
+  }
+
+  el('w-birth').innerHTML = birthDateSelectsHtml('new', lang);
+
+  el('whoNew').addEventListener('click', () => {
+    el('whoForm').hidden = false;
+    el('whoNew').hidden = true;
+    el<HTMLInputElement>('w-last').focus();
+  });
+
+  el('whoCancel').addEventListener('click', () => {
+    el('whoForm').hidden = true;
+    el('whoNew').hidden = false;
+    setMsg('whoMsg', '');
+  });
+
+  el('whoSave').addEventListener('click', async () => {
+    const lastName = el<HTMLInputElement>('w-last').value.trim();
+    const firstName = el<HTMLInputElement>('w-first').value.trim();
+    const patronymic = el<HTMLInputElement>('w-mid').value.trim();
+    const birthDate = readBirthDate(el('whoForm'), 'new');
+
+    if (!lastName || !firstName) return setMsg('whoMsg', 'Familiya va ism majburiy.', 'error');
+    if (!birthDate) return setMsg('whoMsg', 'Tugʻilgan sanani toʻliq kiriting.', 'error');
+
+    setMsg('whoMsg', 'Saqlanmoqda…');
+    try {
+      const res = await post('/api/patients', { action: 'add', firstName, lastName, patronymic, birthDate });
+      const body = (await res.json()) as { error?: string; patient?: Patient; activeId?: string };
+      if (!res.ok || !body.patient) return setMsg('whoMsg', body.error ?? 'Saqlab boʻlmadi.', 'error');
+      patients.push(body.patient);
+      activeId = body.activeId ?? body.patient.id;
+      el('whoForm').hidden = true;
+      el('whoNew').hidden = false;
+      el<HTMLInputElement>('w-last').value = '';
+      el<HTMLInputElement>('w-first').value = '';
+      el<HTMLInputElement>('w-mid').value = '';
+      setMsg('whoMsg', 'Qoʻshildi va tanlandi.', 'ok');
+      renderPatients();
+    } catch {
+      setMsg('whoMsg', 'Internetga ulanishda muammo.', 'error');
+    }
+  });
+
+  el('logout').addEventListener('click', async () => {
+    await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+    try {
+      sessionStorage.removeItem('dimed_session');
+    } catch {
+      /* sessionStorage yopiq bo'lishi mumkin */
+    }
+    window.location.href = '/';
+  });
+
+  // ---------- yuklash ----------
+  async function load() {
+    let info: SessionInfo;
+    try {
+      const res = await fetch('/api/session', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error(String(res.status));
+      info = await res.json();
+    } catch {
+      el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
+      return;
+    }
+
+    if (info.role === 'guest') {
+      el('loading').hidden = true;
+      el('guest').hidden = false;
+      return;
+    }
+
+    el('accName').textContent = info.name || '—';
+    el('accPhone').textContent = info.phone ?? '—';
+    // Serverda saqlangan til brauzerdagidan farq qilsa, serverniki ustun.
+    if (isLang(info.lang) && info.lang !== lang) {
+      lang = info.lang;
+      setLang(info.lang);
+      el('w-birth').innerHTML = birthDateSelectsHtml('new', lang);
+    }
+    bindLang();
+
+    try {
+      await loadPatients();
+    } catch {
+      el('whoList').innerHTML = '<p class="empty">Bemorlar roʻyxatini yuklab boʻlmadi.</p>';
+    }
+
+    el('loading').hidden = true;
+    el('content').hidden = false;
+  }
+
+  load();
+</script>
+
+<style>
+  .state {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  @media (max-width: 820px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .full {
+    grid-column: 1 / -1;
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: 24px;
+  }
+
+  .card h2 {
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    font-family: var(--font-sans);
+    margin-bottom: 16px;
+  }
+
+  .kv {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--line);
+    font-size: 14px;
+  }
+
+  .kv .k {
+    color: var(--muted);
+  }
+
+  .kv .v {
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 16px 0;
+    line-height: 1.55;
+  }
+
+  .note.top {
+    margin-top: 0;
+  }
+
+  .seg {
+    display: flex;
+    gap: 4px;
+  }
+
+  .seg button {
+    flex: 1;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 10px;
+    padding: 8px 4px;
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .seg button.on {
+    background: var(--rose);
+    border-color: var(--rose);
+    color: #fff;
+  }
+
+  .seg button:focus-visible {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
+  }
+
+  .msg {
+    min-height: 20px;
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .msg.error {
+    color: var(--rose);
+  }
+
+  .msg.ok {
+    color: var(--leaf);
+  }
+
+  .who-list {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .who-list :global(.empty) {
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .who-list :global(.who-item) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--card);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .who-list :global(.who-item:hover) {
+    border-color: var(--leaf);
+  }
+
+  .who-list :global(.who-item.on) {
+    border-color: var(--leaf);
+    background: color-mix(in srgb, var(--leaf) 8%, var(--card));
+  }
+
+  .who-list :global(.who-nm) {
+    font-weight: 650;
+    font-size: 15px;
+  }
+
+  .who-list :global(.who-meta) {
+    font-size: 12.5px;
+    color: var(--muted);
+    flex: 1;
+  }
+
+  .who-list :global(.who-tag) {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ok);
+    background: var(--ok-bg);
+    border-radius: 999px;
+    padding: 3px 10px;
+  }
+
+  .who-form {
+    display: grid;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+
+  .two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  @media (max-width: 520px) {
+    .two {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .who-form input,
+  .who-form :global(.birth-sel) {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+    color: inherit;
+    font: inherit;
+    font-size: 14px;
+  }
+
+  .who-form input:focus-visible,
+  .who-form :global(.birth-sel:focus-visible) {
+    outline: none;
+    border-color: var(--leaf);
+  }
+
+  .who-form :global(.birth-row) {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr 1.2fr;
+    gap: 8px;
+  }
+
+  .fld-label {
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--muted);
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .foot {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .foot a {
+    color: var(--rose);
+    font-weight: 650;
+  }
+</style>

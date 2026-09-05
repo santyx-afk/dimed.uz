@@ -195,6 +195,12 @@ import { site } from '../data/site';
 
   const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const go = (): void => {
+    // Header'dagi "kim kirgan" keshi (C1) eskirmasin.
+    try {
+      sessionStorage.removeItem('dimed_session');
+    } catch {
+      /* bo'sh */
+    }
     window.location.href = safeNext();
   };
 
