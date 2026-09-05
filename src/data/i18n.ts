@@ -71,6 +71,37 @@ export const messages = {
   },
 
   // --- navbat: tasdiqlash qadami (B2) ---
+  'common.retry': { uz: 'Qayta urinish', ru: 'Повторить', en: 'Try again' },
+
+  // --- 4-qadam: kirish (guest) ---
+  'booking.login.title': { uz: 'Davom etish uchun kiring', ru: 'Войдите, чтобы продолжить', en: 'Sign in to continue' },
+  'booking.login.lede': {
+    uz: 'Navbat kim uchun ekanini bilishimiz uchun Telegram orqali kiring — SMS ham, parol ham kerak emas.',
+    ru: 'Войдите через Telegram, чтобы мы знали, для кого запись — без SMS и паролей.',
+    en: 'Sign in with Telegram so we know who the appointment is for — no SMS, no password.',
+  },
+  'booking.login.botStep': { uz: 'Botga /start yuboring va 6 xonali kodni oling', ru: 'Отправьте боту /start и получите 6-значный код', en: 'Send /start to the bot and get the 6-digit code' },
+  'booking.login.botBtn': { uz: 'Botni ochish', ru: 'Открыть бота', en: 'Open the bot' },
+  'booking.login.phone': { uz: 'Telefon raqamingiz', ru: 'Ваш номер телефона', en: 'Your phone number' },
+  'booking.login.code': { uz: 'Botdagi 6 xonali kod', ru: '6-значный код из бота', en: '6-digit code from the bot' },
+  'booking.login.button': { uz: 'Kirish', ru: 'Войти', en: 'Sign in' },
+  'booking.login.working': { uz: 'Tekshirilmoqda…', ru: 'Проверяем…', en: 'Checking…' },
+  'booking.login.phoneRequired': {
+    uz: 'Telefon raqamini toʻliq kiriting.',
+    ru: 'Введите номер телефона полностью.',
+    en: 'Enter your full phone number.',
+  },
+  'booking.login.codeRequired': {
+    uz: '6 xonali kodni toʻliq kiriting.',
+    ru: 'Введите 6-значный код полностью.',
+    en: 'Enter the full 6-digit code.',
+  },
+  'booking.login.failed': { uz: 'Kirishda xatolik.', ru: 'Ошибка входа.', en: 'Sign-in failed.' },
+  'booking.patient.required': {
+    uz: 'Davom etish uchun navbat kim uchun ekanini tanlang.',
+    ru: 'Выберите, для кого запись, чтобы продолжить.',
+    en: 'Select who the appointment is for to continue.',
+  },
   'booking.confirm.title': { uz: 'Bron maʼlumotlari', ru: 'Данные записи', en: 'Booking details' },
   'booking.confirm.price': { uz: 'Qabul narxi', ru: 'Стоимость приёма', en: 'Consultation fee' },
   'booking.confirm.payAtDesk': {
