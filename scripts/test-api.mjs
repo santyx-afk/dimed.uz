@@ -1775,6 +1775,48 @@ await test('admin baholar ro\'yxati va yashirish (F3)', async () => {
   assert.equal(tableOf('test_doctors').get('ashurov').rating_sum, 5);
 });
 
+console.log('\nBemor ro\'yxati to\'liq keladi:');
+const otherCookie = createSessionCookie({ phone: '+998907777777', userId: '888' }).split(';')[0];
+await test('25 tadan ko\'p 1C yozuvi bo\'lsa ham hammasi ko\'rinadi', async () => {
+  // Avval Limit: 25 turardi va sahifalanmasdi — oilaning bir qismi yo'qolardi.
+  for (let i = 0; i < 30; i++) {
+    seed('test_individuals', `+998907777777|90${String(i).padStart(2, '0')}`, {
+      phone: '+998907777777', sort_key: `90${String(i).padStart(2, '0')}`,
+      Surname: 'Toirov', Name: `Farzand${i}`, Birthday: '01.01.2010',
+    });
+  }
+  const res = await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: otherCookie },
+  });
+  assert.equal(res.status, 200);
+  const { patients } = await res.json();
+  assert.ok(patients.length >= 31, `hammasi kelishi kerak edi, keldi: ${patients.length}`);
+  assert.ok(patients.some((p) => p.name === 'Toirov Farzand29'), 'oxirgisi ham ro\'yxatda');
+});
+
+await test('kodsiz (eski PROFILE) yozuv ham ro\'yxatda qoladi', async () => {
+  seed('test_individuals', '+998907777777|PROFILE', {
+    phone: '+998907777777', sort_key: 'PROFILE', Surname: 'Toirova', Name: 'Xadicha',
+  });
+  const { patients } = await (await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: otherCookie },
+  })).json();
+  const one = patients.find((p) => p.name === 'Toirova Xadicha');
+  assert.ok(one, 'kodsiz yozuv ham chiqishi kerak');
+  assert.equal(one.id, 'PROFILE');
+});
+
+await test('bir odam ikki marta chiqmaydi', async () => {
+  // Eski PROFILE yozuvi kodli yozuv bilan bir xil ismda — bittasi qoladi.
+  seed('test_individuals', '+998907777777|PROFILE', {
+    phone: '+998907777777', sort_key: 'PROFILE', Surname: 'Toirov', Name: 'Farzand0',
+  });
+  const { patients } = await (await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: otherCookie },
+  })).json();
+  assert.equal(patients.filter((p) => p.name === 'Toirov Farzand0').length, 1);
+});
+
 console.log('\nShifokorning yosh cheklovi:');
 const AGE_DATE = addDays(BOOK_DATE, 3);
 const setAgeGroup = (group) => {

@@ -451,6 +451,15 @@ standart nomi bilan yaratilgan `AnalysisResult` — ega tasdiqlagach o'chiriladi
     ko'rsatiladi (eski yozuvlar ular yuborilmasdan oldin tushgan).
     Shu yo'l tanlangani uchun 1C'ga `DeleteItem` huquqi kerak emas.
 
+22. **Bemor ro'yxati sahifalanadi.** `dimed_individuals` telefon
+    bo'yicha `queryAllPages` bilan oxirigacha o'qiladi. Avval
+    `Limit: 25` turardi va sahifalanmasdi: bir telefon ostida 25 tadan
+    ko'p yozuv bo'lsa oilaning bir qismi jimgina yo'qolardi. Xato
+    bo'lsa endi log-botga boradi (avval `catch(() => [])` edi va
+    sabab bilinmasdi). Kodsiz eski "PROFILE" yozuvi ham ro'yxatda
+    qoladi, lekin kodli yozuv bilan ismi bir xil bo'lsa takrorlanmaydi.
+    Nima ko'rinishini tekshirish: `npm run check-patients -- +998...`.
+
 20. **Bemor kimligi — `/api/patients`.** Ro'yxat 1C katalogi va
     `dimed_users.patients` (saytda qo'shilganlar) dan yig'iladi;
     tanlangani `active_patient_id` da turadi. Yangi odam qo'shish
