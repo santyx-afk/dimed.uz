@@ -57,6 +57,7 @@ const me = await load('me.ts');
 const doctorSchedule = await load('doctor-schedule.ts');
 const lcResults = await load('lc-results.ts');
 const reschedule = await load('reschedule.ts');
+const cancelApi = await load('cancel.ts');
 const doctorOff = await load('doctor-off.ts');
 const remindPatients = await load('remind-patients.ts');
 const doctorDaily = await load('doctor-daily.ts');
@@ -361,6 +362,30 @@ const authed = (obj) => ({
   (555A) 1C dan Birthday bilan kelgan — bron shu bemor nomiga olinadi.
 */
 const bookAs = (obj) => authed({ patientId: '555A', privacyAccepted: true, ...obj });
+
+/** Ikkinchi bemor (boshqa telefon) — begona so'rovlarni tekshirish uchun. */
+const otherCookie = createSessionCookie({ phone: '+998907777777', userId: '888' }).split(';')[0];
+
+/*
+  Test telefonining kelgusi bronlarini vaqtincha olib turadi: haqiqiy
+  bemorda ular bo'lmaydi, lekin testlar ketma-ket yurgani uchun
+  yig'ilib qoladi va "bir vaqtda 5 ta" chegarasiga urilib ketadi.
+  Qaytaruvchi funksiya qaytaradi — keyingi testlarning ma'lumoti
+  joyida qolsin.
+*/
+const clearUpcoming = (phone = '+998901234567') => {
+  const table = tableOf('test_appointments');
+  const now = new Date().toISOString();
+  const removed = [];
+  for (const [key, row] of [...table.entries()]) {
+    if (row.phone === phone && row.starts_at > now) {
+      removed.push([key, row]);
+      table.delete(key);
+    }
+  }
+  return () => removed.forEach(([key, row]) => seed('test_appointments', key, row));
+};
+
 
 await test('maxfiylik siyosatiga rozilik bo\'lmasa bron qilinmaydi', async () => {
   const res = await call(book, 'https://dimed.uz/api/book', bookAs({
@@ -928,6 +953,38 @@ await test('yangi tayyor natija tushganda havola bilan xabar ketadi, takrorlanma
   assert.equal(telegramCalls.filter((c) => c.body.chat_id === '777').length, 0, 'ikkinchi marta yuborilmaydi');
 });
 
+await test('tez yugurish faqat yaqinda kelgan bemorni qaraydi', async () => {
+  // Tarixi belgilangan, lekin yaqinda navbati bo'lmagan bemor — o'tkazib
+  // yuboriladi; tungi to'liq aylanishda esa qaraladi.
+  const user = tableOf('test_users').get('888');
+  seed('test_users', '888', { ...user, results_notified: [] });
+  seed('test_analysis_results', '+998907777777|uzoq-1', {
+    phone: '+998907777777', sort_key: 'uzoq-1', Date: '01.02.2026 10:00:00',
+    AnalysisResults: [{ Analyte: 'Gemoglobin', Result: '130', AnalyteUnit: 'g/L' }],
+  });
+
+  telegramCalls.length = 0;
+  const res = await call(notifyResults, 'https://dimed.uz/api/notify-results?mode=recent');
+  const data = await res.json();
+  assert.equal(data.mode, 'recent');
+  assert.ok(data.users > data.checked, 'hamma bemor qaralmasligi kerak');
+  assert.equal(
+    telegramCalls.filter((c) => c.body.chat_id === '888').length,
+    0,
+    'yaqinda kelmagan bemorga xabar yo\'q',
+  );
+
+  // Tungi to'liq aylanishda esa u ham qaraladi va natijasi yetib boradi.
+  telegramCalls.length = 0;
+  const full = await (await call(notifyResults, 'https://dimed.uz/api/notify-results?mode=full')).json();
+  assert.equal(full.mode, 'full');
+  assert.equal(full.checked, full.users, 'to\'liq aylanishda hammasi qaraladi');
+  assert.ok(
+    telegramCalls.some((c) => c.body.chat_id === '888' && c.body.text?.includes('Gemoglobin')),
+    'to\'liq aylanishda natija haqida xabar ketadi',
+  );
+});
+
 console.log('\nBemorni tanlash (bir telefon — bir oila):');
 
 await test('sessiyasiz /api/patients 401 qaytaradi', async () => {
@@ -1287,6 +1344,71 @@ await test('kabinetda faqat yangi vaqt ko\'rinadi', async () => {
   assert.equal(data.appointments.length, 1);
   assert.equal(data.appointments[0].time, '10:00');
   assert.equal(data.appointments[0].canMove, true);
+});
+
+console.log('\nBemor bronni bekor qiladi:');
+await test('bekor qilish slotni bo\'shatadi va botga xabar ketadi', async () => {
+  const restore = clearUpcoming();
+  const CANCEL_DATE = addDays(BOOK_DATE, 6);
+  const before = tableOf('test_doctors').get('ashurov');
+  seed('test_doctors', 'ashurov', {
+    ...before, slot_minutes: 60, shifts: [{ start: '08:00', end: '17:00' }],
+    workdays: [0, 1, 2, 3, 4, 5, 6], age_group: 'all',
+  });
+
+  const booked = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: CANCEL_DATE, time: '09:00',
+  }));
+  assert.equal(booked.status, 200, JSON.stringify(await booked.clone().json()));
+
+  const kirmagan = await call(cancelApi, 'https://dimed.uz/api/cancel',
+    jsonBody({ doctor: 'ashurov', date: CANCEL_DATE, time: '09:00' }));
+  assert.equal(kirmagan.status, 401);
+
+  const begona = await call(cancelApi, 'https://dimed.uz/api/cancel', {
+    ...jsonBody({ doctor: 'ashurov', date: CANCEL_DATE, time: '09:00' }),
+    headers: { 'content-type': 'application/json', cookie: otherCookie },
+  });
+  assert.equal(begona.status, 403);
+
+  telegramCalls.length = 0;
+  const res = await call(cancelApi, 'https://dimed.uz/api/cancel', {
+    ...jsonBody({ doctor: 'ashurov', date: CANCEL_DATE, time: '09:00' }),
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_appointments').get(`ashurov#${CANCEL_DATE}|09:00`).status, 'cancelled');
+  assert.ok(telegramCalls.some((c) => c.body.text?.includes('bekor qilindi')));
+
+  // Slot yana bo'sh — boshqa bemor olishi mumkin.
+  const free = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${CANCEL_DATE}`)).json();
+  assert.equal(free.slots.find((x) => x.time === '09:00').free, true);
+
+  // Ikkinchi marta bekor qilib bo'lmaydi.
+  const again = await call(cancelApi, 'https://dimed.uz/api/cancel', {
+    ...jsonBody({ doctor: 'ashurov', date: CANCEL_DATE, time: '09:00' }),
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+  });
+  assert.equal(again.status, 400);
+  seed('test_doctors', 'ashurov', before);
+  restore();
+});
+
+await test('qabulga 1 soatdan kam qolsa bekor qilib bo\'lmaydi', async () => {
+  const soon = new Date(Date.now() + 30 * 60_000);
+  const { dateKey } = toTashkent(soon);
+  const time = toHHMM(toTashkent(soon).minutes);
+  seed('test_appointments', `ashurov#${dateKey}|${time}`, {
+    doctor_day: `ashurov#${dateKey}`, time, doctor_id: 'ashurov', date: dateKey,
+    phone: '+998901234567', telegram_id: '777', starts_at: soon.toISOString(),
+    status: 'booked', price: 70000, created_at: new Date().toISOString(),
+  });
+  const res = await call(cancelApi, 'https://dimed.uz/api/cancel', {
+    ...jsonBody({ doctor: 'ashurov', date: dateKey, time }),
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /1 soatdan kam/);
 });
 
 console.log('\nEslatmalar:');
@@ -1832,7 +1954,6 @@ await test('admin baholar ro\'yxati va yashirish (F3)', async () => {
 });
 
 console.log('\nBemor ro\'yxati to\'liq keladi:');
-const otherCookie = createSessionCookie({ phone: '+998907777777', userId: '888' }).split(';')[0];
 await test('25 tadan ko\'p 1C yozuvi bo\'lsa ham hammasi ko\'rinadi', async () => {
   // Avval Limit: 25 turardi va sahifalanmasdi — oilaning bir qismi yo'qolardi.
   for (let i = 0; i < 30; i++) {
@@ -1874,17 +1995,8 @@ await test('bir odam ikki marta chiqmaydi', async () => {
 });
 
 console.log('\nBir vaqtda ochiq navbatlar cheklovi:');
-/** Test telefonining kelgusi bronlarini tozalaydi (haqiqiy bemorda ular bo'lmaydi). */
-const clearUpcoming = (phone = '+998901234567') => {
-  const table = tableOf('test_appointments');
-  const now = new Date().toISOString();
-  for (const [key, row] of [...table.entries()]) {
-    if (row.phone === phone && row.starts_at > now) table.delete(key);
-  }
-};
-
 await test('bitta telefon cheksiz navbat ololmaydi', async () => {
-  clearUpcoming();
+  const restore = clearUpcoming();
   const CAP_DATE = addDays(BOOK_DATE, 5);
   // Smena oldingi testlarda o'zgargan — bu test o'zi kerakligini qo'yadi.
   const before = tableOf('test_doctors').get('ashurov');
@@ -1919,11 +2031,12 @@ await test('bitta telefon cheksiz navbat ololmaydi', async () => {
   assert.equal(again.status, 200, JSON.stringify(await again.clone().json()));
   clearUpcoming();
   seed('test_doctors', 'ashurov', before);
+  restore();
 });
 
 console.log('\nShifokorning yosh cheklovi:');
 const AGE_DATE = addDays(BOOK_DATE, 3);
-clearUpcoming();
+clearUpcoming(); // bu yozuvlar bundan keyingi testlarga kerak emas
 const setAgeGroup = (group) => {
   const doc = tableOf('test_doctors').get('ashurov');
   seed('test_doctors', 'ashurov', { ...doc, age_group: group });

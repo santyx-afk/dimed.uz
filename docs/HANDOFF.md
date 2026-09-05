@@ -110,8 +110,12 @@ kerak — pastdagi checklist.
   kattalar shifokoriga yozila oladi. Bron vidjeti mos kelmagan
   bemorni xiralashtiradi va o'tkazmaydi, `/api/book` esa qayta
   tekshiradi (vidjetni chetlab o'tgan so'rov ham to'xtaydi).
-- **Bekor qilish yo'q.** Bemor faqat boshqa vaqtga ko'chira oladi, shifokor
-  o'zgarmaydi (boshqa shifokorga o'tish — bu yangi bron).
+- **Bekor qilish va ko'chirish.** Bemor navbatni boshqa vaqtga ko'chira
+  yoki bekor qila oladi — ikkalasi ham qabulga 1 soatdan ko'p qolganda.
+  Bekor qilingan slot boshqa bemorlarga ochiladi. Shifokor o'zgarmaydi
+  (boshqa shifokorga o'tish — bu yangi bron).
+- **Bir vaqtda 5 tadan ko'p kelgusi bron bo'lmaydi** (bitta telefonda):
+  kimdir slotlarni band qilib, klinikaning kunini to'sib qo'ymasin.
 - **Klinika vaqti — Asia/Tashkent (UTC+5).** Server UTC'da ishlaydi, shuning
   uchun sana/vaqt hisoblari faqat `lib/time.ts` orqali qilinadi.
 - **Bir slot — bir bemor.** DynamoDB shartli yozuvi bilan kafolatlanadi.

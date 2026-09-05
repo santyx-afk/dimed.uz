@@ -3,6 +3,8 @@ import { ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { loadResults } from './lib/results.ts';
 import { shareUrl } from './result.ts';
+import { appointmentsOnDate } from './lib/appointments.ts';
+import { toTashkent, addDays } from './lib/time.ts';
 import { botText, isLang, type Lang } from './lib/i18n.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
@@ -24,6 +26,21 @@ const NOTIFIED_CAP = 500;
 /** Bir ishga tushishda bitta bemorga ko'pi bilan shuncha alohida xabar. */
 const MAX_SEPARATE = 3;
 
+/*
+  Har ishga tushishda hamma bemorning natijalari o'qib chiqilardi:
+  bitta bemor — ikki jadvalga so'rov. Bemor soni o'sgani sari bu
+  chiziqli qimmatlashadi va bir kuni cron vaqtga sig'may qoladi.
+
+  Shuning uchun tez-tez ishlaydigan yugurish faqat yaqinda klinikada
+  bo'lgan bemorlarni qaraydi — natija qabuldan keyin keladi. Botdan
+  o'tgan, lekin saytdan navbat olmagan bemorlar (masalan to'g'ridan
+  to'g'ri laboratoriyaga kelganlar) kuniga bir marta, tunda
+  qaraladigan to'liq aylanishda qamrab olinadi.
+*/
+const RECENT_DAYS = 21;
+/** To'liq aylanish Toshkent vaqti bilan shu soatda (cron har 15 daqiqada). */
+const FULL_SWEEP_HOUR = 3;
+
 type UserRow = {
   telegram_id: string;
   phone?: string;
@@ -31,10 +48,41 @@ type UserRow = {
   results_notified?: string[];
 };
 
+/** Oxirgi kunlarda klinikada bo'lgan bemorlar telefonlari. */
+async function recentPatients(now: Date): Promise<Set<string>> {
+  const today = toTashkent(now).dateKey;
+  const days = Array.from({ length: RECENT_DAYS }, (_, i) => addDays(today, -i));
+  const rows = await Promise.all(
+    days.map((day) => appointmentsOnDate(day).catch(() => [])),
+  );
+  return new Set(rows.flat().map((a) => a.phone).filter(Boolean));
+}
+
 export default async (request: Request, _context: Context): Promise<Response> => {
   try {
+    const now = new Date();
+    /*
+      Rejimni so'rovda ham ko'rsatish mumkin (`?mode=full`): cron
+      parametr yubormaydi, shuning uchun standarti — soat bo'yicha,
+      lekin klinika kerak bo'lganda to'liq aylanishni qo'lda ishga
+      tushira oladi (va test ham aniq rejimni tekshira oladi).
+    */
+    const asked = new URL(request.url).searchParams.get('mode');
+    const fullSweep =
+      asked === 'full' || (asked !== 'recent' && Math.floor(toTashkent(now).minutes / 60) === FULL_SWEEP_HOUR);
+
     const { Items = [] } = await db.send(new ScanCommand({ TableName: TABLES.users }));
-    const users = (Items as UserRow[]).filter((u) => u.phone && u.telegram_id);
+    const all = (Items as UserRow[]).filter((u) => u.phone && u.telegram_id);
+
+    /*
+      Tarixi hali belgilanmagan bemor (birinchi marta ko'rilayotgan)
+      har doim qaraladi — aks holda u tungi aylanishgacha kutib qolardi
+      va oradagi natijalar "yangi" bo'lib bir yo'la kelib tushardi.
+    */
+    const recent = fullSweep ? null : await recentPatients(now);
+    const users = recent
+      ? all.filter((u) => !u.results_notified || recent.has(u.phone as string))
+      : all;
 
     let checked = 0;
     let sent = 0;
@@ -47,7 +95,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       }
     }
 
-    return json({ ok: true, checked, sent });
+    return json({ ok: true, mode: fullSweep ? 'full' : 'recent', users: all.length, checked, sent });
   } catch (err) {
     await logToAdmin('notify-results', err);
     return error('Natija xabarlarini yuborishda xatolik', 500);
