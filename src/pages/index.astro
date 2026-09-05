@@ -290,7 +290,10 @@ const featuredAnalyses = featured
           </div>
           <div>
             <div class="k">Manzil</div>
-            <div class="v">{site.address}<small>{site.addressNote}</small></div>
+            <div class="v">
+              <a class="plain map-link" href={site.mapsUrl} target="_blank" rel="noopener">{site.address}</a>
+              <small>{site.addressNote}</small>
+            </div>
           </div>
         </div>
         <div class="c-row">
@@ -984,6 +987,18 @@ const featuredAnalyses = featured
     font-weight: 650;
     font-size: 15px;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Manzil — Google Maps havolasi (A4) */
+  .map-link {
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 4px;
+  }
+
+  .map-link:hover {
+    color: var(--rose);
+    text-decoration-color: currentColor;
   }
 
   .c-row .v small {

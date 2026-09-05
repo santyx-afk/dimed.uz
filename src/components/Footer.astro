@@ -9,7 +9,8 @@ const year = new Date().getFullYear();
   <div class="foot-in">
     <Logo height={22} />
     <p>
-      © {year} Dimed klinikasi · {site.address}
+      © {year} Dimed klinikasi ·
+      <a class="foot-link" href={site.mapsUrl} target="_blank" rel="noopener">{site.address}</a>
       <span class="sep" aria-hidden="true">·</span>
       <a class="foot-link" href="/maxfiylik">Maxfiylik siyosati</a>
     </p>
