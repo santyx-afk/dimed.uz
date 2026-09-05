@@ -297,7 +297,7 @@ import { site } from '../data/site';
     render();
   });
 
-  // ---------- PDF ----------
+  // ---------- PDF (D2): brauzerda yasaladi ----------
   const showToast = (text: string) => {
     const toast = el('toast');
     toast.textContent = text;
@@ -312,8 +312,50 @@ import { site } from '../data/site';
       .replace(/[^\p{L}\p{N}]+/gu, '_')
       .replace(/^_+|_+$/g, '') || 'bemor';
 
-  // PDF: brauzerning "PDF sifatida saqlash" oynasi (chop etish uslublari A4).
-  el('btnPdf').addEventListener('click', () => window.print());
+  let pdfLib: Promise<unknown> | null = null;
+  const loadHtml2pdf = (): Promise<unknown> => {
+    if (pdfLib) return pdfLib;
+    pdfLib = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      s.onload = () => resolve((window as unknown as { html2pdf: unknown }).html2pdf);
+      s.onerror = () => reject(new Error('html2pdf yuklanmadi'));
+      document.head.appendChild(s);
+    });
+    return pdfLib;
+  };
+
+  el('btnPdf').addEventListener('click', async () => {
+    if (!result) return;
+    const btn = el<HTMLButtonElement>('btnPdf');
+    const report = el('report');
+    const filename = `Dimed_${fileSlug(result.patientName ?? 'bemor')}_${result.date.slice(0, 10) || 'natija'}.pdf`;
+
+    btn.disabled = true;
+    report.classList.add('pdf-mode');
+    try {
+      const html2pdf = (await loadHtml2pdf()) as (...args: unknown[]) => {
+        set: (o: unknown) => { from: (e: HTMLElement) => { save: () => Promise<void> } };
+      };
+      await html2pdf()
+        .set({
+          margin: [8, 8, 10, 8],
+          filename,
+          image: { type: 'jpeg', quality: 0.96 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.patient-table', '.banner'] },
+        })
+        .from(report)
+        .save();
+    } catch {
+      // Kutubxona yuklanmasa — brauzerning "PDF sifatida saqlash" oynasi.
+      window.print();
+    } finally {
+      report.classList.remove('pdf-mode');
+      btn.disabled = false;
+    }
+  });
 
   // ---------- ulashish ----------
   el('btnShare').addEventListener('click', async () => {
