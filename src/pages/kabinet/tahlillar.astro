@@ -162,7 +162,7 @@ import Cabinet from '../../layouts/Cabinet.astro';
 <style>
   .state {
     text-align: center;
-    padding: 40px 0;
+    padding: 48px 0;
     color: var(--muted);
     font-size: 15px;
   }
@@ -276,7 +276,7 @@ import Cabinet from '../../layouts/Cabinet.astro';
     font-size: 11px;
     font-weight: 700;
     border-radius: 999px;
-    padding: 3px 10px;
+    padding: 4px 8px;
     white-space: nowrap;
   }
 
@@ -300,13 +300,13 @@ import Cabinet from '../../layouts/Cabinet.astro';
   @media (max-width: 600px) {
     .list :global(.lab-row) {
       flex-wrap: wrap;
-      padding: 16px 12px;
+      padding: 16px;
     }
 
     .list :global(.lab-side) {
       width: 100%;
       justify-content: space-between;
-      padding-left: 52px;
+      padding-left: calc(36px + var(--sp-3));
     }
   }
 
@@ -337,7 +337,7 @@ import Cabinet from '../../layouts/Cabinet.astro';
     font: inherit;
     font-size: 13px;
     border-radius: 999px;
-    padding: 6px 14px;
+    padding: 8px 16px;
     cursor: pointer;
   }
 

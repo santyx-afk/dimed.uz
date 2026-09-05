@@ -747,7 +747,7 @@ const widgetData = JSON.stringify({ departments, doctors });
 <style>
   .widget {
     border-radius: 22px;
-    padding: 22px;
+    padding: var(--card-pad);
     position: relative;
   }
 
@@ -771,7 +771,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   .live-dot {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     font-size: 12px;
     font-weight: 600;
     color: var(--leaf);
@@ -798,7 +798,7 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   .steps {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: 16px;
   }
 
@@ -807,14 +807,14 @@ const widgetData = JSON.stringify({ departments, doctors });
     border: none;
     background: var(--busy);
     border-radius: 10px;
-    padding: 7px 4px;
+    padding: 8px 4px;
     font-size: 11.5px;
     font-weight: 650;
     color: var(--muted);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
     transition:
       background 0.2s,
       color 0.2s;
@@ -870,7 +870,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     text-transform: uppercase;
     letter-spacing: 0.09em;
     color: var(--muted);
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
 
   .widget :global(.dept-grid) {
@@ -882,12 +882,12 @@ const widgetData = JSON.stringify({ departments, doctors });
   .widget :global(.dept-btn) {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     text-align: left;
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 13px;
-    padding: 11px 13px;
+    padding: 8px 16px;
     font-size: 13.5px;
     font-weight: 600;
     transition:
@@ -939,12 +939,12 @@ const widgetData = JSON.stringify({ departments, doctors });
   .widget :global(.doc-btn) {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
     text-align: left;
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 13px;
-    padding: 9px 12px;
+    padding: 8px 16px;
     transition: border-color 0.15s;
   }
 
@@ -975,7 +975,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
   }
 
   .widget :global(.doc-btn .rate-tag) {
@@ -995,16 +995,16 @@ const widgetData = JSON.stringify({ departments, doctors });
     color: var(--leaf);
     background: var(--leaf-soft);
     border-radius: 999px;
-    padding: 4px 9px;
+    padding: 4px 8px;
     white-space: nowrap;
   }
 
   .widget :global(.date-row) {
     display: flex;
-    gap: 7px;
+    gap: 8px;
     overflow-x: auto;
-    padding-bottom: 6px;
-    margin-bottom: 14px;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
   }
 
   .widget :global(.date-pill) {
@@ -1012,7 +1012,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
     border-radius: 12px;
-    padding: 7px 6px;
+    padding: 8px;
     text-align: center;
     font-size: 11px;
     font-weight: 600;
@@ -1047,7 +1047,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   .widget :global(.slot-grid) {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 7px;
+    gap: 8px;
     max-height: 210px;
     overflow-y: auto;
     padding-right: 2px;
@@ -1092,7 +1092,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     gap: 16px;
     font-size: 11.5px;
     color: var(--muted);
-    margin-top: 12px;
+    margin-top: 16px;
   }
 
   .widget :global(.slot-legend i) {
@@ -1100,7 +1100,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     width: 10px;
     height: 10px;
     border-radius: 3px;
-    margin-right: 5px;
+    margin-right: 4px;
     vertical-align: -1px;
   }
 
@@ -1117,16 +1117,16 @@ const widgetData = JSON.stringify({ departments, doctors });
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 14px;
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
   }
 
   .widget :global(.sum-row) {
     display: flex;
     justify-content: space-between;
     font-size: 14px;
-    padding: 5px 0;
-    gap: 12px;
+    padding: 4px 0;
+    gap: 16px;
   }
 
   .widget :global(.sum-row .k) {
@@ -1141,8 +1141,8 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   .widget :global(.sum-row.total) {
     border-top: 1px dashed var(--line);
-    margin-top: 6px;
-    padding-top: 11px;
+    margin-top: 8px;
+    padding-top: 8px;
   }
 
   .widget :global(.sum-row.total .v) {
@@ -1159,8 +1159,8 @@ const widgetData = JSON.stringify({ departments, doctors });
   /* Tasdiqlash qadami: narx katta, to'lov kassada (B2) */
   .widget :global(.price-box) {
     text-align: center;
-    padding: 16px 12px;
-    margin-bottom: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
     border-radius: 14px;
     background: var(--rose-soft);
   }
@@ -1184,7 +1184,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   }
 
   .widget :global(.price-note) {
-    margin-top: 6px;
+    margin-top: 8px;
     font-size: 13.5px;
     font-weight: 600;
     color: var(--ink);
@@ -1193,13 +1193,13 @@ const widgetData = JSON.stringify({ departments, doctors });
   .widget :global(.pay-note) {
     font-size: 12px;
     color: var(--muted);
-    margin-top: 11px;
+    margin-top: 8px;
     line-height: 1.5;
   }
 
   .widget :global(.book-msg) {
     min-height: 20px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     font-size: 13px;
     font-weight: 600;
     color: var(--muted);
@@ -1216,7 +1216,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     font-size: 12.5px;
     font-weight: 600;
     padding: 0;
-    margin-top: 14px;
+    margin-top: 16px;
     text-decoration: underline;
     text-underline-offset: 3px;
   }
@@ -1227,7 +1227,7 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   .widget :global(.success) {
     text-align: center;
-    padding: 10px 4px;
+    padding: 8px 4px;
   }
 
   .widget :global(.success .badge) {
@@ -1236,7 +1236,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     border-radius: 50%;
     background: var(--leaf);
     color: #fff;
-    margin: 0 auto 14px;
+    margin: 0 auto 16px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1251,7 +1251,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   .widget :global(.success h4) {
     font-size: 19px;
     font-weight: 750;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
 
   .widget :global(.success p) {
@@ -1274,15 +1274,15 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   .widget :global(.who-list) {
     display: grid;
-    gap: 6px;
-    margin: 8px 0 10px;
+    gap: 8px;
+    margin: 8px 0;
   }
 
   .widget :global(.who-item) {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 10px 13px;
+    padding: 8px 16px;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--card);
@@ -1316,16 +1316,16 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   .widget :global(.who-form) {
     display: grid;
-    gap: 7px;
-    margin-top: 10px;
-    padding-top: 10px;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
     border-top: 1px solid var(--line);
   }
 
   .widget :global(.who-form input),
   .widget :global(.birth-sel) {
     width: 100%;
-    padding: 10px 12px;
+    padding: 8px 16px;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--card);
@@ -1343,8 +1343,8 @@ const widgetData = JSON.stringify({ departments, doctors });
   .widget :global(.consent) {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
-    margin: 12px 0 4px;
+    gap: 8px;
+    margin: 16px 0 4px;
     font-size: 13px;
     line-height: 1.45;
     cursor: pointer;
@@ -1373,10 +1373,10 @@ const widgetData = JSON.stringify({ departments, doctors });
   .widget :global(.birth-row) {
     display: grid;
     grid-template-columns: 1fr 1.6fr 1.2fr;
-    gap: 6px;
+    gap: 8px;
   }
 
   .widget :global(.birth-sel) {
-    padding: 10px 8px;
+    padding: 8px;
   }
 </style>

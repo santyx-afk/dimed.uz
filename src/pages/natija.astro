@@ -392,7 +392,8 @@ import { site } from '../data/site';
 
 <style>
   .page {
-    padding: 24px 0 96px;
+    /* Pastda: mobil harakat paneli (fixed) ostida qoladigan joy — 64 + 32 */
+    padding: var(--sp-4) 0 calc(var(--sp-7) + var(--sp-5));
     min-height: 60vh;
   }
 
@@ -429,7 +430,7 @@ import { site } from '../data/site';
     border: none;
     background: transparent;
     border-radius: 999px;
-    padding: 6px 12px;
+    padding: 8px 16px;
     font-size: 13px;
     font-weight: 600;
     color: var(--muted);
@@ -442,7 +443,7 @@ import { site } from '../data/site';
 
   .state {
     text-align: center;
-    padding: 40px 0;
+    padding: 48px 0;
     color: var(--muted);
     font-size: 15px;
   }
@@ -536,7 +537,7 @@ import { site } from '../data/site';
 
   .patient-table td {
     width: 50%;
-    padding: 12px 16px;
+    padding: 16px;
     border-bottom: 1px solid var(--r-line);
     vertical-align: top;
   }
@@ -566,7 +567,7 @@ import { site } from '../data/site';
 
   .banner {
     border-radius: 12px;
-    padding: 12px 16px;
+    padding: 16px;
     margin-bottom: 16px;
     font-size: 13.5px;
     font-weight: 500;
@@ -599,7 +600,7 @@ import { site } from '../data/site';
   }
 
   .section-title {
-    padding: 12px 16px;
+    padding: 16px;
     border-bottom: 1px solid var(--r-line);
     font-family: var(--font-display);
     font-size: 17px;
@@ -614,7 +615,7 @@ import { site } from '../data/site';
 
   .data-table th {
     background: #fdf5f9;
-    padding: 12px 16px;
+    padding: 16px;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -625,7 +626,7 @@ import { site } from '../data/site';
   }
 
   .data-table :global(td) {
-    padding: 12px 16px;
+    padding: 16px;
     border-bottom: 1px solid var(--r-line);
     font-size: 14px;
     vertical-align: middle;
@@ -639,7 +640,7 @@ import { site } from '../data/site';
   .data-table :global(.test-name-wrap) {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
   }
 
   .data-table :global(.test-name) {
@@ -657,11 +658,11 @@ import { site } from '../data/site';
 
   .data-table :global(.test-desc) {
     display: none;
-    margin-top: 6px;
+    margin-top: 8px;
     font-size: 12px;
     color: var(--r-muted);
     background: #f7f0f4;
-    padding: 6px 8px;
+    padding: 8px;
     border-radius: 6px;
   }
 
@@ -681,7 +682,7 @@ import { site } from '../data/site';
 
   .data-table :global(.badge) {
     display: inline-block;
-    padding: 3px 8px;
+    padding: 4px 8px;
     border-radius: 6px;
     font-size: 11px;
     font-weight: 700;
@@ -743,7 +744,7 @@ import { site } from '../data/site';
     top: 2px;
     width: 10px;
     height: 10px;
-    margin-left: -5px;
+    margin-left: -4px;
     border-radius: 50%;
     border: 2px solid #fff;
     box-shadow: 0 0 0 1px rgb(0 0 0 / 0.15);
@@ -771,7 +772,7 @@ import { site } from '../data/site';
   .disclaimer {
     background: #f7f0f4;
     border-radius: 12px;
-    padding: 12px 16px;
+    padding: 16px;
     font-size: 12.5px;
     color: var(--r-muted);
   }
@@ -807,11 +808,11 @@ import { site } from '../data/site';
   /* --- mobil: jadval kartochkalarga aylanadi --- */
   @media (max-width: 768px) {
     .page {
-      padding-bottom: 96px;
+      padding-bottom: calc(var(--sp-7) + var(--sp-5));
     }
 
     .report {
-      padding: 20px 16px;
+      padding: 16px;
       border-radius: 12px;
     }
 
@@ -831,7 +832,7 @@ import { site } from '../data/site';
       right: 0;
       z-index: 40;
       margin: 0;
-      padding: 12px 16px;
+      padding: 16px;
       background: color-mix(in srgb, var(--bg) 92%, transparent);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
@@ -876,11 +877,11 @@ import { site } from '../data/site';
 
     .data-table :global(td) {
       border-bottom: none;
-      padding: 6px 12px;
+      padding: 8px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
+      gap: 16px;
       text-align: right;
     }
 
@@ -960,7 +961,7 @@ import { site } from '../data/site';
     .data-table :global(td) {
       display: table-cell !important;
       text-align: left !important;
-      padding: 10px 12px;
+      padding: 8px 16px;
     }
 
     .data-table :global(td::before) {

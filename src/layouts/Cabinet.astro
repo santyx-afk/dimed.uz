@@ -66,7 +66,7 @@ const tabs: Record<Area, { key: string; href: string; label: string }[]> = {
 
 <style>
   .page {
-    padding: 32px 0 64px;
+    padding: var(--sp-5) 0 var(--section-pad);
     min-height: 60vh;
   }
 
@@ -127,7 +127,7 @@ const tabs: Record<Area, { key: string; href: string; label: string }[]> = {
 
   @media (max-width: 600px) {
     .page {
-      padding: 24px 0 48px;
+      padding: var(--sp-4) 0 var(--section-pad);
     }
   }
 </style>
