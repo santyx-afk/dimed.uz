@@ -72,6 +72,7 @@ const pricesApi = await load('prices.ts');
 const adminPrices = await load('admin-prices.ts');
 const notifyResults = await load('notify-results.ts');
 const askRatings = await load('ask-ratings.ts');
+const adminRatings = await load('admin-ratings.ts');
 const { createShareToken } = await import(pathToFileURL(join(fnDir, 'lib', 'share.ts')).href);
 
 const { toTashkent, toInstant, addDays } = await import(
@@ -1726,6 +1727,52 @@ await test('cron: vaqti o\'tgan navbat uchun so\'raladi, kelmagan uchun yo\'q', 
   const again = await (await call(askRatings, 'https://dimed.uz/api/ask-ratings')).json();
   assert.equal(again.asked, 0, 'takror so\'ralmaydi');
   assert.equal(telegramCalls.length, 0);
+});
+
+await test('admin baholar ro\'yxati va yashirish (F3)', async () => {
+  assert.equal((await call(adminRatings, 'https://dimed.uz/api/admin-ratings')).status, 401);
+  assert.equal(
+    (await call(adminRatings, 'https://dimed.uz/api/admin-ratings', { headers: { cookie: sessionCookie } })).status,
+    403,
+  );
+
+  const list = await (await call(adminRatings, 'https://dimed.uz/api/admin-ratings', {
+    headers: { cookie: adminRateCookie },
+  })).json();
+  const row = list.ratings.find((r) => r.doctorId === 'ashurov');
+  assert.ok(row);
+  assert.equal(row.doctorName, 'Ashurov Tursunali');
+  assert.equal(row.rating, 5);
+  assert.equal(row.comment, 'Juda yaxshi shifokor');
+  assert.equal(row.patientName, 'Azizova');
+  assert.ok(row.phone.includes('•'), 'telefon niqoblangan');
+  assert.equal(row.hidden, false);
+  const doc = list.doctors.find((d) => d.id === 'ashurov');
+  assert.equal(doc.ratingAvg, 5);
+  assert.equal(doc.ratingCount, 1);
+
+  const post = (body) => call(adminRatings, 'https://dimed.uz/api/admin-ratings', {
+    ...jsonBody(body),
+    headers: { 'content-type': 'application/json', cookie: adminRateCookie },
+  });
+  assert.equal((await post({ id: 'x', hidden: true })).status, 400);
+  assert.equal((await post({ id: 'ashurov|yoq', hidden: true })).status, 404);
+
+  const hide = await post({ id: row.id, hidden: true });
+  assert.equal(hide.status, 200);
+  assert.equal(tableOf('test_doctors').get('ashurov').rating_count, 0);
+  assert.equal(tableOf('test_doctors').get('ashurov').rating_sum, 0);
+  const pub = await (await call(doctorsList, 'https://dimed.uz/api/doctors')).json();
+  assert.equal(pub.find((d) => d.id === 'ashurov').ratingAvg, null, 'yashirilgan baho o\'rtachaga kirmaydi');
+
+  const twice = await (await post({ id: row.id, hidden: true })).json();
+  assert.equal(twice.unchanged, true);
+  assert.equal(tableOf('test_doctors').get('ashurov').rating_count, 0, 'ikki marta ayirilmaydi');
+
+  const show = await post({ id: row.id, hidden: false });
+  assert.equal(show.status, 200);
+  assert.equal(tableOf('test_doctors').get('ashurov').rating_count, 1);
+  assert.equal(tableOf('test_doctors').get('ashurov').rating_sum, 5);
 });
 
 console.log('\nPayme to\'lovi:');
