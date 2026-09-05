@@ -211,7 +211,7 @@ await test('to\'g\'ri kod sessiya beradi va kod bir martalik', async () => {
 
 await test('kirishda 1C profili yangilanadi', async () => {
   seed('test_individuals', '+998901234567|555A', {
-    phone: '+998901234567', sort_key: '555A', Surname: 'Azizova',
+    phone: '+998901234567', sort_key: '555A', Surname: 'Azizova', Birthday: '25.04.1990',
   });
   await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({ message: { chat: { id: 777 }, text: '/start' } }),
@@ -290,22 +290,49 @@ const authed = (obj) => ({
   headers: { 'content-type': 'application/json', cookie: sessionCookie },
 });
 
+/*
+  Bron uchun bemor (tug'ilgan sanasi bilan) majburiy (B1). Azizova
+  (555A) 1C dan Birthday bilan kelgan — bron shu bemor nomiga olinadi.
+*/
+const bookAs = (obj) => authed({ patientId: '555A', ...obj });
+
+await test('bemorsiz yoki tug\'ilgan sanasiz bron qilinmaydi', async () => {
+  const noPatient = await call(book, 'https://dimed.uz/api/book', authed({
+    doctor: 'ashurov', date: BOOK_DATE, time: '09:00',
+  }));
+  assert.equal(noPatient.status, 400, 'hali hech kim tanlanmagan — bemor so\'raladi');
+  assert.match((await noPatient.json()).error, /kim uchun/);
+
+  seed('test_individuals', '+998901234567|556B', {
+    phone: '+998901234567', sort_key: '556B', Surname: 'Sanasiz', Name: 'Bemor',
+  });
+  const noBirth = await call(book, 'https://dimed.uz/api/book', authed({
+    doctor: 'ashurov', date: BOOK_DATE, time: '09:00', patientId: '556B',
+  }));
+  assert.equal(noBirth.status, 400);
+  assert.match((await noBirth.json()).error, /tug‘ilgan sana/);
+  assert.equal(tableOf('test_appointments').has(`ashurov#${BOOK_DATE}|09:00`), false);
+});
+
 await test('bron qilinadi va botga tasdiq ketadi', async () => {
   telegramCalls.length = 0;
-  const res = await call(book, 'https://dimed.uz/api/book', authed({
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({
     doctor: 'ashurov', date: BOOK_DATE, time: '09:00',
   }));
   assert.equal(res.status, 200);
   const data = await res.json();
   assert.equal(data.mode, 'at_clinic');
+  assert.equal(data.appointment.patientName, 'Azizova');
+  assert.equal(data.appointment.patientBirthDate, '1990-04-25');
   const appt = tableOf('test_appointments').get(`ashurov#${BOOK_DATE}|09:00`);
   assert.equal(appt.status, 'booked', 'klinikada to\'lash — darhol band');
   assert.equal(appt.hold_until, undefined, 'bunda hold muddati bo\'lmasligi kerak');
+  assert.equal(appt.patient_birth_date, '1990-04-25', 'tug\'ilgan sana navbat yozuviga tushadi');
   assert.ok(telegramCalls.some((c) => c.body.text.includes('band qilindi')));
 });
 
 await test('band slot ikkinchi marta olinmaydi', async () => {
-  const res = await call(book, 'https://dimed.uz/api/book', authed({
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({
     doctor: 'ashurov', date: BOOK_DATE, time: '09:00',
   }));
   assert.equal(res.status, 409);
@@ -319,14 +346,14 @@ await test('band slot ro\'yxatda yopiq ko\'rinadi', async () => {
 });
 
 await test('jadvalda yo\'q vaqt rad etiladi', async () => {
-  const res = await call(book, 'https://dimed.uz/api/book', authed({
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({
     doctor: 'ashurov', date: BOOK_DATE, time: '12:30',
   }));
   assert.equal(res.status, 400);
 });
 
 await test('o\'tgan kunga bron qilib bo\'lmaydi', async () => {
-  const res = await call(book, 'https://dimed.uz/api/book', authed({
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({
     doctor: 'ashurov', date: '2020-01-01', time: '09:00',
   }));
   assert.equal(res.status, 400);
@@ -600,7 +627,7 @@ await test('1C dagi oila a\'zolari variant sifatida chiqadi', async () => {
   });
   seed('test_individuals', '+998901234567|30002', {
     phone: '+998901234567', sort_key: '30002',
-    FullName: 'Toirova Malika Rozimuhammadovna',
+    FullName: 'Toirova Malika Rozimuhammadovna', Birthday: '2015-06-01',
   });
   seed('test_individuals', '+998901234567|30003', {
     phone: '+998901234567', sort_key: '30003',
@@ -616,6 +643,42 @@ await test('1C dagi oila a\'zolari variant sifatida chiqadi', async () => {
   assert.ok(nomlar.includes('Toirova Malika Rozimuhammadovna'));
   assert.ok(!nomlar.some((n) => n.includes('Eski')), 'o\'chirilgani chiqmasligi kerak');
   assert.equal(data.activeId, null, 'hali hech kim tanlanmagan');
+
+  const azizova = data.patients.find((p) => p.id === '555A');
+  assert.equal(azizova.birthDate, '1990-04-25', '1C Birthday ISO ko\'rinishida qaytadi');
+  const toirov = data.patients.find((p) => p.id === '30001');
+  assert.equal(toirov.birthDate, null, 'Birthday bo\'lmasa null');
+});
+
+await test('mavjud bemorga tug\'ilgan sana kiritiladi (1C va saytniki)', async () => {
+  const bad = await call(patientsApi, 'https://dimed.uz/api/patients', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ action: 'birthDate', id: '30001', birthDate: '2030-02-30' }),
+  });
+  assert.equal(bad.status, 400, 'haqiqiy bo\'lmagan sana rad etiladi');
+
+  const res = await call(patientsApi, 'https://dimed.uz/api/patients', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ action: 'birthDate', id: '30001', birthDate: '1988-12-01' }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).patient.birthDate, '1988-12-01');
+  assert.equal(tableOf('test_users').get('777').birth_dates['30001'], '1988-12-01',
+    '1C bemorining sanasi users.birth_dates da turadi');
+
+  const data = await (await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  assert.equal(data.patients.find((p) => p.id === '30001').birthDate, '1988-12-01');
+
+  const yoq = await call(patientsApi, 'https://dimed.uz/api/patients', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ action: 'birthDate', id: 'yoq-bunday', birthDate: '1988-12-01' }),
+  });
+  assert.equal(yoq.status, 404);
 });
 
 await test('yangi oila a\'zosi qo\'shiladi va tanlanadi', async () => {
@@ -626,16 +689,29 @@ await test('yangi oila a\'zosi qo\'shiladi va tanlanadi', async () => {
   });
   assert.equal(bad.status, 400, 'familiyasiz qabul qilinmaydi');
 
-  const res = await call(patientsApi, 'https://dimed.uz/api/patients', {
+  const noBirth = await call(patientsApi, 'https://dimed.uz/api/patients', {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie: sessionCookie },
     body: JSON.stringify({ action: 'add', firstName: 'Sardor', lastName: 'Karimov' }),
+  });
+  assert.equal(noBirth.status, 400, 'tug\'ilgan sanasiz qabul qilinmaydi');
+  assert.match((await noBirth.json()).error, /Tug‘ilgan sana/);
+
+  const res = await call(patientsApi, 'https://dimed.uz/api/patients', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({
+      action: 'add', firstName: 'Sardor', lastName: 'Karimov', birthDate: '2019-03-08',
+    }),
   });
   assert.equal(res.status, 200);
   const { patient, activeId } = await res.json();
   assert.equal(patient.name, 'Karimov Sardor');
   assert.equal(patient.source, 'local');
+  assert.equal(patient.birthDate, '2019-03-08');
   assert.equal(activeId, patient.id, 'yangi qo\'shilgani darhol tanlanadi');
+  const saved = tableOf('test_users').get('777').patients.find((p) => p.id === patient.id);
+  assert.equal(saved.birth_date, '2019-03-08', 'bemor yozuviga saqlanadi');
 
   const data = await (await call(patientsApi, 'https://dimed.uz/api/patients', {
     headers: { cookie: sessionCookie },
@@ -818,6 +894,8 @@ await test('qabul boshqa vaqtga ko\'chadi va botga xabar ketadi', async () => {
   assert.equal(moved.status, 'booked');
   assert.equal(moved.phone, '+998901234567');
   assert.equal(moved.moved_from, `${BOOK_DATE} 09:00`);
+  assert.equal(moved.patient_name, 'Azizova', 'bemor kimligi yangi yozuvga ko\'chishi kerak');
+  assert.equal(moved.patient_birth_date, '1990-04-25');
   assert.equal(moved.reminded_at, undefined, 'yangi vaqt uchun eslatma qaytadan yuborilishi kerak');
   assert.ok(telegramCalls.some((c) => c.body.text.includes('o\'zgartirildi')));
 });
@@ -1115,10 +1193,9 @@ await test('onlayn bron Payme havolasini qaytaradi', async () => {
   const free = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${PAY_DATE}`)).json();
   const time = free.slots.find((s) => s.free).time;
 
-  const res = await call(book, 'https://dimed.uz/api/book', {
-    ...jsonBody({ doctor: 'ashurov', date: PAY_DATE, time }),
-    headers: { 'content-type': 'application/json', cookie: sessionCookie },
-  });
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: PAY_DATE, time,
+  }));
   assert.equal(res.status, 200);
   const data = await res.json();
   assert.equal(data.mode, 'online');

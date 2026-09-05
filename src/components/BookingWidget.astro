@@ -8,7 +8,12 @@ import DeptIcon from './DeptIcon.astro';
   vaqtlar DynamoDB dagi navbatlarga qarab chiqarib tashlanadi.
   Kun tugmalari esa hozircha statik `doctors.ts` dagi `workdays` dan
   quriladi (qarang: docs/HANDOFF.md, «Muhim qarorlar», 6-band).
+
+  Boshlang'ich ma'lumot (bo'limlar, shifokorlar) JSON sifatida
+  sahifaga qo'yiladi va skript uni o'qiydi — shunda skript odatdagi
+  modul bo'lib, `src/lib` dagi yordamchilarni import qila oladi.
 */
+const widgetData = JSON.stringify({ departments, doctors });
 ---
 
 <div class="widget glass" id="navbat-widget" aria-live="polite">
@@ -35,8 +40,19 @@ import DeptIcon from './DeptIcon.astro';
       ))
     }
   </template>
+  <script is:inline type="application/json" id="widgetData" set:html={widgetData} />
 </div>
-<script is:inline define:vars={{ departments, doctors }}>
+
+<script>
+  // @ts-nocheck — vidjet tarixan oddiy JS; modulga o'tkazildi (importlar uchun).
+  import { t } from '../data/i18n';
+  import { getLang } from '../lib/lang';
+  import { birthDateSelectsHtml, readBirthDate, formatBirthDate } from '../lib/birthdate';
+
+  const { departments, doctors } = JSON.parse(document.getElementById('widgetData').textContent);
+  const lang = getLang();
+  const tr = (key, vars) => t(key, lang, vars);
+
   const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
   const MONTHS = [
     'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
@@ -47,6 +63,8 @@ import DeptIcon from './DeptIcon.astro';
   // Server YYYY-MM-DD kutadi.
   const dstr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const dlabel = (d) => `${WD[d.getDay()]}, ${d.getDate()}-${MONTHS[d.getMonth()]}`;
+  const esc = (s) =>
+    String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
 
   // <template> ichidagi tugunlar DocumentFragment'da yashaydi —
   // ularni faqat template.content orqali olish mumkin.
@@ -88,7 +106,7 @@ import DeptIcon from './DeptIcon.astro';
   };
 
   const state = { step: 1, deptId: null, doc: null, date: null, dateLabel: null, time: null, booked: null,
-    patientId: null, patientName: null };
+    patientId: null, patientName: null, patientBirthDate: null };
 
   /*
     Telefonga bog'langan bemorlar. Bir raqamdan butun oila foydalanadi
@@ -112,6 +130,7 @@ import DeptIcon from './DeptIcon.astro';
         if (pick) {
           state.patientId = pick.id;
           state.patientName = pick.name;
+          state.patientBirthDate = pick.birthDate;
         }
       }
       return data;
@@ -302,20 +321,38 @@ import DeptIcon from './DeptIcon.astro';
     else grid.innerHTML = '<p class="slot-empty">Bu shifokorning yaqin kunlarda qabuli yoʻq.</p>';
   }
 
+  /** Bemor ro'yxatidagi bitta qator: ism + tug'ilgan sana (yoki yo'qligi). */
+  const patientItem = (p) =>
+    `<button class="who-item${p.id === state.patientId ? ' on' : ''}" data-pick="${esc(p.id)}">
+      <span class="who-nm">${esc(p.name)}</span>
+      <small class="who-bd${p.birthDate ? '' : ' none'}">${
+        p.birthDate ? esc(formatBirthDate(p.birthDate, lang)) : esc(tr('booking.birthDate.missingFor'))
+      }</small>
+    </button>`;
+
   /*
-    4-qadam — navbat kim uchun. Bir telefondan butun oila foydalanadi
+    4-qadam — bemor ma'lumotlari. Bir telefondan butun oila foydalanadi
     (ota-ona bolasini o'z raqami bilan yozdiradi), shuning uchun bemor
     alohida qadamda tanlanadi: ro'yxatdan yoki yangi odam qo'shib.
+    Tug'ilgan sana majburiy (B1): yo'q bo'lsa shu yerda so'raladi va
+    bemor yozuviga saqlanadi.
   */
   async function renderPatient() {
-    wBody.innerHTML = `<div class="pane-label">Navbat kim uchun?</div>
-      <div class="who-list" id="whoList"><p class="slot-empty">Yuklanmoqda…</p></div>
+    wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.whoFor'))}</div>
+      <div class="who-list" id="whoList"><p class="slot-empty">${esc(tr('common.loading'))}</p></div>
       <button class="btn btn-ghost w-full" id="whoNew" type="button">+ Boshqa odam</button>
       <div class="who-form" id="whoForm" hidden>
         <input id="w-last" type="text" placeholder="Familiya *" autocomplete="family-name" />
         <input id="w-first" type="text" placeholder="Ism *" autocomplete="given-name" />
         <input id="w-mid" type="text" placeholder="Sharif (ixtiyoriy)" />
+        <div class="fld-label">${esc(tr('booking.birthDate'))} *</div>
+        ${birthDateSelectsHtml('new', lang)}
         <button class="btn w-full" id="whoSave" type="button">Saqlash va davom etish</button>
+      </div>
+      <div class="who-form" id="whoBirth" hidden>
+        <div class="fld-label" id="whoBirthLabel"></div>
+        ${birthDateSelectsHtml('fix', lang)}
+        <button class="btn w-full" id="whoBirthSave" type="button">Saqlash va davom etish</button>
       </div>
       <p class="book-msg" id="whoMsg" role="status" aria-live="polite"></p>
       <button class="back-link">← vaqtni oʻzgartirish</button>`;
@@ -327,17 +364,24 @@ import DeptIcon from './DeptIcon.astro';
 
     const msg = wBody.querySelector('#whoMsg');
     const form = wBody.querySelector('#whoForm');
+    const birthForm = wBody.querySelector('#whoBirth');
     const newBtn = wBody.querySelector('#whoNew');
+    const setMsg = (text, kind = '') => {
+      msg.textContent = text;
+      msg.className = `book-msg${kind ? ` ${kind}` : ''}`;
+    };
 
     const openForm = () => {
       form.hidden = false;
+      birthForm.hidden = true;
       newBtn.hidden = true;
       wBody.querySelector('#w-last').focus();
     };
 
-    const choose = (patient) => {
+    const proceed = (patient) => {
       state.patientId = patient.id;
       state.patientName = patient.name;
+      state.patientBirthDate = patient.birthDate;
       // Tanlov eslab qolinadi — keyingi safar oldindan belgilangan turadi.
       fetch('/api/patients', {
         method: 'POST',
@@ -346,6 +390,23 @@ import DeptIcon from './DeptIcon.astro';
         body: JSON.stringify({ action: 'select', id: patient.id }),
       }).catch(() => {});
       setStep(5);
+    };
+
+    /*
+      Bemorda tug'ilgan sana bo'lmasa (eski yozuv yoki 1C'da bo'sh) —
+      davom etishdan oldin shu yerda so'raladi.
+    */
+    let fixing = null;
+    const choose = (patient) => {
+      if (patient.birthDate) return proceed(patient);
+      fixing = patient;
+      form.hidden = true;
+      newBtn.hidden = false;
+      birthForm.hidden = false;
+      wBody.querySelector('#whoBirthLabel').textContent = `${patient.name} — ${tr('booking.birthDate')} *`;
+      setMsg(tr('booking.birthDate.missingFor'));
+      wBody.querySelectorAll('.who-item').forEach((b) => b.classList.toggle('on', b.dataset.pick === patient.id));
+      birthForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     };
 
     const data = await loadPatients();
@@ -365,12 +426,7 @@ import DeptIcon from './DeptIcon.astro';
       newBtn.hidden = true;
       form.hidden = false;
     } else {
-      wBody.querySelector('#whoList').innerHTML = data.patients
-        .map(
-          (p) => `<button class="who-item${p.id === state.patientId ? ' on' : ''}" data-pick="${p.id}">
-            ${p.name}</button>`,
-        )
-        .join('');
+      wBody.querySelector('#whoList').innerHTML = data.patients.map(patientItem).join('');
       wBody.querySelectorAll('[data-pick]').forEach((b) =>
         b.addEventListener('click', () => {
           const found = data.patients.find((p) => p.id === b.dataset.pick);
@@ -381,37 +437,51 @@ import DeptIcon from './DeptIcon.astro';
 
     newBtn.addEventListener('click', openForm);
 
+    const post = (body) =>
+      fetch('/api/patients', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
     wBody.querySelector('#whoSave').addEventListener('click', async () => {
       const lastName = wBody.querySelector('#w-last').value.trim();
       const firstName = wBody.querySelector('#w-first').value.trim();
       const patronymic = wBody.querySelector('#w-mid').value.trim();
+      const birthDate = readBirthDate(form, 'new');
 
-      if (!lastName || !firstName) {
-        msg.textContent = 'Familiya va ism majburiy.';
-        msg.className = 'book-msg error';
-        return;
-      }
+      if (!lastName || !firstName) return setMsg('Familiya va ism majburiy.', 'error');
+      if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
 
-      msg.textContent = 'Saqlanmoqda…';
-      msg.className = 'book-msg';
+      setMsg('Saqlanmoqda…');
       try {
-        const res = await fetch('/api/patients', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'add', firstName, lastName, patronymic }),
-        });
+        const res = await post({ action: 'add', firstName, lastName, patronymic, birthDate });
         const body = await res.json();
-        if (!res.ok) {
-          msg.textContent = body.error ?? 'Saqlab boʻlmadi.';
-          msg.className = 'book-msg error';
-          return;
-        }
+        if (!res.ok) return setMsg(body.error ?? 'Saqlab boʻlmadi.', 'error');
         patients.patients.push(body.patient);
-        choose(body.patient);
+        proceed(body.patient);
       } catch {
-        msg.textContent = 'Internetga ulanishda muammo.';
-        msg.className = 'book-msg error';
+        setMsg(tr('common.error.network'), 'error');
+      }
+    });
+
+    wBody.querySelector('#whoBirthSave').addEventListener('click', async () => {
+      if (!fixing) return;
+      const birthDate = readBirthDate(birthForm, 'fix');
+      if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
+
+      setMsg('Saqlanmoqda…');
+      try {
+        const res = await post({ action: 'birthDate', id: fixing.id, birthDate });
+        const body = await res.json();
+        if (!res.ok) return setMsg(body.error ?? 'Saqlab boʻlmadi.', 'error');
+        // Ro'yxatdagi yozuv ham yangilanadi — orqaga qaytilsa sana turadi.
+        const at = patients.patients.findIndex((p) => p.id === fixing.id);
+        if (at !== -1) patients.patients[at] = body.patient;
+        proceed(body.patient);
+      } catch {
+        setMsg(tr('common.error.network'), 'error');
       }
     });
   }
@@ -426,7 +496,7 @@ import DeptIcon from './DeptIcon.astro';
         <h4>Navbatingiz band qilindi!</h4>
         <p>${b.mode === 'at_clinic' ? 'Toʻlov qabulxonada amalga oshiriladi.' : 'Toʻlov qabul qilindi.'}</p>
         <div class="sum-card" style="margin-top:14px;text-align:left">
-          ${state.patientName ? `<div class="sum-row"><span class="k">Bemor</span><span class="v">${state.patientName}</span></div>` : ''}
+          ${state.patientName ? `<div class="sum-row"><span class="k">Bemor</span><span class="v">${esc(state.patientName)}</span></div>` : ''}
           <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
           <div class="sum-row"><span class="k">Sana · vaqt</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
           <div class="sum-row total"><span class="k">Narx</span><span class="v">${fmtPrice(d.price)}</span></div>
@@ -558,9 +628,9 @@ import DeptIcon from './DeptIcon.astro';
           uchun), lekin "faolsiz" bo'lgani uchun bemorga ko'rinmasligi
           kerak — kartasi olib tashlanadi.
         */
-        const live = new Set(docs.map((d) => d.id));
+        const liveIds = new Set(docs.map((d) => d.id));
         document.querySelectorAll('[data-doc-card]').forEach((card) => {
-          card.hidden = !live.has(card.dataset.docCard);
+          card.hidden = !liveIds.has(card.dataset.docCard);
         });
 
         // Shifokori qolmagan bo'lim: son o'rniga izoh, tugma o'chiq.
@@ -584,9 +654,8 @@ import DeptIcon from './DeptIcon.astro';
   })();
 
   /*
-    Bo'lim/shifokor kartalaridagi "Navbat olish" tugmalari. Bu skript
-    (define:vars tufayli) inline bo'lgani uchun kartalar DOM'ga tushishidan
-    oldin ishlaydi — shuning uchun delegatsiya ishlatiladi.
+    Bo'lim/shifokor kartalaridagi "Navbat olish" tugmalari. Kartalar
+    sahifada ko'p va qayta chizilishi mumkin — delegatsiya ishlatiladi.
   */
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-book-dept]');
@@ -1086,14 +1155,6 @@ import DeptIcon from './DeptIcon.astro';
     cursor: pointer;
   }
 
-  .widget :global(.who-pick) {
-    margin: 12px 0;
-    padding: 12px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--bg);
-  }
-
   .widget :global(.who-list) {
     display: grid;
     gap: 6px;
@@ -1101,6 +1162,9 @@ import DeptIcon from './DeptIcon.astro';
   }
 
   .widget :global(.who-item) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     padding: 10px 13px;
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -1122,6 +1186,17 @@ import DeptIcon from './DeptIcon.astro';
     font-weight: 650;
   }
 
+  .widget :global(.who-bd) {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.who-bd.none) {
+    color: var(--warn);
+  }
+
   .widget :global(.who-form) {
     display: grid;
     gap: 7px;
@@ -1130,7 +1205,8 @@ import DeptIcon from './DeptIcon.astro';
     border-top: 1px solid var(--line);
   }
 
-  .widget :global(.who-form input) {
+  .widget :global(.who-form input),
+  .widget :global(.birth-sel) {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--line);
@@ -1141,8 +1217,26 @@ import DeptIcon from './DeptIcon.astro';
     font-size: 14px;
   }
 
-  .widget :global(.who-form input:focus-visible) {
+  .widget :global(.who-form input:focus-visible),
+  .widget :global(.birth-sel:focus-visible) {
     outline: none;
     border-color: var(--leaf);
+  }
+
+  .widget :global(.fld-label) {
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .widget :global(.birth-row) {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr 1.2fr;
+    gap: 6px;
+  }
+
+  .widget :global(.birth-sel) {
+    padding: 10px 8px;
   }
 </style>

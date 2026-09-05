@@ -39,6 +39,8 @@ export type Appointment = {
   /** navbat kim uchun olingani (bir telefon — bir oila) */
   patient_id?: string;
   patient_name?: string;
+  /** YYYY-MM-DD — bron paytidagi bemor yozuvidan (B1) */
+  patient_birth_date?: string;
   /** eslatma yuborilgan lahza — takror yuborilmasligi uchun */
   reminded_at?: string;
   created_at: string;

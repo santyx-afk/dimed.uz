@@ -85,6 +85,10 @@ import { site } from '../data/site';
           <span>Sharif</span>
           <input id="w-mid" type="text" placeholder="Baxtiyorovich (ixtiyoriy)" />
         </label>
+        <div class="fld">
+          <span>Tugʻilgan sana<i>*</i></span>
+          <div id="w-birth"></div>
+        </div>
         <div class="who-actions">
           <button class="btn btn-ghost btn-sm" id="whoCancel" type="button">Bekor qilish</button>
           <button class="btn btn-sm" id="whoSave" type="button">Saqlash va davom etish</button>
@@ -97,6 +101,9 @@ import { site } from '../data/site';
 </Base>
 
 <script>
+  import { birthDateSelectsHtml, readBirthDate } from '../lib/birthdate';
+  import { getLang } from '../lib/lang';
+
   const phoneInput = document.getElementById('phone') as HTMLInputElement;
   const otpInputs = [...document.querySelectorAll<HTMLInputElement>('#otpRow .otp')];
   const submit = document.getElementById('submit') as HTMLButtonElement;
@@ -271,6 +278,9 @@ import { site } from '../data/site';
     }
   }
 
+  // Tug'ilgan sana — kun/oy/yil select'lari (brauzer kalendari emas).
+  el('w-birth').innerHTML = birthDateSelectsHtml('new', getLang());
+
   el('whoNew').addEventListener('click', () => {
     el('whoForm').hidden = false;
     el('whoNew').hidden = true;
@@ -287,9 +297,14 @@ import { site } from '../data/site';
     const lastName = el<HTMLInputElement>('w-last').value.trim();
     const firstName = el<HTMLInputElement>('w-first').value.trim();
     const patronymic = el<HTMLInputElement>('w-mid').value.trim();
+    const birthDate = readBirthDate(el('whoForm'), 'new');
 
     if (!lastName || !firstName) {
       setWhoMsg('Familiya va ism majburiy.', 'error');
+      return;
+    }
+    if (!birthDate) {
+      setWhoMsg('Tugʻilgan sanani toʻliq kiriting.', 'error');
       return;
     }
 
@@ -299,7 +314,7 @@ import { site } from '../data/site';
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'add', firstName, lastName, patronymic }),
+        body: JSON.stringify({ action: 'add', firstName, lastName, patronymic, birthDate }),
       });
       const body = (await res.json()) as { error?: string };
       if (!res.ok) {
@@ -544,6 +559,28 @@ import { site } from '../data/site';
   }
 
   .who-form input:focus-visible {
+    outline: none;
+    border-color: var(--leaf);
+  }
+
+  /* Tug'ilgan sana select'lari (JS chizadi — :global) */
+  .who-form :global(.birth-row) {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr 1.2fr;
+    gap: 8px;
+  }
+
+  .who-form :global(.birth-sel) {
+    width: 100%;
+    padding: 11px 10px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--bg);
+    color: inherit;
+    font: inherit;
+  }
+
+  .who-form :global(.birth-sel:focus-visible) {
     outline: none;
     border-color: var(--leaf);
   }

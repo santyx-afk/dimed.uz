@@ -56,6 +56,13 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     if (body.patientId && !patient) {
       return error('Bemor topilmadi — ro‘yxatdan tanlang', 404);
     }
+    /*
+      Bemor va uning tug'ilgan sanasi majburiy (B1): shifokor kimni
+      kutayotganini, laboratoriya esa yoshini bilishi kerak. Vidjet
+      buni 4-qadamda so'raydi; API ham qayta tekshiradi.
+    */
+    if (!patient) return error('Navbat kim uchun ekanini tanlang');
+    if (!patient.birthDate) return error('Bemorning tug‘ilgan sanasi kiritilmagan');
 
     const payment = await createPayment({
       amount: doctor.price,
@@ -90,7 +97,9 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             date,
             phone: session.phone,
             telegram_id: session.userId,
-            ...(patient ? { patient_id: patient.id, patient_name: patient.name } : {}),
+            patient_id: patient.id,
+            patient_name: patient.name,
+            patient_birth_date: patient.birthDate,
             starts_at: toInstant(date, time).toISOString(),
             status,
             hold_until: holdUntil,
@@ -132,7 +141,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     );
 
     if (payment.mode === 'at_clinic') {
-      await confirmAtClinic(session.userId, doctor.name, date, time, doctor.price, patient?.name);
+      await confirmAtClinic(session.userId, doctor.name, date, time, doctor.price, patient.name);
     }
 
     return json({
@@ -147,7 +156,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
         date,
         time,
         price: doctor.price,
-        patientName: patient?.name ?? null,
+        patientName: patient.name,
+        patientBirthDate: patient.birthDate,
       },
     });
   } catch (err) {

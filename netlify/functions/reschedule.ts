@@ -93,6 +93,10 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             date: toDate,
             phone: appointment.phone,
             telegram_id: appointment.telegram_id ?? session.userId,
+            // Bemor kimligi yangi yozuvga ham ko'chadi — avval yo'qolib qolardi.
+            patient_id: appointment.patient_id,
+            patient_name: appointment.patient_name,
+            patient_birth_date: appointment.patient_birth_date,
             starts_at: toInstant(toDate, toTime).toISOString(),
             status: appointment.status,
             price: appointment.price,
