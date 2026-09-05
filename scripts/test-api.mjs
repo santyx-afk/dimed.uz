@@ -66,6 +66,8 @@ const paymentWebhook = await load('payment-webhook.ts');
 const patientsApi = await load('patients.ts');
 const sessionApi = await load('session.ts');
 const settingsApi = await load('settings.ts');
+const resultApi = await load('result.ts');
+const { createShareToken } = await import(pathToFileURL(join(fnDir, 'lib', 'share.ts')).href);
 
 const { toTashkent, toInstant, addDays } = await import(
   pathToFileURL(join(fnDir, 'lib', 'time.ts')).href
@@ -404,6 +406,7 @@ await test('1C natijasi kabinetda ko\'rinadi', async () => {
   assert.equal(cabinet.results[0].items.length, 1);
   assert.equal(cabinet.results[0].items[0].title, 'Gemoglobin');
   assert.equal(cabinet.results[0].items[0].reference, '120 – 160');
+  assert.equal(cabinet.results[0].items[0].status, 'normal', 'matnli me\'yordan holat chiqadi');
 });
 
 await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async () => {
@@ -429,7 +432,8 @@ await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async
   assert.equal(doc.biomaterial, 'Qon');
   assert.equal(doc.date, '2026-08-21T14:30:00', '1C sanasi ISO ga o\'girilishi kerak');
   const hgb = doc.items.find((i) => i.title === 'Gemoglobin');
-  assert.equal(hgb.value, '132 g/L');
+  assert.equal(hgb.value, '132', 'qiymat va birlik alohida (natija sahifasi uchun)');
+  assert.equal(hgb.unit, 'g/L');
   assert.equal(hgb.code, 'HGB');
   assert.ok(doc.items.some((i) => i.title === 'Leykotsitlar'), 'ikkinchi analit ham chiqishi kerak');
 
@@ -467,7 +471,8 @@ await test('1C to\'g\'ridan-to\'g\'ri yozgan hujjat analitlarga yoyiladi', async
   })).json();
   const bil = uchinchi.results.filter((r) => r.id === 'doc-stray-1');
   assert.equal(bil.length, 1, 'takror hujjat bir marta ko\'rinishi kerak');
-  assert.equal(bil[0].items[0].value, '12 mkmol/l');
+  assert.equal(bil[0].items[0].value, '12');
+  assert.equal(bil[0].items[0].unit, 'mkmol/l');
 });
 
 await test('natijalar bir sahifaga sig\'masa ham hammasi ko\'rinadi', async () => {
@@ -536,7 +541,8 @@ await test('analit nomi bo\'sh bo\'lsa qator yo\'qolmaydi', async () => {
   const nomsiz = cabinet.results.find((r) => r.id === 'doc-nomsiz');
   assert.equal(nomsiz.items.length, 1, 'nomi ham qiymati ham yo\'q qator tashlab yuboriladi');
   assert.equal(nomsiz.items[0].title, '2345-7', 'nomsiz analit xalqaro kod bilan chiqadi');
-  assert.equal(nomsiz.items[0].value, '5.4 mmol/L');
+  assert.equal(nomsiz.items[0].value, '5.4');
+  assert.equal(nomsiz.items[0].unit, 'mmol/L');
 });
 
 await test('natijada bemor ismi bo\'ladi (bir telefon — oila)', async () => {
@@ -672,6 +678,13 @@ await test('/api/settings tilni saqlaydi, noto\'g\'ri til rad etiladi', async ()
 
   const anon = await call(settingsApi, 'https://dimed.uz/api/settings');
   assert.equal(anon.status, 401);
+
+  // Keyingi testlar o'zbekcha xabarlarga tayanadi.
+  await call(settingsApi, 'https://dimed.uz/api/settings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ lang: 'uz' }),
+  });
 });
 
 await test('/api/me?include= faqat so\'ralganini yuklaydi', async () => {
@@ -719,6 +732,95 @@ await test('natija ro\'yxatida tahlil nomi, holati va shifokor bor (C2)', async 
 
   const bitta = data.results.find((r) => r.id === 'doc-uuid-2');
   assert.equal(bitta.title, 'Kreatinin', 'bitta ko\'rsatkich — uning nomi');
+});
+
+console.log('\nNatija sahifasi (D1) va ulashish:');
+await test('/api/result o\'z natijasini beradi, begonaniki 404', async () => {
+  const anon = await call(resultApi, 'https://dimed.uz/api/result?id=doc-uuid-1');
+  assert.equal(anon.status, 401);
+
+  const res = await call(resultApi, 'https://dimed.uz/api/result?id=doc-uuid-1', {
+    headers: { cookie: sessionCookie },
+  });
+  assert.equal(res.status, 200);
+  const { result, shared } = await res.json();
+  assert.equal(shared, false);
+  assert.equal(result.id, 'doc-uuid-1');
+  assert.equal(result.biomaterial, 'Qon');
+  assert.equal(result.items.length, 2);
+  assert.equal(result.items[0].value, '132');
+  assert.equal(result.items[0].unit, 'g/L');
+
+  const yoq = await call(resultApi, 'https://dimed.uz/api/result?id=yoq-hujjat', {
+    headers: { cookie: sessionCookie },
+  });
+  assert.equal(yoq.status, 404);
+
+  const other = createSessionCookie({ phone: '+998911111111', userId: '9001' }).split(';')[0];
+  const begona = await call(resultApi, 'https://dimed.uz/api/result?id=doc-uuid-1', {
+    headers: { cookie: other },
+  });
+  assert.equal(begona.status, 404, 'boshqa bemor natijasi ko\'rinmaydi');
+});
+
+await test('me\'yoriy oraliq va holat: son, matn, bayroq', async () => {
+  seed('test_analysis_results', '+998901234567|doc-meyor', {
+    phone: '+998901234567', sort_key: 'doc-meyor', Date: '08.03.2026 09:00:00',
+    AnalysisName: 'Biokimyo', PatientName: 'Azizova Aziza', PatientBirthday: '25.04.1990', PatientIsMale: false,
+    Doctor: 'Ashurov T.',
+    AnalysisResults: [
+      { Analyte: 'Glyukoza', Result: '6,2', AnalyteUnit: 'mmol/L', ReferenceMin: 3.9, ReferenceMax: 5.6 },
+      { Analyte: 'Gemoglobin', Result: '132', AnalyteUnit: 'g/L', Reference: '120 – 160' },
+      { Analyte: 'Kaliy', Result: '3.1', AnalyteUnit: 'mmol/L', Norm: '3.5-5.1' },
+      { Analyte: 'Bayroqli', Result: 'musbat', Flag: 'H' },
+      { Analyte: 'Nomalum', Result: '7' },
+    ],
+  });
+
+  const { result } = await (await call(resultApi, 'https://dimed.uz/api/result?id=doc-meyor', {
+    headers: { cookie: sessionCookie },
+  })).json();
+
+  const by = (name) => result.items.find((i) => i.title === name);
+  assert.equal(by('Glyukoza').status, 'high');
+  assert.equal(by('Glyukoza').refLow, 3.9);
+  assert.equal(by('Glyukoza').refHigh, 5.6);
+  assert.equal(by('Glyukoza').reference, '3.9 — 5.6');
+  assert.ok(by('Glyukoza').description?.uz, 'tanish ko\'rsatkichga tavsif bor');
+  assert.equal(by('Gemoglobin').status, 'normal');
+  assert.equal(by('Gemoglobin').refLow, 120);
+  assert.equal(by('Kaliy').status, 'low');
+  assert.equal(by('Bayroqli').status, 'high', 'son bo\'lmasa bayroq bo\'yicha');
+  assert.equal(by('Nomalum').status, null, 'ma\'lumot yetmasa holat yo\'q');
+  assert.equal(by('Nomalum').description, null);
+
+  assert.equal(result.patientBirthDate, '1990-04-25');
+  assert.equal(result.patientGender, 'female');
+  assert.equal(result.doctor, 'Ashurov T.');
+  assert.equal(result.title, 'Biokimyo');
+});
+
+await test('ulashish havolasi sessiyasiz ochiladi, buzuq va eskirgan token 404', async () => {
+  const res = await call(resultApi, 'https://dimed.uz/api/result?id=doc-meyor&share=1', {
+    headers: { cookie: sessionCookie },
+  });
+  assert.equal(res.status, 200);
+  const { url } = await res.json();
+  assert.ok(url.startsWith('https://dimed.uz/natija?t='), url);
+
+  const token = new URL(url).searchParams.get('t');
+  const open = await call(resultApi, `https://dimed.uz/api/result?t=${encodeURIComponent(token)}`);
+  assert.equal(open.status, 200);
+  const body = await open.json();
+  assert.equal(body.shared, true);
+  assert.equal(body.result.id, 'doc-meyor');
+
+  const buzuq = await call(resultApi, `https://dimed.uz/api/result?t=${encodeURIComponent(token.slice(0, -2) + 'zz')}`);
+  assert.equal(buzuq.status, 404);
+
+  const eskirgan = createShareToken('+998901234567', 'doc-meyor', -1);
+  const old = await call(resultApi, `https://dimed.uz/api/result?t=${encodeURIComponent(eskirgan)}`);
+  assert.equal(old.status, 404);
 });
 
 console.log('\nBemorni tanlash (bir telefon — bir oila):');
