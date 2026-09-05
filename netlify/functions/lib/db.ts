@@ -28,6 +28,7 @@ export const TABLES = {
   labResults: tableName('lab_results'),
   prices: tableName('prices'),
   ratings: tableName('ratings'),
+  rateLimits: tableName('rate_limits'),
 } as const;
 
 /**

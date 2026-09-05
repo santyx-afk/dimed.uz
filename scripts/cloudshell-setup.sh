@@ -414,6 +414,27 @@ jadval "prices" "$(cat <<JSON
 JSON
 )"
 
+jadval "rate_limits" "$(cat <<JSON
+{
+  "TableName": "${PREFIX}_rate_limits",
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "bucket",
+      "AttributeType": "S"
+    }
+  ],
+  "KeySchema": [
+    {
+      "AttributeName": "bucket",
+      "KeyType": "HASH"
+    }
+  ],
+  "BillingMode": "PAY_PER_REQUEST"
+}
+JSON
+)"
+ttl "rate_limits" "expires_at"
+
 jadval "ratings" "$(cat <<JSON
 {
   "TableName": "${PREFIX}_ratings",
@@ -445,7 +466,7 @@ JSON
 # --- 2-qadam: jadvallar tayyor bo'lishini kutamiz ---
 echo
 echo "2-qadam: jadvallar tayyor bo'lishini kutamiz"
-for t in users otp_codes individuals doctors schedules appointments analysis_results payments lab_results prices ratings; do
+for t in users otp_codes individuals doctors schedules appointments analysis_results payments lab_results prices rate_limits ratings; do
   ddb wait table-exists --table-name "${PREFIX}_$t"
 done
 echo "  hammasi tayyor"

@@ -5,12 +5,29 @@ import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, getDoctor } from './lib/auth.ts';
 import { doctorDayKey, isValidSlot, isBookable } from './lib/slots.ts';
 import { shiftsFor } from './lib/schedule.ts';
+import { upcomingForPhone } from './lib/appointments.ts';
 import { isDateKey, isTime, toInstant, weekdayOf, type DateKey } from './lib/time.ts';
 import { createPayment } from './lib/payment.ts';
 import { listPatients } from './lib/patients.ts';
 import { ageOn, fitsAgeGroup, toAgeGroup, ageRejected } from './lib/age.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
+import { hitLimit, tooMany } from './lib/rate-limit.ts';
+
+/*
+  Bir soatda bitta hisobdan nechta bron so'rovi. Bu — "bolg'alash"ga
+  qarshi chegara (odam daqiqasiga bir marta bron qilmaydi), slotlarni
+  band qilib tashlashga qarshi emas: uni kuchdagi bronlar soni
+  cheklaydi (quyida).
+*/
+const MAX_BOOKINGS_PER_HOUR = 60;
+
+/**
+ * Bitta telefonda bir vaqtda nechta kelgusi bron turishi mumkin.
+ * Bir oila uchun yetarli, lekin kimdir kun bo'yi slotlarni band
+ * qilib qo'ya olmaydi.
+ */
+const MAX_UPCOMING = 5;
 
 /** Hold shuncha vaqt turadi — to'lov shu oraliqda tugallanishi kerak. */
 const HOLD_SECONDS = 5 * 60;
@@ -32,6 +49,10 @@ export default async (request: Request, _context: Context): Promise<Response> =>
   if (!session) return error('Avval Telegram orqali kiring', 401);
 
   try {
+    // Bir hisobdan ketma-ket bron urinishlari cheklanadi.
+    const rate = await hitLimit(`bron#${session.phone}`, MAX_BOOKINGS_PER_HOUR, 60 * 60);
+    if (!rate.ok) return tooMany(rate.retryAfter);
+
     const body = (await request.json()) as Body;
     const { doctor: doctorId, date, time } = body;
 
@@ -50,6 +71,14 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     const now = new Date();
     if (!isBookable(date, time, now)) {
       return error('Qabulga 1 soatdan kam qoldi — boshqa vaqtni tanlang');
+    }
+
+    const upcoming = await upcomingForPhone(session.phone, now);
+    if (upcoming.length >= MAX_UPCOMING) {
+      return error(
+        `Sizda ${upcoming.length} ta kelgusi navbat bor — bir vaqtda ${MAX_UPCOMING} tadan ko‘p bo‘lmaydi. ` +
+          'Avval keraksizini bekor qiling yoki qabuldan keyin yangisini oling.',
+      );
     }
 
     /*
