@@ -1,14 +1,20 @@
 import type { APIRoute } from 'astro';
 
-/** Shaxsiy sahifalar va API indekslanmaydi. */
+/**
+ * Ommaviy sahifalar ochiq; shaxsiy kabinet, kirish, admin, API va
+ * tahlil natijasi sahifalari indekslanmaydi (H1).
+ */
 export const GET: APIRoute = ({ site }) =>
   new Response(
     [
       'User-agent: *',
       'Allow: /',
+      'Disallow: /admin',
       'Disallow: /kabinet',
       'Disallow: /kirish',
+      'Disallow: /natija',
       'Disallow: /api/',
+      'Disallow: /.netlify/',
       '',
       `Sitemap: ${new URL('sitemap.xml', site ?? 'https://dimed.uz').href}`,
       '',
