@@ -103,6 +103,13 @@ kerak — pastdagi checklist.
 - **1 soat qoidasi.** Qabul boshlanishiga kamida 1 soat qolgan bo'lishi kerak —
   ham bron qilish, ham vaqtni ko'chirish uchun. Roppa-rosa 60 daqiqa —
   **ruxsat etiladi** («kamida» shartiga mos).
+- **Yosh cheklovi shifokorga qarab.** Har bir shifokorda `age_group`
+  bo'ladi: `all` (standart), `adult` — 16 yosh va undan katta, `child` —
+  16 yoshgacha. Admin panelda belgilanadi. Yosh **qabul kuniga** qarab
+  hisoblanadi: bugun 15 da bo'lgan bemor 16 ga to'ladigan kunga
+  kattalar shifokoriga yozila oladi. Bron vidjeti mos kelmagan
+  bemorni xiralashtiradi va o'tkazmaydi, `/api/book` esa qayta
+  tekshiradi (vidjetni chetlab o'tgan so'rov ham to'xtaydi).
 - **Bekor qilish yo'q.** Bemor faqat boshqa vaqtga ko'chira oladi, shifokor
   o'zgarmaydi (boshqa shifokorga o'tish — bu yangi bron).
 - **Klinika vaqti — Asia/Tashkent (UTC+5).** Server UTC'da ishlaydi, shuning
@@ -330,7 +337,7 @@ to'g'ridan-to'g'ri import qilinadi — shuning uchun `lib/` ichidagi importlar
 | `users` | `telegram_id` | **faqat sayt yozadi.** GSI: `phone-index`, `code-index` (1C kodi, sparse) |
 | `otp_codes` | `phone` | TTL: `expires_at` (jonli bazada yoqilgan) |
 | `individuals` | `phone` / `sort_key` | **1C yozadi.** `sort_key` = 1C bemor kodi. Maydonlar inglizcha: Surname, Name, Patronymic, IsMale, Birthday… |
-| `doctors` | `doctor_id` | GSI: `telegram-index` (shifokor kabineti) |
+| `doctors` | `doctor_id` | GSI: `telegram-index` (shifokor kabineti). `age_group`: `all` / `adult` (16+) / `child` (16 gacha) |
 | `schedules` | `doctor_id` / `date` | kunlik smenalar, `day_off`, `summary_sent_at` |
 | `appointments` | `doctor_day` / `time` | `doctor_day` = `"<doctor_id>#<sana>"`; GSI: `patient-index` (`phone`/`starts_at`), `date-index` (`date`/`starts_at`) |
 | `analysis_results` | `phone` / `sort_key` | **1C yozadi.** `sort_key` = hujjat UID, ichida `AnalysisResults` ro'yxati |
@@ -410,6 +417,13 @@ standart nomi bilan yaratilgan `AnalysisResult` — ega tasdiqlagach o'chiriladi
     egasi o'z ID sini bilib, env'ga qo'yishi uchun. Upsert **UpdateCommand
     SET** bilan — `telegram_id` bog'lanish o'chmaydi. «O'chirish» =
     `active:false` (navbatlar tarixi saqlanadi).
+
+21. **Bron 4-qadamidan bemorsiz o'tib bo'lmaydi.** Kirmagan
+    foydalanuvchi avval 5-qadamga o'tkazib yuborilardi va navbat
+    ismsiz qolardi. Endi kirish o'sha qadamning o'zida (Telegram kodi
+    bilan), 5-qadam esa faqat `proceed()` orqali ochiladi. 5-qadamda
+    sessiya tugasa (401) foydalanuvchi 4-qadamga qaytariladi —
+    tanlangan shifokor va vaqt saqlanib qoladi.
 
 11. **Shifokor ro'yxati jonli.** `GET /api/doctors` faol shifokorlarni beradi;
     bron vidjeti, bosh sahifadagi shifokor soni va bo'lim hisoblagichlari

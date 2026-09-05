@@ -73,7 +73,7 @@ export const messages = {
   // --- navbat: tasdiqlash qadami (B2) ---
   'common.retry': { uz: 'Qayta urinish', ru: 'Повторить', en: 'Try again' },
 
-  // --- 4-qadam: kirish (guest) ---
+  // --- 4-qadam: kirish (guest) va yosh cheklovi ---
   'booking.login.title': { uz: 'Davom etish uchun kiring', ru: 'Войдите, чтобы продолжить', en: 'Sign in to continue' },
   'booking.login.lede': {
     uz: 'Navbat kim uchun ekanini bilishimiz uchun Telegram orqali kiring — SMS ham, parol ham kerak emas.',

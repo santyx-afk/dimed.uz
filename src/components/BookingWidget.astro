@@ -48,6 +48,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   import { t } from '../data/i18n';
   import { getLang } from '../lib/lang';
   import { birthDateSelectsHtml, readBirthDate, formatBirthDate } from '../lib/birthdate';
+  import { ageOnDate, fitsAgeGroup, ageRejected, ageChip, toAgeGroup } from '../lib/age';
   import { site } from '../data/site';
 
   const { departments, doctors } = JSON.parse(document.getElementById('widgetData').textContent);
@@ -61,6 +62,11 @@ const widgetData = JSON.stringify({ departments, doctors });
   ];
   const fmtPrice = (n) => n.toLocaleString('ru-RU').replace(/,/g, ' ') + ' soʻm';
   const BOT_URL = site.telegramBot;
+  /** Tanlangan shifokorning yosh cheklovi; belgilanmagan bo'lsa cheklovsiz. */
+  const docAgeGroup = () => toAgeGroup(state.doc?.ageGroup);
+  // Sana hali tanlanmagan bo'lsa bugunga qarab hisoblanadi — cheklov
+  // hech qachon "yoshi noma'lum" deb hammani rad etib qo'ymasin.
+  const ageOn = (birthDate, dateKey) => ageOnDate(birthDate, dateKey || dstr(new Date()));
   const pad = (n) => String(n).padStart(2, '0');
   // Server YYYY-MM-DD kutadi.
   const dstr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -231,6 +237,10 @@ const widgetData = JSON.stringify({ departments, doctors });
               <img src="${d.photo}" alt="" width="42" height="42" loading="lazy">
               <span><span class="nm">${d.name}</span><br><span class="jb">${d.job}</span></span>
               <span class="tags">${
+                ageChip(toAgeGroup(d.ageGroup), lang)
+                  ? `<span class="age-tag">${esc(ageChip(toAgeGroup(d.ageGroup), lang))}</span>`
+                  : ''
+              }${
                 d.ratingCount ? `<span class="rate-tag" title="${d.ratingCount} ta baho">★ ${d.ratingAvg}</span>` : ''
               }<span class="slot-tag">${d.slotMinutes} daq</span></span>
             </button>`,
@@ -351,13 +361,18 @@ const widgetData = JSON.stringify({ departments, doctors });
    * Shifokorning yosh chekloviga tushmagan bemor darhol xiralashadi —
    * bosib ko'rgandan keyin emas, ro'yxatning o'zidayoq ko'rinadi.
    */
-  const patientItem = (p) =>
-    `<button class="who-item${p.id === state.patientId ? ' on' : ''}" data-pick="${esc(p.id)}">
+  const patientItem = (p) => {
+    const fits = !p.birthDate || fitsAgeGroup(docAgeGroup(), ageOn(p.birthDate, state.date));
+    const note = p.birthDate
+      ? esc(formatBirthDate(p.birthDate, lang))
+      : esc(tr('booking.birthDate.missingFor'));
+    return `<button class="who-item${p.id === state.patientId ? ' on' : ''}${fits ? '' : ' unfit'}" data-pick="${esc(p.id)}">
       <span class="who-nm">${esc(p.name)}</span>
-      <small class="who-bd${p.birthDate ? '' : ' none'}">${
-        p.birthDate ? esc(formatBirthDate(p.birthDate, lang)) : esc(tr('booking.birthDate.missingFor'))
+      <small class="who-bd${p.birthDate ? '' : ' none'}">${note}${
+        fits ? '' : ` · ${esc(ageChip(docAgeGroup(), lang))} emas`
       }</small>
     </button>`;
+  };
 
   /*
     4-qadam — bemor ma'lumotlari. Bir telefondan butun oila foydalanadi
@@ -448,8 +463,17 @@ const widgetData = JSON.stringify({ departments, doctors });
       return false;
     };
 
+    /*
+      Shifokorning yosh cheklovi: pediatr kattani, kattalar shifokori
+      bolani qabul qilmaydi. Server ham shuni tekshiradi — bu yerdagisi
+      bemor 5-qadamga bekorga o'tib, xatoni oxirida ko'rmasligi uchun.
+    */
+    const fitsDoctor = (patient) =>
+      fitsAgeGroup(docAgeGroup(), patient.birthDate ? ageOn(patient.birthDate, state.date) : null);
+
     const proceed = (patient) => {
       if (!privacyOk()) return;
+      if (!fitsDoctor(patient)) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
       state.patientId = patient.id;
       state.patientName = patient.name;
       state.patientBirthDate = patient.birthDate;
@@ -514,6 +538,8 @@ const widgetData = JSON.stringify({ departments, doctors });
       if (!lastName || !firstName) return setMsg('Familiya va ism majburiy.', 'error');
       if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
       if (!privacyOk()) return;
+      // Yoshi to'g'ri kelmasa — bemorni bekorga qo'shib o'tirmaymiz.
+      if (!fitsDoctor({ birthDate })) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
 
       setMsg('Saqlanmoqda…');
       try {
@@ -532,6 +558,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       const birthDate = readBirthDate(birthForm, 'fix');
       if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
       if (!privacyOk()) return;
+      if (!fitsDoctor({ birthDate })) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
 
       setMsg('Saqlanmoqda…');
       try {
@@ -809,6 +836,15 @@ const widgetData = JSON.stringify({ departments, doctors });
         const liveIds = new Set(docs.map((d) => d.id));
         document.querySelectorAll('[data-doc-card]').forEach((card) => {
           card.hidden = !liveIds.has(card.dataset.docCard);
+        });
+
+        // Yosh cheklovi (admin panelda o'zgarsa) kartada ham yangilanadi.
+        docs.forEach((d) => {
+          const chip = document.querySelector(`[data-doc-card="${d.id}"] [data-doc-age]`);
+          if (!chip) return;
+          const text = ageChip(toAgeGroup(d.ageGroup), lang);
+          chip.hidden = !text;
+          chip.textContent = text;
         });
 
         // Yosh cheklovi (admin panelda o'zgarsa) kartada ham yangilanadi.
@@ -1105,6 +1141,16 @@ const widgetData = JSON.stringify({ departments, doctors });
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .widget :global(.doc-btn .age-tag) {
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--rose);
+    background: var(--rose-soft);
+    border-radius: 999px;
+    padding: 4px 8px;
+    white-space: nowrap;
   }
 
   .widget :global(.doc-btn .rate-tag) {
@@ -1467,6 +1513,14 @@ const widgetData = JSON.stringify({ departments, doctors });
   .widget :global(.birth-sel:focus-visible) {
     outline: none;
     border-color: var(--leaf);
+  }
+
+  .widget :global(.who-item.unfit) {
+    opacity: 0.5;
+  }
+
+  .widget :global(.who-item.unfit .who-bd) {
+    color: var(--rose);
   }
 
   .widget :global(.consent) {

@@ -1,6 +1,7 @@
 ---
 import Cabinet from '../../../layouts/Cabinet.astro';
 import { departments } from '../../../data/departments';
+import { AGE_GROUPS, ageLabel } from '../../../lib/age';
 
 const slotOptions = [10, 15, 20, 30, 60];
 const weekdays = [
@@ -74,6 +75,14 @@ const weekdays = [
         </div>
 
         <div class="fld">
+          <span>Bemor yoshi</span>
+          <div class="seg" id="f-age">
+            {AGE_GROUPS.map((g) => <button type="button" data-age={g}>{ageLabel(g)}</button>)}
+          </div>
+          <small class="fld-note">Pediatr faqat bolalarni, kattalar shifokori faqat kattalarni qabul qilsin.</small>
+        </div>
+
+        <div class="fld">
           <span>Ish kunlari</span>
           <div class="days" id="f-days">
             {weekdays.map((w) => (
@@ -134,6 +143,7 @@ const weekdays = [
     hours: string;
     phone: string;
     active: boolean;
+    ageGroup: 'all' | 'adult' | 'child';
     telegramId: string;
     linked: boolean;
   };
@@ -149,9 +159,16 @@ const weekdays = [
   };
   const fmtPrice = (n: number) => n.toLocaleString('ru-RU').replace(/,/g, ' ');
 
+  const AGE_TEXT: Record<Doctor['ageGroup'], string> = {
+    all: '',
+    adult: '16+ yosh',
+    child: '16 yoshgacha',
+  };
+
   let doctors: Doctor[] = [];
   let shifts: Shift[] = [];
   let slotMinutes = 60;
+  let ageGroup: Doctor['ageGroup'] = 'all';
 
   // ---------- yuklash ----------
   async function load() {
@@ -237,7 +254,9 @@ const weekdays = [
     return `<div class="doc-row${d.active ? '' : ' off'}">
       <div class="doc-main">
         <span class="nm">${esc(d.name)}</span>
-        <span class="meta">${esc(d.job)} · ${fmtPrice(d.price)} so‘m · ${d.slotMinutes} daqiqa</span>
+        <span class="meta">${esc(d.job)} · ${fmtPrice(d.price)} so‘m · ${d.slotMinutes} daqiqa${
+          AGE_TEXT[d.ageGroup] ? ` · ${AGE_TEXT[d.ageGroup]}` : ''
+        }</span>
       </div>
       <div class="doc-tags">
         ${
@@ -288,6 +307,9 @@ const weekdays = [
     slotMinutes = d?.slotMinutes ?? 60;
     renderSlotSeg();
 
+    ageGroup = d?.ageGroup ?? 'all';
+    renderAgeSeg();
+
     const days = d?.workdays ?? [1, 2, 3, 4, 5, 6];
     el('f-days')
       .querySelectorAll<HTMLInputElement>('input')
@@ -311,6 +333,19 @@ const weekdays = [
         btn.onclick = () => {
           slotMinutes = Number(btn.dataset.min);
           renderSlotSeg();
+        };
+      });
+  }
+
+  /** Yosh cheklovi tanlovi — slot davomiyligi bilan bir xil segment. */
+  function renderAgeSeg() {
+    el('f-age')
+      .querySelectorAll<HTMLButtonElement>('button')
+      .forEach((btn) => {
+        btn.classList.toggle('on', btn.dataset.age === ageGroup);
+        btn.onclick = () => {
+          ageGroup = btn.dataset.age as Doctor['ageGroup'];
+          renderAgeSeg();
         };
       });
   }
@@ -373,6 +408,7 @@ const weekdays = [
       deptId: el<HTMLSelectElement>('f-dept').value,
       price: Number(el<HTMLInputElement>('f-price').value),
       slotMinutes,
+      ageGroup,
       workdays,
       shifts,
       experience: el<HTMLInputElement>('f-exp').value.trim(),
@@ -701,6 +737,11 @@ const weekdays = [
     background: var(--leaf);
     border-color: var(--leaf);
     color: #fff;
+  }
+
+  .fld-note {
+    font-size: 12px;
+    color: var(--muted);
   }
 
   .days {
