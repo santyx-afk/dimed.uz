@@ -50,6 +50,7 @@ const widgetData = JSON.stringify({ departments, doctors });
   import { birthDateSelectsHtml, readBirthDate, formatBirthDate } from '../lib/birthdate';
   import { ageOnDate, fitsAgeGroup, ageRejected, ageChip, toAgeGroup } from '../lib/age';
   import { site } from '../data/site';
+  import { parsePhone, formatPhone } from '../lib/phone';
 
   const { departments, doctors } = JSON.parse(document.getElementById('widgetData').textContent);
   const lang = getLang();
@@ -633,9 +634,15 @@ const widgetData = JSON.stringify({ departments, doctors });
       if (e.key === 'Enter') btn.click();
     });
 
+    phone.addEventListener('blur', () => {
+      const ok = parsePhone(phone.value);
+      if (ok.ok) phone.value = formatPhone(ok.value);
+    });
+
     btn.addEventListener('click', async () => {
-      if (phone.value.replace(/\D/g, '').length < 9) {
-        setMsg(tr('booking.login.phoneRequired'), 'error');
+      const checked = parsePhone(phone.value);
+      if (!checked.ok) {
+        setMsg(checked.error, 'error');
         return phone.focus();
       }
       if (code.value.length !== 6) {
@@ -650,7 +657,7 @@ const widgetData = JSON.stringify({ departments, doctors });
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ phone: phone.value.trim(), code: code.value }),
+          body: JSON.stringify({ phone: checked.value, code: code.value }),
         });
         const body = await res.json();
         if (!res.ok) {

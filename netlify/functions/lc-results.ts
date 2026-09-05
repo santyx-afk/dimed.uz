@@ -4,7 +4,8 @@ import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { required } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
-import { json, error, normalizePhone } from './lib/http.ts';
+import { json, error } from './lib/http.ts';
+import { parsePhone } from './lib/phone.ts';
 import { botText, isLang } from './lib/i18n.ts';
 import { siteOrigin } from './result.ts';
 
@@ -52,7 +53,9 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       if (!item.value) return error(`"${item.title}": value maydoni kerak (matn natija)`);
     }
 
-    const phone = normalizePhone(body.phone);
+    const checked = parsePhone(body.phone);
+    if (!checked.ok) return error(`phone: ${checked.error}`);
+    const phone = checked.value;
     const date = body.date ?? new Date().toISOString();
 
     for (const item of body.results) {

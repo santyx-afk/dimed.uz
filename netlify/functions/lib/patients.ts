@@ -1,6 +1,7 @@
 import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES, queryAllPages } from './db.ts';
 import { logToAdmin } from './telegram.ts';
+import { phoneVariants } from './phone.ts';
 
 /**
  * 1C `individuals` jadvalidagi bemor profili. 1C o'zi yozadi:
@@ -226,13 +227,33 @@ const readUser = async (telegramId: string): Promise<UserRecord> => {
  * tekshirib bo'lmaydi.
  */
 async function readIndividuals(phone: string): Promise<IndividualRecord[]> {
-  try {
-    const items = await queryAllPages({
+  const read = (key: string) =>
+    queryAllPages({
       TableName: TABLES.individuals,
       KeyConditionExpression: 'phone = :p',
-      ExpressionAttributeValues: { ':p': phone },
-    });
-    return items as IndividualRecord[];
+      ExpressionAttributeValues: { ':p': key },
+    }) as Promise<IndividualRecord[]>;
+
+  try {
+    const rows = await read(phone);
+    /*
+      1C kalitni satr sifatida yozadi: "+998901234567" va "998901234567"
+      ikki xil bemor bo'lib qoladi. Asosiy kalit bo'yicha topilmasa,
+      boshqa yozilishlarini ham qaraymiz — aks holda bemor o'z
+      oilasini ko'rmaydi. Topilsa qo'shimcha so'rov bo'lmaydi.
+    */
+    if (rows.length) return rows;
+
+    const others = phoneVariants(phone).filter((v) => v !== phone);
+    const extra = await Promise.all(others.map((key) => read(key).catch(() => [])));
+    const found = extra.flat();
+    if (found.length) {
+      await logToAdmin(
+        'patients/1c-telefon-formati',
+        new Error(`${phone} uchun yozuvlar boshqa formatdagi kalitda topildi — 1C "+998…" yozishi kerak`),
+      );
+    }
+    return found;
   } catch (err) {
     await logToAdmin('patients/1c-royxat', err);
     return [];

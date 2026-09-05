@@ -5,7 +5,8 @@ import { db, TABLES } from './lib/db.ts';
 import { createSessionCookie } from './lib/session.ts';
 import { mergeIndividualProfile } from './lib/patients.ts';
 import { logToAdmin } from './lib/telegram.ts';
-import { json, error, normalizePhone } from './lib/http.ts';
+import { json, error } from './lib/http.ts';
+import { parsePhone } from './lib/phone.ts';
 
 type Body = { phone?: string; code?: string };
 
@@ -16,7 +17,12 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     const body = (await request.json()) as Body;
     if (!body.phone || !body.code) return error('Telefon raqami va kod kerak');
 
-    const phone = normalizePhone(body.phone);
+    // Raqam har xil yozilishi mumkin (bo'sh joy, chiziqcha, mamlakat
+    // kodi bilan yoki usiz) — hammasi bitta kalitga keltiriladi.
+    // Noto'g'ri raqam bazaga umuman bormaydi.
+    const checked = parsePhone(body.phone);
+    if (!checked.ok) return error(checked.error);
+    const phone = checked.value;
     const given = body.code.replace(/\D/g, '');
     if (given.length !== 6) return error('Kod 6 xonali bo‘lishi kerak');
 
