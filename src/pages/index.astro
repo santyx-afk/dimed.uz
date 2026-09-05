@@ -3,7 +3,7 @@ import Base from '../layouts/Base.astro';
 import BookingWidget from '../components/BookingWidget.astro';
 import DeptIcon from '../components/DeptIcon.astro';
 import { departments } from '../data/departments';
-import { doctors, doctorsByDept } from '../data/doctors';
+import { activeDoctors, doctorsByDept } from '../data/doctors';
 import { site } from '../data/site';
 import analyses from '../data/analyses.json';
 
@@ -29,7 +29,7 @@ const featuredAnalyses = featured
         </div>
         <div class="hero-stats">
           <div class="stat-chip"><b>{departments.length}</b> boʻlim</div>
-          <div class="stat-chip"><b class="g" id="statDoctors">{doctors.length}</b> shifokor</div>
+          <div class="stat-chip"><b class="g" id="statDoctors">{activeDoctors.length}</b> shifokor</div>
           <div class="stat-chip"><b>{analyses.length}</b> tahlil turi</div>
           <div class="stat-chip"><b class="g">08:00–22:00</b> har kuni</div>
         </div>
@@ -127,7 +127,7 @@ const featuredAnalyses = featured
     </div>
     <div class="doc-cards">
       {
-        doctors.map((d) => (
+        activeDoctors.map((d) => (
           <div class="doc-card glass rv" data-doc-card={d.id}>
             <div class="ph">
               <img src={d.photo} alt={d.name} width="64" height="64" loading="lazy" />

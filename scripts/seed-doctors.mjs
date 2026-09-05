@@ -44,7 +44,8 @@ for (const d of doctors) {
         ':slot': d.slotMinutes,
         ':workdays': d.workdays,
         ':price': d.price,
-        ':active': true,
+        // Faolsiz shifokor (doctors.ts da active:false) qayta seed'da ham yoqilib ketmaydi.
+        ':active': d.active !== false,
         ':photo': d.photo,
         ':exp': d.experience ?? '',
         ':hours': d.hours,

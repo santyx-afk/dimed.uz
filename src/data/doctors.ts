@@ -15,6 +15,13 @@ export type Doctor = {
   /** Ish kunlari: 0 = yakshanba ... 6 = shanba */
   workdays: number[];
   price: number;
+  /**
+   * Saytda ko'rinadimi. `false` — shifokor ishdan bo'shagan yoki vaqtincha
+   * qabul qilmaydi: kartasi va bron ro'yxatida chiqmaydi, lekin yozuvi
+   * (navbatlar tarixi uchun) saqlanadi. Bazadagi `active` maydoni bilan
+   * bir xil; admin paneldan yoqib-o'chiriladi.
+   */
+  active?: boolean;
 };
 
 /**
@@ -99,6 +106,9 @@ export const doctors: Doctor[] = [
     slotMinutes: 20,
     workdays: [1, 2, 3, 4, 5],
     price: 80000,
+    // Ishdan bo'shagan — saytda ko'rinmaydi (E3). Yangi ginekolog kelganda
+    // admin panelda qo'shiladi yoki shu yozuv qayta yoqiladi.
+    active: false,
   },
   {
     id: 'mansurov',
@@ -160,4 +170,7 @@ export const doctors: Doctor[] = [
   },
 ];
 
-export const doctorsByDept = (deptId: string) => doctors.filter((d) => d.deptId === deptId);
+/** Saytda ko'rsatiladigan (faol) shifokorlar — kartalar va bron vidjeti shundan chiziladi. */
+export const activeDoctors = doctors.filter((d) => d.active !== false);
+
+export const doctorsByDept = (deptId: string) => activeDoctors.filter((d) => d.deptId === deptId);

@@ -120,6 +120,18 @@ test('cloudshell-setup.sh da hamma shifokor bor', () => {
   }
 });
 
+test('faolsiz shifokor skriptda active=false bilan yoziladi', () => {
+  // E3: ishdan bo'shagan shifokor bazadan o'chirilmaydi, lekin qayta
+  // seed qilinganda ham saytda paydo bo'lib qolmasligi kerak.
+  const matn = readFileSync(OUTPUT, 'utf8');
+  const faolsiz = doctors.filter((d) => d.active === false);
+  assert.ok(faolsiz.length >= 1, 'kamida bitta faolsiz shifokor kutilgan (murtazayeva)');
+  for (const d of faolsiz) {
+    const qator = matn.split('\n').find((l) => l.startsWith(`shifokor "${d.id}"`));
+    assert.ok(qator?.includes('{"BOOL":false}'), `${d.id} skriptda active=false bo'lishi kerak`);
+  }
+});
+
 test('cloudshell-setup.sh telegram_id ga tegmaydi', () => {
   const matn = readFileSync(OUTPUT, 'utf8');
   // Bog'lanish qo'lda qilinadi; seed uni o'chirib yubormasligi kerak.
