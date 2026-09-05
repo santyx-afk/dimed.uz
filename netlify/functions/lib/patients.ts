@@ -1,5 +1,6 @@
-import { GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLES } from './db.ts';
+import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { db, TABLES, queryAllPages } from './db.ts';
+import { logToAdmin } from './telegram.ts';
 
 /**
  * 1C `individuals` jadvalidagi bemor profili. 1C o'zi yozadi:
@@ -121,15 +122,7 @@ export async function mergeIndividualProfile(phone: string, telegramId: string):
     raqamdan foydalanadi). Hammasi o'qiladi va Telegram egasiga mos
     kelgani tanlanadi — chegara oilaga yetarli.
   */
-  const found = await db.send(
-    new QueryCommand({
-      TableName: TABLES.individuals,
-      KeyConditionExpression: 'phone = :p',
-      ExpressionAttributeValues: { ':p': phone },
-      Limit: 25,
-    }),
-  );
-  const [first, ...rest] = ((found.Items ?? []) as IndividualRecord[]).filter(
+  const [first, ...rest] = (await readIndividuals(phone)).filter(
     (one) => one.DeletionMark !== true,
   );
   if (!first) return false;
@@ -222,6 +215,51 @@ const readUser = async (telegramId: string): Promise<UserRecord> => {
 };
 
 /**
+ * 1C yozuvlarini oxirigacha o'qiydi.
+ *
+ * Avval `Limit: 25` turardi va sahifalash yo'q edi: bir telefon ostida
+ * 25 tadan ko'p yozuv bo'lsa (1C bitta odamga bir necha marta yozgan
+ * bo'lishi mumkin) oilaning bir qismi jimgina yo'qolardi.
+ *
+ * Xato bo'lsa ham kirish va bron to'xtamaydi — lekin endi jim emas:
+ * sabab log-botga boradi, aks holda "hamma ko'rinmayapti" ni
+ * tekshirib bo'lmaydi.
+ */
+async function readIndividuals(phone: string): Promise<IndividualRecord[]> {
+  try {
+    const items = await queryAllPages({
+      TableName: TABLES.individuals,
+      KeyConditionExpression: 'phone = :p',
+      ExpressionAttributeValues: { ':p': phone },
+    });
+    return items as IndividualRecord[];
+  } catch (err) {
+    await logToAdmin('patients/1c-royxat', err);
+    return [];
+  }
+}
+
+/**
+ * Bir odam ikki marta chiqmasin: bir xil id, yoki eski "PROFILE"
+ * yozuvi kodli yozuv bilan bir xil ismda bo'lsa — biri qoladi.
+ */
+function dedupe(list: PatientOption[]): PatientOption[] {
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  const out: PatientOption[] = [];
+
+  // Kodli yozuvlar oldin: "PROFILE" faqat o'zi yolg'iz bo'lsa qoladi.
+  for (const one of [...list].sort((a, b) => Number(a.id === 'PROFILE') - Number(b.id === 'PROFILE'))) {
+    const nameKey = one.name.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seenIds.has(one.id) || (one.id === 'PROFILE' && seenNames.has(nameKey))) continue;
+    seenIds.add(one.id);
+    seenNames.add(nameKey);
+    out.push(one);
+  }
+  return out;
+}
+
+/**
  * Telefonga bog'langan bemorlar ro'yxati.
  *
  * Ikki manba qo'shiladi: 1C katalogidagi (klinikada ro'yxatdan o'tgan)
@@ -232,25 +270,22 @@ export async function listPatients(
   phone: string,
   telegramId: string,
 ): Promise<{ patients: PatientOption[]; activeId: string | null }> {
-  const [found, user] = await Promise.all([
-    db.send(
-      new QueryCommand({
-        TableName: TABLES.individuals,
-        KeyConditionExpression: 'phone = :p',
-        ExpressionAttributeValues: { ':p': phone },
-        Limit: 25,
-      }),
-    ).catch(() => ({ Items: [] })),
-    readUser(telegramId),
-  ]);
+  const [rows, user] = await Promise.all([readIndividuals(phone), readUser(telegramId)]);
 
   const overrides = user.birth_dates ?? {};
 
-  const fromOneC = ((found.Items ?? []) as IndividualRecord[])
+  const fromOneC = rows
     .filter((one) => one.DeletionMark !== true)
     .map((one) => {
-      const raw = one.sort_key !== 'PROFILE' ? one.sort_key : one.Code;
-      const id = raw ? normalizeCode(raw) : '';
+      /*
+        Yozuv kaliti — 1C bemor kodi. Eski yozuvlarda u "PROFILE" bo'lib,
+        kod alohida maydonda turadi. Ikkalasi ham bo'lmasa yozuvni
+        tashlab yubormaymiz: sort_key o'zi ham telefon ichida yagona,
+        ya'ni identifikator sifatida yetadi — aks holda bunday oila
+        a'zosi ro'yxatdan butunlay yo'qolardi.
+      */
+      const code = one.sort_key !== 'PROFILE' ? one.sort_key : one.Code;
+      const id = normalizeCode(code || one.sort_key || '');
       const fromOneCBirthday = one.Birthday ? checkBirthDate(one.Birthday) : null;
       return {
         id,
@@ -275,7 +310,7 @@ export async function listPatients(
     birthDate: p.birth_date ?? null,
   }));
 
-  const patients = [...fromOneC, ...local];
+  const patients = dedupe([...fromOneC, ...local]);
   const activeId =
     user.active_patient_id && patients.some((p) => p.id === user.active_patient_id)
       ? user.active_patient_id

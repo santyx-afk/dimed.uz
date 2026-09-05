@@ -1,5 +1,7 @@
 ---
 import Cabinet from '../../layouts/Cabinet.astro';
+import SignInCard from '../../components/SignInCard.astro';
+import { t } from '../../data/i18n';
 import { LANGS, LANG_NAMES } from '../../data/i18n';
 ---
 
@@ -13,10 +15,7 @@ import { LANGS, LANG_NAMES } from '../../data/i18n';
 >
   <div id="loading" class="state">Yuklanmoqda…</div>
 
-  <div id="guest" class="state" hidden>
-    <p>Sozlamalar uchun Telegram orqali kiring.</p>
-    <a class="btn" href="/kirish?next=/kabinet/sozlamalar">Kirish</a>
-  </div>
+  <SignInCard what={t('signin.what.settings')} next="/kabinet/sozlamalar" hidden />
 
   <div id="content" class="grid" hidden>
     <div class="card glass">
@@ -69,6 +68,7 @@ import { LANGS, LANG_NAMES } from '../../data/i18n';
 </Cabinet>
 
 <script>
+  import { showSignIn } from '../../lib/signin';
   import { birthDateSelectsHtml, readBirthDate, formatBirthDate } from '../../lib/birthdate';
   import { getLang, setLang, applyLang } from '../../lib/lang';
   import { isLang } from '../../data/i18n';
@@ -232,8 +232,7 @@ import { LANGS, LANG_NAMES } from '../../data/i18n';
     }
 
     if (info.role === 'guest') {
-      el('loading').hidden = true;
-      el('guest').hidden = false;
+      showSignIn(401);
       return;
     }
 

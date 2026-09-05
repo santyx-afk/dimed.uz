@@ -8,6 +8,7 @@ import { shiftsFor } from './lib/schedule.ts';
 import { isDateKey, isTime, toInstant, weekdayOf, type DateKey } from './lib/time.ts';
 import { createPayment } from './lib/payment.ts';
 import { listPatients } from './lib/patients.ts';
+import { ageOn, fitsAgeGroup, toAgeGroup, ageRejected } from './lib/age.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
 
@@ -70,6 +71,16 @@ export default async (request: Request, _context: Context): Promise<Response> =>
     */
     if (!patient) return error('Navbat kim uchun ekanini tanlang');
     if (!patient.birthDate) return error('Bemorning tug‘ilgan sanasi kiritilmagan');
+
+    /*
+      Shifokorning yosh cheklovi: pediatr kattani, kattalar shifokori
+      bolani qabul qilmasin. Yosh qabul kuniga qarab hisoblanadi.
+    */
+    const ageGroup = toAgeGroup(doctor.age_group);
+    if (!fitsAgeGroup(ageGroup, ageOn(patient.birthDate, toInstant(date, time)))) {
+      return error(ageRejected(ageGroup));
+    }
+
     if (body.privacyAccepted !== true) return error('Maxfiylik siyosatiga rozilik kerak');
 
     const payment = await createPayment({

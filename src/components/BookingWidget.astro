@@ -48,6 +48,8 @@ const widgetData = JSON.stringify({ departments, doctors });
   import { t } from '../data/i18n';
   import { getLang } from '../lib/lang';
   import { birthDateSelectsHtml, readBirthDate, formatBirthDate } from '../lib/birthdate';
+  import { ageOnDate, fitsAgeGroup, ageRejected, ageChip, toAgeGroup } from '../lib/age';
+  import { site } from '../data/site';
 
   const { departments, doctors } = JSON.parse(document.getElementById('widgetData').textContent);
   const lang = getLang();
@@ -59,6 +61,12 @@ const widgetData = JSON.stringify({ departments, doctors });
     'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
   ];
   const fmtPrice = (n) => n.toLocaleString('ru-RU').replace(/,/g, ' ') + ' soʻm';
+  const BOT_URL = site.telegramBot;
+  /** Tanlangan shifokorning yosh cheklovi; belgilanmagan bo'lsa cheklovsiz. */
+  const docAgeGroup = () => toAgeGroup(state.doc?.ageGroup);
+  // Sana hali tanlanmagan bo'lsa bugunga qarab hisoblanadi — cheklov
+  // hech qachon "yoshi noma'lum" deb hammani rad etib qo'ymasin.
+  const ageOn = (birthDate, dateKey) => ageOnDate(birthDate, dateKey || dstr(new Date()));
   const pad = (n) => String(n).padStart(2, '0');
   // Server YYYY-MM-DD kutadi.
   const dstr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -130,12 +138,18 @@ const widgetData = JSON.stringify({ departments, doctors });
     umuman ko'rsatilmaydi — u baribir kirish sahifasiga tushadi.
   */
   let patients = null;
+  /** Oxirgi urinish nega bo'lmadi: 'auth' — kirmagan, 'network' — ulanmadi. */
+  let patientsError = null;
 
   async function loadPatients() {
     if (patients) return patients;
+    patientsError = null;
     try {
       const res = await fetch('/api/patients', { credentials: 'same-origin' });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        patientsError = res.status === 401 ? 'auth' : 'network';
+        return null;
+      }
       const data = await res.json();
       patients = data;
       if (!state.patientId) {
@@ -149,6 +163,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       }
       return data;
     } catch {
+      patientsError = 'network';
       return null;
     }
   }
@@ -222,6 +237,10 @@ const widgetData = JSON.stringify({ departments, doctors });
               <img src="${d.photo}" alt="" width="42" height="42" loading="lazy">
               <span><span class="nm">${d.name}</span><br><span class="jb">${d.job}</span></span>
               <span class="tags">${
+                ageChip(toAgeGroup(d.ageGroup), lang)
+                  ? `<span class="age-tag">${esc(ageChip(toAgeGroup(d.ageGroup), lang))}</span>`
+                  : ''
+              }${
                 d.ratingCount ? `<span class="rate-tag" title="${d.ratingCount} ta baho">★ ${d.ratingAvg}</span>` : ''
               }<span class="slot-tag">${d.slotMinutes} daq</span></span>
             </button>`,
@@ -337,14 +356,23 @@ const widgetData = JSON.stringify({ departments, doctors });
     else grid.innerHTML = '<p class="slot-empty">Bu shifokorning yaqin kunlarda qabuli yoʻq.</p>';
   }
 
-  /** Bemor ro'yxatidagi bitta qator: ism + tug'ilgan sana (yoki yo'qligi). */
-  const patientItem = (p) =>
-    `<button class="who-item${p.id === state.patientId ? ' on' : ''}" data-pick="${esc(p.id)}">
+  /**
+   * Bemor ro'yxatidagi bitta qator: ism + tug'ilgan sana (yoki yo'qligi).
+   * Shifokorning yosh chekloviga tushmagan bemor darhol xiralashadi —
+   * bosib ko'rgandan keyin emas, ro'yxatning o'zidayoq ko'rinadi.
+   */
+  const patientItem = (p) => {
+    const fits = !p.birthDate || fitsAgeGroup(docAgeGroup(), ageOn(p.birthDate, state.date));
+    const note = p.birthDate
+      ? esc(formatBirthDate(p.birthDate, lang))
+      : esc(tr('booking.birthDate.missingFor'));
+    return `<button class="who-item${p.id === state.patientId ? ' on' : ''}${fits ? '' : ' unfit'}" data-pick="${esc(p.id)}">
       <span class="who-nm">${esc(p.name)}</span>
-      <small class="who-bd${p.birthDate ? '' : ' none'}">${
-        p.birthDate ? esc(formatBirthDate(p.birthDate, lang)) : esc(tr('booking.birthDate.missingFor'))
+      <small class="who-bd${p.birthDate ? '' : ' none'}">${note}${
+        fits ? '' : ` · ${esc(ageChip(docAgeGroup(), lang))} emas`
       }</small>
     </button>`;
+  };
 
   /*
     4-qadam — bemor ma'lumotlari. Bir telefondan butun oila foydalanadi
@@ -353,7 +381,23 @@ const widgetData = JSON.stringify({ departments, doctors });
     Tug'ilgan sana majburiy (B1): yo'q bo'lsa shu yerda so'raladi va
     bemor yozuviga saqlanadi.
   */
+  /*
+    4-qadam — bemor ma'lumotlari. Bir telefondan butun oila foydalanadi
+    (ota-ona bolasini o'z raqami bilan yozdiradi), shuning uchun bemor
+    alohida qadamda tanlanadi: ro'yxatdan yoki yangi odam qo'shib.
+
+    Bu qadamdan bemor tanlanmasdan o'tib bo'lmaydi — 5-qadam
+    ("Tasdiqlash") faqat `proceed()` orqali ochiladi. Kirmagan
+    foydalanuvchi shu yerning o'zida Telegram orqali kiradi: avval
+    sahifadan haydab yuborilardi va tanlov butunlay o'tkazib
+    yuborilardi.
+  */
   async function renderPatient() {
+    const data = await loadPatients();
+    // Kirmagan bo'lsa — shu qadamning o'zida kirish; ulanish uzilgan
+    // bo'lsa kirish oynasini ko'rsatish chalg'itadi, qayta urinish beramiz.
+    if (!data) return patientsError === 'network' ? renderPatientsFailed() : renderLogin();
+
     wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.whoFor'))}</div>
       <div class="who-list" id="whoList"><p class="slot-empty">${esc(tr('common.loading'))}</p></div>
       <button class="btn btn-ghost w-full" id="whoNew" type="button">+ Boshqa odam</button>
@@ -419,8 +463,17 @@ const widgetData = JSON.stringify({ departments, doctors });
       return false;
     };
 
+    /*
+      Shifokorning yosh cheklovi: pediatr kattani, kattalar shifokori
+      bolani qabul qilmaydi. Server ham shuni tekshiradi — bu yerdagisi
+      bemor 5-qadamga bekorga o'tib, xatoni oxirida ko'rmasligi uchun.
+    */
+    const fitsDoctor = (patient) =>
+      fitsAgeGroup(docAgeGroup(), patient.birthDate ? ageOn(patient.birthDate, state.date) : null);
+
     const proceed = (patient) => {
       if (!privacyOk()) return;
+      if (!fitsDoctor(patient)) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
       state.patientId = patient.id;
       state.patientName = patient.name;
       state.patientBirthDate = patient.birthDate;
@@ -450,17 +503,6 @@ const widgetData = JSON.stringify({ departments, doctors });
       wBody.querySelectorAll('.who-item').forEach((b) => b.classList.toggle('on', b.dataset.pick === patient.id));
       birthForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     };
-
-    const data = await loadPatients();
-
-    /*
-      Kirmagan foydalanuvchida ro'yxat yo'q — savol berishning ma'nosi
-      ham yo'q: "band qilish" tugmasi uni kirish sahifasiga oladi.
-    */
-    if (!data) {
-      setStep(5);
-      return;
-    }
 
     if (!data.patients.length) {
       wBody.querySelector('#whoList').innerHTML =
@@ -496,6 +538,8 @@ const widgetData = JSON.stringify({ departments, doctors });
       if (!lastName || !firstName) return setMsg('Familiya va ism majburiy.', 'error');
       if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
       if (!privacyOk()) return;
+      // Yoshi to'g'ri kelmasa — bemorni bekorga qo'shib o'tirmaymiz.
+      if (!fitsDoctor({ birthDate })) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
 
       setMsg('Saqlanmoqda…');
       try {
@@ -514,6 +558,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       const birthDate = readBirthDate(birthForm, 'fix');
       if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
       if (!privacyOk()) return;
+      if (!fitsDoctor({ birthDate })) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
 
       setMsg('Saqlanmoqda…');
       try {
@@ -526,6 +571,106 @@ const widgetData = JSON.stringify({ departments, doctors });
         proceed(body.patient);
       } catch {
         setMsg(tr('common.error.network'), 'error');
+      }
+    });
+  }
+
+  /** Bemor ro'yxatini olib bo'lmadi (kirish emas, ulanish muammosi). */
+  function renderPatientsFailed() {
+    wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.whoFor'))}</div>
+      <p class="book-msg error">${esc(tr('common.error.network'))}</p>
+      <button class="btn w-full" id="whoRetry" type="button">${esc(tr('common.retry'))}</button>
+      <button class="back-link">← vaqtni oʻzgartirish</button>`;
+    wBody.querySelector('#whoRetry').addEventListener('click', () => renderPatient());
+    wBody.querySelector('.back-link').addEventListener('click', () => {
+      state.time = null;
+      setStep(3);
+    });
+  }
+
+  /*
+    Kirmagan foydalanuvchi uchun 4-qadamning o'zida kirish: botdan
+    kod olinadi va shu yerda kiritiladi. Muvaffaqiyatli kirgach
+    tanlangan bo'lim/shifokor/vaqt saqlanib qoladi va bemor ro'yxati
+    o'sha zahoti shu qadamda ochiladi.
+  */
+  function renderLogin() {
+    wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.login.title'))}</div>
+      <p class="login-lede">${esc(tr('booking.login.lede'))}</p>
+      <div class="login-steps">
+        <span>${esc(tr('booking.login.botStep'))}</span>
+        <a class="btn btn-sm tg" href="${BOT_URL}" target="_blank" rel="noopener">${esc(tr('booking.login.botBtn'))}</a>
+      </div>
+      <label class="fld-label" for="wPhone">${esc(tr('booking.login.phone'))}</label>
+      <input class="login-inp" id="wPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+998 90 123 45 67" />
+      <label class="fld-label" for="wCode">${esc(tr('booking.login.code'))}</label>
+      <input class="login-inp code" id="wCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" />
+      <p class="book-msg" id="loginMsg" role="status" aria-live="polite"></p>
+      <button class="btn w-full" id="wLogin" type="button">${esc(tr('booking.login.button'))}</button>
+      <button class="back-link">← vaqtni oʻzgartirish</button>`;
+
+    wBody.querySelector('.back-link').addEventListener('click', () => {
+      state.time = null;
+      setStep(3);
+    });
+
+    const msg = wBody.querySelector('#loginMsg');
+    const phone = wBody.querySelector('#wPhone');
+    const code = wBody.querySelector('#wCode');
+    const btn = wBody.querySelector('#wLogin');
+    const setMsg = (text, kind = '') => {
+      msg.textContent = text;
+      msg.className = `book-msg${kind ? ` ${kind}` : ''}`;
+    };
+
+    code.addEventListener('input', () => {
+      code.value = code.value.replace(/\D/g, '').slice(0, 6);
+    });
+    phone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') code.focus();
+    });
+    code.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') btn.click();
+    });
+
+    btn.addEventListener('click', async () => {
+      if (phone.value.replace(/\D/g, '').length < 9) {
+        setMsg(tr('booking.login.phoneRequired'), 'error');
+        return phone.focus();
+      }
+      if (code.value.length !== 6) {
+        setMsg(tr('booking.login.codeRequired'), 'error');
+        return code.focus();
+      }
+
+      btn.disabled = true;
+      setMsg(tr('booking.login.working'));
+      try {
+        const res = await fetch('/api/auth-verify', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ phone: phone.value.trim(), code: code.value }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          setMsg(body.error ?? tr('booking.login.failed'), 'error');
+          code.value = '';
+          code.focus();
+          return;
+        }
+        // Header'dagi "kim kirgan" keshi (C1) eskirmasin.
+        try {
+          sessionStorage.removeItem('dimed_session');
+        } catch {
+          /* xotira yopiq bo'lsa ham bron davom etadi */
+        }
+        patients = null;
+        await renderPatient();
+      } catch {
+        setMsg(tr('common.error.network'), 'error');
+      } finally {
+        btn.disabled = false;
       }
     });
   }
@@ -621,8 +766,10 @@ const widgetData = JSON.stringify({ departments, doctors });
         const data = await res.json();
 
         if (res.status === 401) {
-          // Kirmagan bo'lsa — kirish sahifasiga, keyin shu yerga qaytadi.
-          window.location.href = `/kirish?next=${encodeURIComponent(location.pathname + '#navbat-widget')}`;
+          // Sessiya tugagan — 4-qadamda kirish oynasi ochiladi, tanlovlar saqlanadi.
+          patients = null;
+          state.patientId = null;
+          setStep(4);
           return;
         }
 
@@ -689,6 +836,24 @@ const widgetData = JSON.stringify({ departments, doctors });
         const liveIds = new Set(docs.map((d) => d.id));
         document.querySelectorAll('[data-doc-card]').forEach((card) => {
           card.hidden = !liveIds.has(card.dataset.docCard);
+        });
+
+        // Yosh cheklovi (admin panelda o'zgarsa) kartada ham yangilanadi.
+        docs.forEach((d) => {
+          const chip = document.querySelector(`[data-doc-card="${d.id}"] [data-doc-age]`);
+          if (!chip) return;
+          const text = ageChip(toAgeGroup(d.ageGroup), lang);
+          chip.hidden = !text;
+          chip.textContent = text;
+        });
+
+        // Yosh cheklovi (admin panelda o'zgarsa) kartada ham yangilanadi.
+        docs.forEach((d) => {
+          const chip = document.querySelector(`[data-doc-card="${d.id}"] [data-doc-age]`);
+          if (!chip) return;
+          const text = ageChip(toAgeGroup(d.ageGroup), lang);
+          chip.hidden = !text;
+          chip.textContent = text;
         });
 
         // Bemor baholari (G2): o'rtacha va soni shifokor kartasida.
@@ -976,6 +1141,16 @@ const widgetData = JSON.stringify({ departments, doctors });
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .widget :global(.doc-btn .age-tag) {
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--rose);
+    background: var(--rose-soft);
+    border-radius: 999px;
+    padding: 4px 8px;
+    white-space: nowrap;
   }
 
   .widget :global(.doc-btn .rate-tag) {
@@ -1340,6 +1515,14 @@ const widgetData = JSON.stringify({ departments, doctors });
     border-color: var(--leaf);
   }
 
+  .widget :global(.who-item.unfit) {
+    opacity: 0.5;
+  }
+
+  .widget :global(.who-item.unfit .who-bd) {
+    color: var(--rose);
+  }
+
   .widget :global(.consent) {
     display: flex;
     align-items: flex-start;
@@ -1368,6 +1551,58 @@ const widgetData = JSON.stringify({ departments, doctors });
     font-weight: 650;
     color: var(--muted);
     margin-top: 4px;
+  }
+
+  /* 4-qadamdagi kirish (guest) */
+  .widget :global(.login-lede) {
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .widget :global(.login-steps) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 16px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 16px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+
+  .widget :global(.login-steps .tg) {
+    flex: none;
+    background: var(--color-tg, #2aabee);
+    box-shadow: none;
+  }
+
+  .widget :global(.login-inp) {
+    width: 100%;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    margin: 4px 0 8px;
+    font: inherit;
+    font-size: 15px;
+  }
+
+  .widget :global(.login-inp:focus-visible) {
+    outline: none;
+    border-color: var(--rose);
+  }
+
+  .widget :global(.login-inp.code) {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.4em;
+    font-weight: 650;
   }
 
   .widget :global(.birth-row) {

@@ -1,5 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
+import SignInCard from '../components/SignInCard.astro';
+import { t } from '../data/i18n';
 import Logo from '../components/Logo.astro';
 import { LANGS, LANG_NAMES } from '../data/i18n';
 import { site } from '../data/site';
@@ -37,10 +39,7 @@ import { site } from '../data/site';
 
     <div id="state" class="state">Yuklanmoqda…</div>
 
-    <div id="guest" class="state" hidden>
-      <p id="guestText">Natijani koʻrish uchun Telegram orqali kiring.</p>
-      <a class="btn" id="loginLink" href="/kirish">Kirish</a>
-    </div>
+    <SignInCard what={t('signin.what.result')} next="/natija" hidden />
 
     <article class="sheet" id="sheet" hidden>
       <div class="action-bar noprint">

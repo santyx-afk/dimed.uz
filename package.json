@@ -19,7 +19,8 @@
     "migrate-slot-minutes": "node scripts/migrate-slot-minutes.mjs",
     "import-patients": "node scripts/import-patients.mjs",
     "gen-cloudshell": "node --experimental-strip-types scripts/gen-cloudshell-setup.mjs",
-    "build-analyses": "node scripts/build-analyses.mjs"
+    "build-analyses": "node scripts/build-analyses.mjs",
+    "check-patients": "node scripts/check-patients.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.600.0",

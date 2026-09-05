@@ -71,6 +71,66 @@ export const messages = {
   },
 
   // --- navbat: tasdiqlash qadami (B2) ---
+  'common.retry': { uz: 'Qayta urinish', ru: 'Повторить', en: 'Try again' },
+
+  // --- kirish talab qilinadigan sahifalar (mehmon holati) ---
+  'signin.title': { uz: 'Bu — shaxsiy sahifa', ru: 'Это личная страница', en: 'This is a private page' },
+  'signin.denied.title': { uz: 'Bu boʻlim sizga ochiq emas', ru: 'Этот раздел вам недоступен', en: 'This section is not open to you' },
+  'signin.lede': {
+    uz: 'Kimning qanday maʼlumoti ekanini faqat egasi koʻradi. Davom etish uchun Telegram orqali kiring — SMS ham, parol ham kerak emas.',
+    ru: 'Чьи и какие это данные, видит только владелец. Чтобы продолжить, войдите через Telegram — без SMS и паролей.',
+    en: 'Only the owner can see whose data this is. Sign in with Telegram to continue — no SMS, no password.',
+  },
+  'signin.step1': { uz: 'Botga /start yuboring — 6 xonali kod keladi', ru: 'Отправьте боту /start — придёт 6-значный код', en: 'Send /start to the bot — you will get a 6-digit code' },
+  'signin.step2': { uz: 'Kodni kirish sahifasiga kiriting', ru: 'Введите код на странице входа', en: 'Enter the code on the sign-in page' },
+  'signin.bot': { uz: 'Botni ochish', ru: 'Открыть бота', en: 'Open the bot' },
+  'signin.button': { uz: 'Kirish', ru: 'Войти', en: 'Sign in' },
+  'signin.what.appointments': { uz: 'Kirgach: navbatlaringiz, vaqtni koʻchirish va bekor qilish.', ru: 'После входа: ваши записи, перенос и отмена времени.', en: 'After signing in: your appointments, rescheduling and cancellation.' },
+  'signin.what.results': { uz: 'Kirgach: tahlil natijalaringiz — kim uchun, qachon, PDF va ulashish.', ru: 'После входа: ваши результаты анализов — для кого, когда, PDF и отправка.', en: 'After signing in: your test results — for whom, when, PDF and sharing.' },
+  'signin.what.settings': { uz: 'Kirgach: til, oila aʼzolari va hisob sozlamalari.', ru: 'После входа: язык, члены семьи и настройки аккаунта.', en: 'After signing in: language, family members and account settings.' },
+  'signin.what.result': { uz: 'Kirgach: natija toʻliq koʻrinadi — meʼyoriy oraliqlar, PDF va ulashish.', ru: 'После входа: результат целиком — референсные интервалы, PDF и отправка.', en: 'After signing in: the full result — reference ranges, PDF and sharing.' },
+  'signin.what.doctor': { uz: 'Bu boʻlim shifokorlar uchun: bugungi navbatlar va jadval.', ru: 'Этот раздел для врачей: записи на сегодня и график.', en: 'This section is for doctors: today\u2019s queue and schedule.' },
+  'signin.what.admin': { uz: 'Bu boʻlim administrator uchun: shifokorlar, narxlar va baholar.', ru: 'Этот раздел для администратора: врачи, цены и оценки.', en: 'This section is for the administrator: doctors, prices and ratings.' },
+  'denied.doctor': {
+    uz: 'Bu hisob shifokor sifatida roʻyxatdan oʻtmagan. Administratorga murojaat qiling.',
+    ru: 'Этот аккаунт не зарегистрирован как врач. Обратитесь к администратору.',
+    en: 'This account is not registered as a doctor. Please contact the administrator.',
+  },
+  'denied.admin': {
+    uz: 'Bu hisobda administrator huquqi yoʻq.',
+    ru: 'У этого аккаунта нет прав администратора.',
+    en: 'This account does not have administrator rights.',
+  },
+
+  // --- 4-qadam: kirish (guest) va yosh cheklovi ---
+  'booking.login.title': { uz: 'Davom etish uchun kiring', ru: 'Войдите, чтобы продолжить', en: 'Sign in to continue' },
+  'booking.login.lede': {
+    uz: 'Navbat kim uchun ekanini bilishimiz uchun Telegram orqali kiring — SMS ham, parol ham kerak emas.',
+    ru: 'Войдите через Telegram, чтобы мы знали, для кого запись — без SMS и паролей.',
+    en: 'Sign in with Telegram so we know who the appointment is for — no SMS, no password.',
+  },
+  'booking.login.botStep': { uz: 'Botga /start yuboring va 6 xonali kodni oling', ru: 'Отправьте боту /start и получите 6-значный код', en: 'Send /start to the bot and get the 6-digit code' },
+  'booking.login.botBtn': { uz: 'Botni ochish', ru: 'Открыть бота', en: 'Open the bot' },
+  'booking.login.phone': { uz: 'Telefon raqamingiz', ru: 'Ваш номер телефона', en: 'Your phone number' },
+  'booking.login.code': { uz: 'Botdagi 6 xonali kod', ru: '6-значный код из бота', en: '6-digit code from the bot' },
+  'booking.login.button': { uz: 'Kirish', ru: 'Войти', en: 'Sign in' },
+  'booking.login.working': { uz: 'Tekshirilmoqda…', ru: 'Проверяем…', en: 'Checking…' },
+  'booking.login.phoneRequired': {
+    uz: 'Telefon raqamini toʻliq kiriting.',
+    ru: 'Введите номер телефона полностью.',
+    en: 'Enter your full phone number.',
+  },
+  'booking.login.codeRequired': {
+    uz: '6 xonali kodni toʻliq kiriting.',
+    ru: 'Введите 6-значный код полностью.',
+    en: 'Enter the full 6-digit code.',
+  },
+  'booking.login.failed': { uz: 'Kirishda xatolik.', ru: 'Ошибка входа.', en: 'Sign-in failed.' },
+  'booking.patient.required': {
+    uz: 'Davom etish uchun navbat kim uchun ekanini tanlang.',
+    ru: 'Выберите, для кого запись, чтобы продолжить.',
+    en: 'Select who the appointment is for to continue.',
+  },
   'booking.confirm.title': { uz: 'Bron maʼlumotlari', ru: 'Данные записи', en: 'Booking details' },
   'booking.confirm.price': { uz: 'Qabul narxi', ru: 'Стоимость приёма', en: 'Consultation fee' },
   'booking.confirm.payAtDesk': {

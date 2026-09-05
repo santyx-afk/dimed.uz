@@ -2,6 +2,9 @@
  * Shifokor kabineti sahifalari uchun umumiy qism (E1): ma'lumotni
  * yuklash, ruxsat holatlari, kichik formatlovchilar.
  */
+import { t } from '../data/i18n';
+import { getLang } from './lang';
+import { showSignIn } from './signin';
 export type Shift = { start: string; end: string };
 
 export type QueueItem = {
@@ -53,21 +56,14 @@ const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as
 
 /**
  * Yuklanmadi holatini ko'rsatadi: 401/403 — kirish / ruxsat yo'q,
- * boshqasi — xato. Sahifada #loading, #denied, #deniedText bo'lishi kerak.
+ * boshqasi — xato. Sahifada #loading va #denied (SignInCard) bo'lishi kerak.
  */
 export function showDenied(status: number): void {
-  const loading = el('loading');
-  const denied = el('denied');
-  const text = el('deniedText');
   if (status === 401 || status === 403) {
-    if (loading) loading.hidden = true;
-    if (denied) denied.hidden = false;
-    if (text && status === 403) {
-      text.textContent =
-        'Bu hisob shifokor sifatida roʻyxatdan oʻtmagan. Administratorga murojaat qiling.';
-    }
+    showSignIn(status, t('denied.doctor', getLang()), 'denied');
     return;
   }
+  const loading = el('loading');
   if (loading) loading.textContent = 'Maʼlumotlarni yuklab boʻlmadi. Sahifani yangilang.';
 }
 
