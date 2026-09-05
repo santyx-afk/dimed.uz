@@ -93,4 +93,20 @@ export const tables = [
     attrs: [S('phone'), S('sort_key')],
     keys: [HASH('phone'), RANGE('sort_key')],
   },
+  {
+    // Saytdagi narxlar (F2): item_id = "analysis#<kod>" — tahlil turlari.
+    // Shifokor qabuli narxi doctors jadvalida (price). Admin paneldan
+    // tahrirlanadi; sayt /api/prices dan o'qiydi.
+    name: 'prices',
+    attrs: [S('item_id')],
+    keys: [HASH('item_id')],
+  },
+  {
+    // Bemor baholari (G2/F3): PK shifokor, SK baho qo'yilgan lahza (ISO).
+    // O'rtacha baho va soni doctors jadvalida (rating_sum, rating_count)
+    // yig'ilib turadi — sayt kartasi shu yerdan o'qiydi.
+    name: 'ratings',
+    attrs: [S('doctor_id'), S('created_at')],
+    keys: [HASH('doctor_id'), RANGE('created_at')],
+  },
 ];

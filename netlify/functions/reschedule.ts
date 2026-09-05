@@ -93,6 +93,11 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             date: toDate,
             phone: appointment.phone,
             telegram_id: appointment.telegram_id ?? session.userId,
+            // Bemor kimligi yangi yozuvga ham ko'chadi — avval yo'qolib qolardi.
+            patient_id: appointment.patient_id,
+            patient_name: appointment.patient_name,
+            patient_birth_date: appointment.patient_birth_date,
+            privacy_accepted_at: appointment.privacy_accepted_at,
             starts_at: toInstant(toDate, toTime).toISOString(),
             status: appointment.status,
             price: appointment.price,
@@ -101,12 +106,22 @@ export default async (request: Request, _context: Context): Promise<Response> =>
             created_at: appointment.created_at,
             updated_at: now.toISOString(),
           },
+          /*
+            Yozuv yo'q, hold muddati o'tgan yoki slot bo'shatilgan
+            (ko'chirilgan / bekor qilingan) bo'lsagina yoziladi. Avval
+            bo'shatilganlar yo'q edi: bekor qilingan slot ro'yxatda
+            "bo'sh" ko'rinib, band qilinganda 409 berardi.
+          */
           ConditionExpression:
-            'attribute_not_exists(doctor_day) OR (#s = :hold AND hold_until < :now)',
+            'attribute_not_exists(doctor_day) OR (#s = :hold AND hold_until < :now) ' +
+            'OR #s = :moved OR #s = :cancelled OR #s = :byClinic',
           ExpressionAttributeNames: { '#s': 'status' },
           ExpressionAttributeValues: {
             ':hold': 'hold',
             ':now': Math.floor(now.getTime() / 1000),
+            ':moved': 'moved',
+            ':cancelled': 'cancelled',
+            ':byClinic': 'cancelled_by_clinic',
           },
         }),
       );

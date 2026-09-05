@@ -1,0 +1,451 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+---
+
+<Cabinet
+  title="Bugungi navbatlar — Shifokor kabineti"
+  description="Shifokor kabineti: bugungi va kelgusi kunlar navbati."
+  eyebrow="Shifokor kabineti"
+  heading="Bugungi navbatlar"
+  area="doctor"
+  active="bugun"
+>
+  <span class="sub" id="subtitle" slot="sub"></span>
+
+  <div id="loading" class="state">Yuklanmoqda…</div>
+
+  <div id="denied" class="state" hidden>
+    <p id="deniedText">Bu bo‘lim faqat shifokorlar uchun.</p>
+    <a class="btn" href="/kirish?next=/kabinet/shifokor">Kirish</a>
+  </div>
+
+  <div id="content" hidden>
+    <!-- Kun chiplari: kecha, bugun, ertaga va keyingi kunlar — har biri alohida tugma, aktivi ajratilgan -->
+    <div class="days" id="days" role="tablist" aria-label="Kun"></div>
+
+    <div class="card glass">
+      <div class="card-head">
+        <h2 id="dayTitle"></h2>
+        <span class="count" id="count"></span>
+      </div>
+      <div id="dayNote" class="day-note" hidden></div>
+      <div id="queue" class="queue"></div>
+    </div>
+
+    <p class="note">
+      Qabul tugagach bemorni <b>Qabul qilindi</b> yoki <b>Kelmadi</b> deb belgilang: qabul qilingan
+      bemorga bot orqali shifokorni baholash so‘rovi boradi, kelmagan bemorga — yo‘q.
+    </p>
+  </div>
+</Cabinet>
+
+<script>
+  import { fetchDoctor, showDenied, esc, statusLabel, type DoctorData, type QueueItem } from '../../../lib/doctor-cabinet';
+  import { addDaysKey, fmtKey, fromKey, OYLAR, relativeLabel } from '../../../lib/dates';
+  import { formatBirthDate, ageOf } from '../../../lib/birthdate';
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  let todayKey = '';
+  let current = '';
+
+  /** Kecha + bugun + keyingi 6 kun. */
+  function renderDays() {
+    let html = '';
+    for (let i = -1; i < 7; i++) {
+      const key = addDaysKey(todayKey, i);
+      const d = fromKey(key);
+      html += `<button class="day${key === current ? ' on' : ''}${i < 0 ? ' past' : ''}" role="tab"
+        aria-selected="${key === current}" data-day="${key}">
+        <span class="lab">${relativeLabel(key, todayKey)}</span>
+        <b>${d.getDate()}</b><small>${OYLAR[d.getMonth()]}</small>
+      </button>`;
+    }
+    const box = el('days');
+    box.innerHTML = html;
+    box.querySelectorAll<HTMLButtonElement>('[data-day]').forEach((b) =>
+      b.addEventListener('click', () => loadDay(b.dataset.day ?? todayKey)),
+    );
+  }
+
+  function queueRow(a: QueueItem, canMark: boolean): string {
+    const s = statusLabel[a.status] ?? { text: a.status, cls: 'muted' };
+    const age = a.patientBirthDate ? ageOf(a.patientBirthDate) : null;
+    const meta = [
+      a.patientBirthDate ? `${formatBirthDate(a.patientBirthDate)}${age !== null ? ` · ${age} yosh` : ''}` : '',
+      a.phone,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+    const actions =
+      canMark && ['paid', 'booked', 'done', 'no_show'].includes(a.status)
+        ? `<div class="acts">
+            <button class="mark${a.status === 'done' ? ' on' : ''}" data-mark="done" data-time="${a.time}" type="button">✓ Qabul qilindi</button>
+            <button class="mark off${a.status === 'no_show' ? ' on' : ''}" data-mark="no_show" data-time="${a.time}" type="button">Kelmadi</button>
+          </div>`
+        : '';
+
+    return `<div class="q ${a.status}">
+      <span class="tm">${a.time}</span>
+      <span class="who">
+        <b>${a.patientName ? esc(a.patientName) : '<i>ism kiritilmagan</i>'}</b>
+        <small>${esc(meta)}</small>
+      </span>
+      <span class="pill ${s.cls}">${s.text}</span>
+      ${actions}
+    </div>`;
+  }
+
+  function renderQueue(data: DoctorData) {
+    const canMark = data.date <= data.today;
+    el('dayTitle').textContent =
+      data.date === data.today ? `${fmtKey(data.date)} (bugun)` : fmtKey(data.date);
+    el('count').textContent = data.appointments.length ? `${data.appointments.length} ta navbat` : '';
+
+    const note = el('dayNote');
+    if (data.dayOff) {
+      note.hidden = false;
+      note.textContent = `Bu kun yopiq${data.offReason ? ` — ${data.offReason}` : ''}. Navbatlar bekor qilingan.`;
+    } else if (!data.isWorkday) {
+      note.hidden = false;
+      note.textContent = 'Bu kun jadval bo‘yicha dam olish kuni.';
+    } else {
+      note.hidden = true;
+    }
+
+    el('queue').innerHTML = data.appointments.length
+      ? data.appointments.map((a) => queueRow(a, canMark)).join('')
+      : '<p class="empty">Bu kuni band qilingan navbat yoʻq.</p>';
+
+    el('queue')
+      .querySelectorAll<HTMLButtonElement>('[data-mark]')
+      .forEach((b) => b.addEventListener('click', () => mark(b.dataset.time ?? '', b.dataset.mark as 'done' | 'no_show')));
+  }
+
+  /** Qabul qilindi / Kelmadi (E2). */
+  async function mark(time: string, status: 'done' | 'no_show') {
+    const row = el('queue').querySelector<HTMLElement>(`[data-time="${time}"]`)?.closest('.q');
+    row?.classList.add('busy');
+    try {
+      const res = await fetch('/api/appointment-status', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ date: current, time, status }),
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        alert(data.error ?? 'Belgilab boʻlmadi.');
+        return;
+      }
+      await loadDay(current);
+    } catch {
+      alert('Internetga ulanishda muammo.');
+    } finally {
+      row?.classList.remove('busy');
+    }
+  }
+
+  async function loadDay(date: string) {
+    current = date;
+    renderDays();
+    el('queue').innerHTML = '<p class="empty">Yuklanmoqda…</p>';
+    const res = await fetchDoctor(date);
+    if (!res.ok) {
+      el('queue').innerHTML = '<p class="empty">Navbatni yuklab boʻlmadi. Qayta urining.</p>';
+      return;
+    }
+    renderQueue(res.data);
+  }
+
+  async function init() {
+    const res = await fetchDoctor();
+    if (!res.ok) return showDenied(res.status);
+    const data = res.data;
+    todayKey = data.today;
+    current = data.date;
+
+    el('subtitle').textContent = `${data.doctor.name} · ${data.doctor.job}`;
+    el('loading').hidden = true;
+    el('content').hidden = false;
+    renderDays();
+    renderQueue(data);
+  }
+
+  init();
+</script>
+
+<style>
+  .sub {
+    display: block;
+    color: var(--rose);
+    font-weight: 650;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  .state {
+    text-align: center;
+    padding: 48px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  /* Kun chiplari */
+  .days {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+    scrollbar-width: thin;
+  }
+
+  .days :global(.day) {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 64px;
+    padding: 8px 8px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    color: var(--muted);
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+
+  .days :global(.day b) {
+    font-size: 17px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .days :global(.day small) {
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .days :global(.day.past) {
+    opacity: 0.7;
+  }
+
+  .days :global(.day:hover) {
+    border-color: var(--rose);
+  }
+
+  .days :global(.day.on) {
+    border-color: var(--rose);
+    background: var(--rose);
+    color: rgb(255 255 255 / 0.85);
+  }
+
+  .days :global(.day.on b) {
+    color: #fff;
+  }
+
+  .days :global(.day:focus-visible) {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: var(--card-pad);
+  }
+
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .card h2 {
+    font-size: 17px;
+    font-weight: 750;
+  }
+
+  .count {
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 999px;
+    padding: 4px 16px;
+  }
+
+  .day-note {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--warn);
+    background: var(--warn-bg);
+    border-radius: 10px;
+    padding: 8px 16px;
+    margin-bottom: 16px;
+  }
+
+  .queue :global(.empty) {
+    color: var(--muted);
+    font-size: 14px;
+    text-align: center;
+    padding: 24px 0;
+  }
+
+  /* Navbat qatori: vaqt · bemor · holat · amallar */
+  .queue :global(.q) {
+    display: grid;
+    grid-template-columns: 56px 1fr auto;
+    grid-template-areas:
+      'tm who pill'
+      'tm acts acts';
+    align-items: center;
+    gap: 8px 16px;
+    padding: 16px 0;
+    border-bottom: 1px dashed var(--line);
+  }
+
+  .queue :global(.q:last-child) {
+    border-bottom: none;
+  }
+
+  .queue :global(.q.busy) {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .queue :global(.tm) {
+    grid-area: tm;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .queue :global(.who) {
+    grid-area: who;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .queue :global(.who b) {
+    font-weight: 650;
+    font-size: 15px;
+  }
+
+  .queue :global(.who i) {
+    font-weight: 500;
+    color: var(--muted);
+  }
+
+  .queue :global(.who small) {
+    font-size: 12.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .queue :global(.pill) {
+    grid-area: pill;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 4px 8px;
+    white-space: nowrap;
+  }
+
+  .queue :global(.pill.ok) {
+    color: var(--ok);
+    background: var(--ok-bg);
+  }
+
+  .queue :global(.pill.warn) {
+    color: var(--warn);
+    background: var(--warn-bg);
+  }
+
+  .queue :global(.pill.done) {
+    color: var(--leaf);
+    background: var(--leaf-soft);
+  }
+
+  .queue :global(.pill.off),
+  .queue :global(.pill.muted) {
+    color: var(--muted);
+    background: var(--busy);
+  }
+
+  .queue :global(.acts) {
+    grid-area: acts;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .queue :global(.mark) {
+    border: 1px solid var(--line);
+    background: var(--chip-bg);
+    color: var(--leaf);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .queue :global(.mark.off) {
+    color: var(--muted);
+  }
+
+  .queue :global(.mark:hover) {
+    border-color: currentColor;
+  }
+
+  .queue :global(.mark.on) {
+    background: var(--leaf);
+    border-color: var(--leaf);
+    color: #fff;
+  }
+
+  .queue :global(.mark.off.on) {
+    background: var(--muted);
+    border-color: var(--muted);
+  }
+
+  .note {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 16px;
+    line-height: 1.55;
+  }
+
+  @media (max-width: 600px) {
+    .card {
+      padding: 16px;
+    }
+
+    .queue :global(.q) {
+      grid-template-columns: 48px 1fr;
+      grid-template-areas:
+        'tm who'
+        'tm pill'
+        'acts acts';
+    }
+
+    .queue :global(.pill) {
+      justify-self: start;
+    }
+  }
+</style>

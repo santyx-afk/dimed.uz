@@ -26,6 +26,8 @@ export const TABLES = {
   appointments: tableName('appointments'),
   payments: tableName('payments'),
   labResults: tableName('lab_results'),
+  prices: tableName('prices'),
+  ratings: tableName('ratings'),
 } as const;
 
 /**

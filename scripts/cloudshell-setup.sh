@@ -394,10 +394,58 @@ jadval "lab_results" "$(cat <<JSON
 JSON
 )"
 
+jadval "prices" "$(cat <<JSON
+{
+  "TableName": "${PREFIX}_prices",
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "item_id",
+      "AttributeType": "S"
+    }
+  ],
+  "KeySchema": [
+    {
+      "AttributeName": "item_id",
+      "KeyType": "HASH"
+    }
+  ],
+  "BillingMode": "PAY_PER_REQUEST"
+}
+JSON
+)"
+
+jadval "ratings" "$(cat <<JSON
+{
+  "TableName": "${PREFIX}_ratings",
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "doctor_id",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "created_at",
+      "AttributeType": "S"
+    }
+  ],
+  "KeySchema": [
+    {
+      "AttributeName": "doctor_id",
+      "KeyType": "HASH"
+    },
+    {
+      "AttributeName": "created_at",
+      "KeyType": "RANGE"
+    }
+  ],
+  "BillingMode": "PAY_PER_REQUEST"
+}
+JSON
+)"
+
 # --- 2-qadam: jadvallar tayyor bo'lishini kutamiz ---
 echo
 echo "2-qadam: jadvallar tayyor bo'lishini kutamiz"
-for t in users otp_codes individuals doctors schedules appointments analysis_results payments lab_results; do
+for t in users otp_codes individuals doctors schedules appointments analysis_results payments lab_results prices ratings; do
   ddb wait table-exists --table-name "${PREFIX}_$t"
 done
 echo "  hammasi tayyor"
@@ -420,15 +468,15 @@ shifokor() {
   echo "  +  $id — $nom"
 }
 
-shifokor "narimbetov" "Narimbetov Alisher" '{":v0":{"S":"Narimbetov Alisher"},":v1":{"S":"Pediatr"},":v2":{"S":"pediatriya"},":v3":{"L":[{"M":{"start":{"S":"08:30"},"end":{"S":"12:30"}}},{"M":{"start":{"S":"13:30"},"end":{"S":"16:00"}}}]},":v4":{"N":"15"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"60000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/narimbetov-alisher.webp"},":v9":{"S":"10+ yil"},":v10":{"S":"Du–Sh · 08:30–16:00"},":upd":{"S":"'"$NOW"'"}}'
-shifokor "rahimov" "Rahimov Umidjon" '{":v0":{"S":"Rahimov Umidjon"},":v1":{"S":"Oliy toifali pediatr"},":v2":{"S":"pediatriya"},":v3":{"L":[{"M":{"start":{"S":"08:30"},"end":{"S":"12:00"}}},{"M":{"start":{"S":"13:00"},"end":{"S":"15:00"}}}]},":v4":{"N":"15"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"70000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/rahimov-umid.webp"},":v9":{"S":"20+ yil"},":v10":{"S":"Du–Sh · 08:30–15:00"},":upd":{"S":"'"$NOW"'"}}'
-shifokor "ashurov" "Ashurov Tursunali" '{":v0":{"S":"Ashurov Tursunali"},":v1":{"S":"Terapevt · Kardiolog"},":v2":{"S":"terapiya"},":v3":{"L":[{"M":{"start":{"S":"08:00"},"end":{"S":"12:00"}}},{"M":{"start":{"S":"13:00"},"end":{"S":"17:00"}}}]},":v4":{"N":"15"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"70000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/ashurov-tursunali.webp"},":v9":{"S":"40+ yil"},":v10":{"S":"Du–Sh · 08:00–17:00"},":upd":{"S":"'"$NOW"'"}}'
-shifokor "ilxomov" "Ilxomov Laziz" '{":v0":{"S":"Ilxomov Laziz"},":v1":{"S":"Terapevt · Kardiolog"},":v2":{"S":"terapiya"},":v3":{"L":[{"M":{"start":{"S":"09:00"},"end":{"S":"14:00"}}}]},":v4":{"N":"20"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"60000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/ilxomov-laziz.webp"},":v9":{"S":""},":v10":{"S":"Du–Sh · 09:00–14:00"},":upd":{"S":"'"$NOW"'"}}'
-shifokor "murtazayeva" "Murtazayeva Raʼno" '{":v0":{"S":"Murtazayeva Raʼno"},":v1":{"S":"Ginekolog · UTT shifokori"},":v2":{"S":"ginekologiya"},":v3":{"L":[{"M":{"start":{"S":"09:30"},"end":{"S":"12:30"}}},{"M":{"start":{"S":"13:30"},"end":{"S":"16:00"}}}]},":v4":{"N":"20"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"}]},":v6":{"N":"80000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/murtazayeva-rano.webp"},":v9":{"S":""},":v10":{"S":"Du–Ju · 09:30–16:00"},":upd":{"S":"'"$NOW"'"}}'
-shifokor "mansurov" "Mansurov Qobil" '{":v0":{"S":"Mansurov Qobil"},":v1":{"S":"Bolalar nevrologi"},":v2":{"S":"nevrologiya"},":v3":{"L":[{"M":{"start":{"S":"09:00"},"end":{"S":"13:00"}}}]},":v4":{"N":"15"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"65000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/mansurov-qobil.webp"},":v9":{"S":"9+ yil"},":v10":{"S":"Du–Sh · 09:00–13:00"},":upd":{"S":"'"$NOW"'"}}'
-shifokor "umatqulov" "Umatqulov Husan" '{":v0":{"S":"Umatqulov Husan"},":v1":{"S":"Nevrolog · Nevropatolog"},":v2":{"S":"nevrologiya"},":v3":{"L":[{"M":{"start":{"S":"08:00"},"end":{"S":"13:00"}}}]},":v4":{"N":"15"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"65000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/umatqulov-husan.webp"},":v9":{"S":""},":v10":{"S":"Du–Sh · 08:00–13:00"},":upd":{"S":"'"$NOW"'"}}'
-shifokor "qobilxojayev" "Qobilxoʻjayev Yorqinxoʻja" '{":v0":{"S":"Qobilxoʻjayev Yorqinxoʻja"},":v1":{"S":"LOR · Otorinolaringolog"},":v2":{"S":"lor"},":v3":{"L":[{"M":{"start":{"S":"16:00"},"end":{"S":"19:00"}}},{"M":{"start":{"S":"19:30"},"end":{"S":"22:00"}}}]},":v4":{"N":"20"},":v5":{"L":[{"N":"0"},{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"70000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/yorqinxoja-qobulxojayev.webp"},":v9":{"S":"3+ yil"},":v10":{"S":"Du–Ya · 16:00–22:00"},":upd":{"S":"'"$NOW"'"}}'
-shifokor "abdullayev" "Abdullayev Bekmirza" '{":v0":{"S":"Abdullayev Bekmirza"},":v1":{"S":"Logoped · Fizioterapevt"},":v2":{"S":"fizio"},":v3":{"L":[{"M":{"start":{"S":"08:30"},"end":{"S":"12:30"}}},{"M":{"start":{"S":"14:00"},"end":{"S":"17:30"}}}]},":v4":{"N":"30"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"55000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/abdullayev-bekmirza.webp"},":v9":{"S":"10+ yil"},":v10":{"S":"Du–Sh · 08:30–17:30"},":upd":{"S":"'"$NOW"'"}}'
+shifokor "narimbetov" "Narimbetov Alisher" '{":v0":{"S":"Narimbetov Alisher"},":v1":{"S":"Pediatr"},":v2":{"S":"pediatriya"},":v3":{"L":[{"M":{"start":{"S":"08:30"},"end":{"S":"12:30"}}},{"M":{"start":{"S":"13:30"},"end":{"S":"16:00"}}}]},":v4":{"N":"60"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"60000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/narimbetov-alisher.webp"},":v9":{"S":"10+ yil"},":v10":{"S":"Du–Sh · 08:30–16:00"},":upd":{"S":"'"$NOW"'"}}'
+shifokor "rahimov" "Rahimov Umidjon" '{":v0":{"S":"Rahimov Umidjon"},":v1":{"S":"Oliy toifali pediatr"},":v2":{"S":"pediatriya"},":v3":{"L":[{"M":{"start":{"S":"08:30"},"end":{"S":"12:00"}}},{"M":{"start":{"S":"13:00"},"end":{"S":"15:00"}}}]},":v4":{"N":"60"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"70000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/rahimov-umid.webp"},":v9":{"S":"20+ yil"},":v10":{"S":"Du–Sh · 08:30–15:00"},":upd":{"S":"'"$NOW"'"}}'
+shifokor "ashurov" "Ashurov Tursunali" '{":v0":{"S":"Ashurov Tursunali"},":v1":{"S":"Terapevt · Kardiolog"},":v2":{"S":"terapiya"},":v3":{"L":[{"M":{"start":{"S":"08:00"},"end":{"S":"12:00"}}},{"M":{"start":{"S":"13:00"},"end":{"S":"17:00"}}}]},":v4":{"N":"60"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"70000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/ashurov-tursunali.webp"},":v9":{"S":"40+ yil"},":v10":{"S":"Du–Sh · 08:00–17:00"},":upd":{"S":"'"$NOW"'"}}'
+shifokor "ilxomov" "Ilxomov Laziz" '{":v0":{"S":"Ilxomov Laziz"},":v1":{"S":"Terapevt · Kardiolog"},":v2":{"S":"terapiya"},":v3":{"L":[{"M":{"start":{"S":"09:00"},"end":{"S":"14:00"}}}]},":v4":{"N":"60"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"60000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/ilxomov-laziz.webp"},":v9":{"S":""},":v10":{"S":"Du–Sh · 09:00–14:00"},":upd":{"S":"'"$NOW"'"}}'
+shifokor "murtazayeva" "Murtazayeva Raʼno" '{":v0":{"S":"Murtazayeva Raʼno"},":v1":{"S":"Ginekolog · UTT shifokori"},":v2":{"S":"ginekologiya"},":v3":{"L":[{"M":{"start":{"S":"09:30"},"end":{"S":"12:30"}}},{"M":{"start":{"S":"13:30"},"end":{"S":"16:00"}}}]},":v4":{"N":"60"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"}]},":v6":{"N":"80000"},":v7":{"BOOL":false},":v8":{"S":"/images/team/murtazayeva-rano.webp"},":v9":{"S":""},":v10":{"S":"Du–Ju · 09:30–16:00"},":upd":{"S":"'"$NOW"'"}}'
+shifokor "mansurov" "Mansurov Qobil" '{":v0":{"S":"Mansurov Qobil"},":v1":{"S":"Bolalar nevrologi"},":v2":{"S":"nevrologiya"},":v3":{"L":[{"M":{"start":{"S":"09:00"},"end":{"S":"13:00"}}}]},":v4":{"N":"60"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"65000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/mansurov-qobil.webp"},":v9":{"S":"9+ yil"},":v10":{"S":"Du–Sh · 09:00–13:00"},":upd":{"S":"'"$NOW"'"}}'
+shifokor "umatqulov" "Umatqulov Husan" '{":v0":{"S":"Umatqulov Husan"},":v1":{"S":"Nevrolog · Nevropatolog"},":v2":{"S":"nevrologiya"},":v3":{"L":[{"M":{"start":{"S":"08:00"},"end":{"S":"13:00"}}}]},":v4":{"N":"60"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"65000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/umatqulov-husan.webp"},":v9":{"S":""},":v10":{"S":"Du–Sh · 08:00–13:00"},":upd":{"S":"'"$NOW"'"}}'
+shifokor "qobilxojayev" "Qobilxoʻjayev Yorqinxoʻja" '{":v0":{"S":"Qobilxoʻjayev Yorqinxoʻja"},":v1":{"S":"LOR · Otorinolaringolog"},":v2":{"S":"lor"},":v3":{"L":[{"M":{"start":{"S":"16:00"},"end":{"S":"19:00"}}},{"M":{"start":{"S":"19:30"},"end":{"S":"22:00"}}}]},":v4":{"N":"60"},":v5":{"L":[{"N":"0"},{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"70000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/yorqinxoja-qobulxojayev.webp"},":v9":{"S":"3+ yil"},":v10":{"S":"Du–Ya · 16:00–22:00"},":upd":{"S":"'"$NOW"'"}}'
+shifokor "abdullayev" "Abdullayev Bekmirza" '{":v0":{"S":"Abdullayev Bekmirza"},":v1":{"S":"Logoped · Fizioterapevt"},":v2":{"S":"fizio"},":v3":{"L":[{"M":{"start":{"S":"08:30"},"end":{"S":"12:30"}}},{"M":{"start":{"S":"14:00"},"end":{"S":"17:30"}}}]},":v4":{"N":"60"},":v5":{"L":[{"N":"1"},{"N":"2"},{"N":"3"},{"N":"4"},{"N":"5"},{"N":"6"}]},":v6":{"N":"55000"},":v7":{"BOOL":true},":v8":{"S":"/images/team/abdullayev-bekmirza.webp"},":v9":{"S":"10+ yil"},":v10":{"S":"Du–Sh · 08:30–17:30"},":upd":{"S":"'"$NOW"'"}}'
 
 # --- xulosa ---
 JAMI=$(ddb scan --table-name "${PREFIX}_doctors" \

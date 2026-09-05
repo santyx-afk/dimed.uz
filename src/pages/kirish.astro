@@ -85,6 +85,10 @@ import { site } from '../data/site';
           <span>Sharif</span>
           <input id="w-mid" type="text" placeholder="Baxtiyorovich (ixtiyoriy)" />
         </label>
+        <div class="fld">
+          <span>Tugʻilgan sana<i>*</i></span>
+          <div id="w-birth"></div>
+        </div>
         <div class="who-actions">
           <button class="btn btn-ghost btn-sm" id="whoCancel" type="button">Bekor qilish</button>
           <button class="btn btn-sm" id="whoSave" type="button">Saqlash va davom etish</button>
@@ -97,6 +101,9 @@ import { site } from '../data/site';
 </Base>
 
 <script>
+  import { birthDateSelectsHtml, readBirthDate } from '../lib/birthdate';
+  import { getLang } from '../lib/lang';
+
   const phoneInput = document.getElementById('phone') as HTMLInputElement;
   const otpInputs = [...document.querySelectorAll<HTMLInputElement>('#otpRow .otp')];
   const submit = document.getElementById('submit') as HTMLButtonElement;
@@ -188,6 +195,12 @@ import { site } from '../data/site';
 
   const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const go = (): void => {
+    // Header'dagi "kim kirgan" keshi (C1) eskirmasin.
+    try {
+      sessionStorage.removeItem('dimed_session');
+    } catch {
+      /* bo'sh */
+    }
     window.location.href = safeNext();
   };
 
@@ -271,6 +284,9 @@ import { site } from '../data/site';
     }
   }
 
+  // Tug'ilgan sana — kun/oy/yil select'lari (brauzer kalendari emas).
+  el('w-birth').innerHTML = birthDateSelectsHtml('new', getLang());
+
   el('whoNew').addEventListener('click', () => {
     el('whoForm').hidden = false;
     el('whoNew').hidden = true;
@@ -287,9 +303,14 @@ import { site } from '../data/site';
     const lastName = el<HTMLInputElement>('w-last').value.trim();
     const firstName = el<HTMLInputElement>('w-first').value.trim();
     const patronymic = el<HTMLInputElement>('w-mid').value.trim();
+    const birthDate = readBirthDate(el('whoForm'), 'new');
 
     if (!lastName || !firstName) {
       setWhoMsg('Familiya va ism majburiy.', 'error');
+      return;
+    }
+    if (!birthDate) {
+      setWhoMsg('Tugʻilgan sanani toʻliq kiriting.', 'error');
       return;
     }
 
@@ -299,7 +320,7 @@ import { site } from '../data/site';
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'add', firstName, lastName, patronymic }),
+        body: JSON.stringify({ action: 'add', firstName, lastName, patronymic, birthDate }),
       });
       const body = (await res.json()) as { error?: string };
       if (!res.ok) {
@@ -315,14 +336,14 @@ import { site } from '../data/site';
 
 <style>
   .page {
-    padding: 56px 0 72px;
+    padding: var(--section-pad) 0;
     display: flex;
     justify-content: center;
   }
 
   .card {
     border-radius: 22px;
-    padding: 34px;
+    padding: var(--sp-5);
     max-width: 520px;
     width: 100%;
   }
@@ -341,17 +362,17 @@ import { site } from '../data/site';
   .steps {
     list-style: none;
     counter-reset: step;
-    margin: 26px 0 0;
+    margin: 24px 0 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 22px;
+    gap: 24px;
   }
 
   .steps li {
     counter-increment: step;
     position: relative;
-    padding-left: 42px;
+    padding-left: calc(28px + var(--sp-3));
   }
 
   .steps li::before {
@@ -376,7 +397,7 @@ import { site } from '../data/site';
     display: block;
     font-size: 14.5px;
     font-weight: 650;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
 
   .tg {
@@ -390,7 +411,7 @@ import { site } from '../data/site';
     background: var(--chip-bg);
     color: var(--ink);
     border-radius: 12px;
-    padding: 12px 15px;
+    padding: 16px;
     font-size: 16px;
     font-variant-numeric: tabular-nums;
     font-family: inherit;
@@ -427,7 +448,7 @@ import { site } from '../data/site';
 
   .msg {
     min-height: 22px;
-    margin: 20px 0 12px;
+    margin: 24px 0 16px;
     font-size: 13.5px;
     font-weight: 600;
     color: var(--muted);
@@ -446,7 +467,7 @@ import { site } from '../data/site';
   }
 
   .help {
-    margin-top: 18px;
+    margin-top: 16px;
     font-size: 12.5px;
     color: var(--muted);
     line-height: 1.6;
@@ -456,7 +477,7 @@ import { site } from '../data/site';
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 6px;
-    padding: 1px 6px;
+    padding: 1px 8px;
     font-size: 12px;
   }
 
@@ -470,16 +491,16 @@ import { site } from '../data/site';
   .who-list {
     display: grid;
     gap: 8px;
-    margin: 14px 0;
+    margin: 16px 0;
   }
 
   .who-list :global(.who-item) {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
-    padding: 13px 15px;
+    padding: 16px;
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--card);
@@ -507,20 +528,20 @@ import { site } from '../data/site';
     color: var(--muted);
     border: 1px solid var(--line);
     border-radius: 999px;
-    padding: 2px 9px;
+    padding: 2px 8px;
   }
 
   .who-form {
     display: grid;
-    gap: 11px;
-    margin-top: 14px;
-    padding-top: 14px;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
     border-top: 1px solid var(--line);
   }
 
   .who-form .fld {
     display: grid;
-    gap: 5px;
+    gap: 4px;
   }
 
   .who-form .fld span {
@@ -535,7 +556,7 @@ import { site } from '../data/site';
 
   .who-form input {
     width: 100%;
-    padding: 11px 13px;
+    padding: 8px 16px;
     border: 1px solid var(--line);
     border-radius: 11px;
     background: var(--bg);
@@ -544,6 +565,28 @@ import { site } from '../data/site';
   }
 
   .who-form input:focus-visible {
+    outline: none;
+    border-color: var(--leaf);
+  }
+
+  /* Tug'ilgan sana select'lari (JS chizadi — :global) */
+  .who-form :global(.birth-row) {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr 1.2fr;
+    gap: 8px;
+  }
+
+  .who-form :global(.birth-sel) {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--bg);
+    color: inherit;
+    font: inherit;
+  }
+
+  .who-form :global(.birth-sel:focus-visible) {
     outline: none;
     border-color: var(--leaf);
   }

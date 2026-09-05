@@ -1,6 +1,6 @@
 ---
 import { departments } from '../data/departments';
-import { doctors } from '../data/doctors';
+import { activeDoctors as doctors } from '../data/doctors';
 import DeptIcon from './DeptIcon.astro';
 
 /*
@@ -8,7 +8,12 @@ import DeptIcon from './DeptIcon.astro';
   vaqtlar DynamoDB dagi navbatlarga qarab chiqarib tashlanadi.
   Kun tugmalari esa hozircha statik `doctors.ts` dagi `workdays` dan
   quriladi (qarang: docs/HANDOFF.md, «Muhim qarorlar», 6-band).
+
+  Boshlang'ich ma'lumot (bo'limlar, shifokorlar) JSON sifatida
+  sahifaga qo'yiladi va skript uni o'qiydi — shunda skript odatdagi
+  modul bo'lib, `src/lib` dagi yordamchilarni import qila oladi.
 */
+const widgetData = JSON.stringify({ departments, doctors });
 ---
 
 <div class="widget glass" id="navbat-widget" aria-live="polite">
@@ -21,7 +26,7 @@ import DeptIcon from './DeptIcon.astro';
     <button class="step-pill" data-step="2" disabled><span class="n">2</span><span class="lbl">Shifokor</span></button>
     <button class="step-pill" data-step="3" disabled><span class="n">3</span><span class="lbl">Vaqt</span></button>
     <button class="step-pill" data-step="4" disabled><span class="n">4</span><span class="lbl">Bemor</span></button>
-    <button class="step-pill" data-step="5" disabled><span class="n">5</span><span class="lbl">Toʻlov</span></button>
+    <button class="step-pill" data-step="5" disabled><span class="n">5</span><span class="lbl">Tasdiqlash</span></button>
   </div>
   <div id="wBody"></div>
 
@@ -35,8 +40,19 @@ import DeptIcon from './DeptIcon.astro';
       ))
     }
   </template>
+  <script is:inline type="application/json" id="widgetData" set:html={widgetData} />
 </div>
-<script is:inline define:vars={{ departments, doctors }}>
+
+<script>
+  // @ts-nocheck — vidjet tarixan oddiy JS; modulga o'tkazildi (importlar uchun).
+  import { t } from '../data/i18n';
+  import { getLang } from '../lib/lang';
+  import { birthDateSelectsHtml, readBirthDate, formatBirthDate } from '../lib/birthdate';
+
+  const { departments, doctors } = JSON.parse(document.getElementById('widgetData').textContent);
+  const lang = getLang();
+  const tr = (key, vars) => t(key, lang, vars);
+
   const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
   const MONTHS = [
     'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
@@ -47,6 +63,8 @@ import DeptIcon from './DeptIcon.astro';
   // Server YYYY-MM-DD kutadi.
   const dstr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const dlabel = (d) => `${WD[d.getDay()]}, ${d.getDate()}-${MONTHS[d.getMonth()]}`;
+  const esc = (s) =>
+    String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
 
   // <template> ichidagi tugunlar DocumentFragment'da yashaydi —
   // ularni faqat template.content orqali olish mumkin.
@@ -87,8 +105,22 @@ import DeptIcon from './DeptIcon.astro';
     return out;
   };
 
+  /*
+    Maxfiylik siyosatiga rozilik (B4). Bir marta berilgani brauzerda
+    eslab qolinadi — checkbox oldindan belgilangan turadi, lekin har
+    bronda ko'rinadi va serverga ham yuboriladi.
+  */
+  const PRIVACY_KEY = 'dimed_privacy_ok';
+  const readPrivacy = () => {
+    try {
+      return localStorage.getItem(PRIVACY_KEY) === '1';
+    } catch {
+      return false;
+    }
+  };
+
   const state = { step: 1, deptId: null, doc: null, date: null, dateLabel: null, time: null, booked: null,
-    patientId: null, patientName: null };
+    patientId: null, patientName: null, patientBirthDate: null, privacyAccepted: readPrivacy() };
 
   /*
     Telefonga bog'langan bemorlar. Bir raqamdan butun oila foydalanadi
@@ -112,6 +144,7 @@ import DeptIcon from './DeptIcon.astro';
         if (pick) {
           state.patientId = pick.id;
           state.patientName = pick.name;
+          state.patientBirthDate = pick.birthDate;
         }
       }
       return data;
@@ -188,7 +221,9 @@ import DeptIcon from './DeptIcon.astro';
             (d) => `<button class="doc-btn" data-id="${d.id}">
               <img src="${d.photo}" alt="" width="42" height="42" loading="lazy">
               <span><span class="nm">${d.name}</span><br><span class="jb">${d.job}</span></span>
-              <span class="slot-tag">${d.slotMinutes} daq</span>
+              <span class="tags">${
+                d.ratingCount ? `<span class="rate-tag" title="${d.ratingCount} ta baho">★ ${d.ratingAvg}</span>` : ''
+              }<span class="slot-tag">${d.slotMinutes} daq</span></span>
             </button>`,
           )
           .join('') +
@@ -302,21 +337,45 @@ import DeptIcon from './DeptIcon.astro';
     else grid.innerHTML = '<p class="slot-empty">Bu shifokorning yaqin kunlarda qabuli yoʻq.</p>';
   }
 
+  /** Bemor ro'yxatidagi bitta qator: ism + tug'ilgan sana (yoki yo'qligi). */
+  const patientItem = (p) =>
+    `<button class="who-item${p.id === state.patientId ? ' on' : ''}" data-pick="${esc(p.id)}">
+      <span class="who-nm">${esc(p.name)}</span>
+      <small class="who-bd${p.birthDate ? '' : ' none'}">${
+        p.birthDate ? esc(formatBirthDate(p.birthDate, lang)) : esc(tr('booking.birthDate.missingFor'))
+      }</small>
+    </button>`;
+
   /*
-    4-qadam — navbat kim uchun. Bir telefondan butun oila foydalanadi
+    4-qadam — bemor ma'lumotlari. Bir telefondan butun oila foydalanadi
     (ota-ona bolasini o'z raqami bilan yozdiradi), shuning uchun bemor
     alohida qadamda tanlanadi: ro'yxatdan yoki yangi odam qo'shib.
+    Tug'ilgan sana majburiy (B1): yo'q bo'lsa shu yerda so'raladi va
+    bemor yozuviga saqlanadi.
   */
   async function renderPatient() {
-    wBody.innerHTML = `<div class="pane-label">Navbat kim uchun?</div>
-      <div class="who-list" id="whoList"><p class="slot-empty">Yuklanmoqda…</p></div>
+    wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.whoFor'))}</div>
+      <div class="who-list" id="whoList"><p class="slot-empty">${esc(tr('common.loading'))}</p></div>
       <button class="btn btn-ghost w-full" id="whoNew" type="button">+ Boshqa odam</button>
       <div class="who-form" id="whoForm" hidden>
         <input id="w-last" type="text" placeholder="Familiya *" autocomplete="family-name" />
         <input id="w-first" type="text" placeholder="Ism *" autocomplete="given-name" />
         <input id="w-mid" type="text" placeholder="Sharif (ixtiyoriy)" />
+        <div class="fld-label">${esc(tr('booking.birthDate'))} *</div>
+        ${birthDateSelectsHtml('new', lang)}
         <button class="btn w-full" id="whoSave" type="button">Saqlash va davom etish</button>
       </div>
+      <div class="who-form" id="whoBirth" hidden>
+        <div class="fld-label" id="whoBirthLabel"></div>
+        ${birthDateSelectsHtml('fix', lang)}
+        <button class="btn w-full" id="whoBirthSave" type="button">Saqlash va davom etish</button>
+      </div>
+      <label class="consent">
+        <input type="checkbox" id="privacyOk"${state.privacyAccepted ? ' checked' : ''} />
+        <span>${tr('booking.privacy.text', {
+          link: `<a href="/maxfiylik" target="_blank" rel="noopener">${esc(tr('booking.privacy.linkText'))}</a>`,
+        })}</span>
+      </label>
       <p class="book-msg" id="whoMsg" role="status" aria-live="polite"></p>
       <button class="back-link">← vaqtni oʻzgartirish</button>`;
 
@@ -327,17 +386,44 @@ import DeptIcon from './DeptIcon.astro';
 
     const msg = wBody.querySelector('#whoMsg');
     const form = wBody.querySelector('#whoForm');
+    const birthForm = wBody.querySelector('#whoBirth');
     const newBtn = wBody.querySelector('#whoNew');
+    const setMsg = (text, kind = '') => {
+      msg.textContent = text;
+      msg.className = `book-msg${kind ? ` ${kind}` : ''}`;
+    };
 
     const openForm = () => {
       form.hidden = false;
+      birthForm.hidden = true;
       newBtn.hidden = true;
       wBody.querySelector('#w-last').focus();
     };
 
-    const choose = (patient) => {
+    const privacyBox = wBody.querySelector('#privacyOk');
+    privacyBox.addEventListener('change', () => {
+      state.privacyAccepted = privacyBox.checked;
+      try {
+        localStorage.setItem(PRIVACY_KEY, privacyBox.checked ? '1' : '0');
+      } catch {
+        /* xotira yopiq bo'lsa ham joriy bronda ishlaydi */
+      }
+      if (privacyBox.checked) setMsg('');
+    });
+
+    /** Rozilik bo'lmasa davom etilmaydi (B4). */
+    const privacyOk = () => {
+      if (state.privacyAccepted) return true;
+      setMsg(tr('booking.privacy.required'), 'error');
+      privacyBox.focus();
+      return false;
+    };
+
+    const proceed = (patient) => {
+      if (!privacyOk()) return;
       state.patientId = patient.id;
       state.patientName = patient.name;
+      state.patientBirthDate = patient.birthDate;
       // Tanlov eslab qolinadi — keyingi safar oldindan belgilangan turadi.
       fetch('/api/patients', {
         method: 'POST',
@@ -346,6 +432,23 @@ import DeptIcon from './DeptIcon.astro';
         body: JSON.stringify({ action: 'select', id: patient.id }),
       }).catch(() => {});
       setStep(5);
+    };
+
+    /*
+      Bemorda tug'ilgan sana bo'lmasa (eski yozuv yoki 1C'da bo'sh) —
+      davom etishdan oldin shu yerda so'raladi.
+    */
+    let fixing = null;
+    const choose = (patient) => {
+      if (patient.birthDate) return proceed(patient);
+      fixing = patient;
+      form.hidden = true;
+      newBtn.hidden = false;
+      birthForm.hidden = false;
+      wBody.querySelector('#whoBirthLabel').textContent = `${patient.name} — ${tr('booking.birthDate')} *`;
+      setMsg(tr('booking.birthDate.missingFor'));
+      wBody.querySelectorAll('.who-item').forEach((b) => b.classList.toggle('on', b.dataset.pick === patient.id));
+      birthForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     };
 
     const data = await loadPatients();
@@ -365,12 +468,7 @@ import DeptIcon from './DeptIcon.astro';
       newBtn.hidden = true;
       form.hidden = false;
     } else {
-      wBody.querySelector('#whoList').innerHTML = data.patients
-        .map(
-          (p) => `<button class="who-item${p.id === state.patientId ? ' on' : ''}" data-pick="${p.id}">
-            ${p.name}</button>`,
-        )
-        .join('');
+      wBody.querySelector('#whoList').innerHTML = data.patients.map(patientItem).join('');
       wBody.querySelectorAll('[data-pick]').forEach((b) =>
         b.addEventListener('click', () => {
           const found = data.patients.find((p) => p.id === b.dataset.pick);
@@ -381,37 +479,53 @@ import DeptIcon from './DeptIcon.astro';
 
     newBtn.addEventListener('click', openForm);
 
+    const post = (body) =>
+      fetch('/api/patients', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
     wBody.querySelector('#whoSave').addEventListener('click', async () => {
       const lastName = wBody.querySelector('#w-last').value.trim();
       const firstName = wBody.querySelector('#w-first').value.trim();
       const patronymic = wBody.querySelector('#w-mid').value.trim();
+      const birthDate = readBirthDate(form, 'new');
 
-      if (!lastName || !firstName) {
-        msg.textContent = 'Familiya va ism majburiy.';
-        msg.className = 'book-msg error';
-        return;
-      }
+      if (!lastName || !firstName) return setMsg('Familiya va ism majburiy.', 'error');
+      if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
+      if (!privacyOk()) return;
 
-      msg.textContent = 'Saqlanmoqda…';
-      msg.className = 'book-msg';
+      setMsg('Saqlanmoqda…');
       try {
-        const res = await fetch('/api/patients', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'add', firstName, lastName, patronymic }),
-        });
+        const res = await post({ action: 'add', firstName, lastName, patronymic, birthDate });
         const body = await res.json();
-        if (!res.ok) {
-          msg.textContent = body.error ?? 'Saqlab boʻlmadi.';
-          msg.className = 'book-msg error';
-          return;
-        }
+        if (!res.ok) return setMsg(body.error ?? 'Saqlab boʻlmadi.', 'error');
         patients.patients.push(body.patient);
-        choose(body.patient);
+        proceed(body.patient);
       } catch {
-        msg.textContent = 'Internetga ulanishda muammo.';
-        msg.className = 'book-msg error';
+        setMsg(tr('common.error.network'), 'error');
+      }
+    });
+
+    wBody.querySelector('#whoBirthSave').addEventListener('click', async () => {
+      if (!fixing) return;
+      const birthDate = readBirthDate(birthForm, 'fix');
+      if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
+      if (!privacyOk()) return;
+
+      setMsg('Saqlanmoqda…');
+      try {
+        const res = await post({ action: 'birthDate', id: fixing.id, birthDate });
+        const body = await res.json();
+        if (!res.ok) return setMsg(body.error ?? 'Saqlab boʻlmadi.', 'error');
+        // Ro'yxatdagi yozuv ham yangilanadi — orqaga qaytilsa sana turadi.
+        const at = patients.patients.findIndex((p) => p.id === fixing.id);
+        if (at !== -1) patients.patients[at] = body.patient;
+        proceed(body.patient);
+      } catch {
+        setMsg(tr('common.error.network'), 'error');
       }
     });
   }
@@ -419,19 +533,22 @@ import DeptIcon from './DeptIcon.astro';
   function renderCheckout() {
     const d = state.doc;
 
+    // Narx faqat raqam (so'msiz) — "… X soʻm toʻlaysiz" matniga qo'yish uchun.
+    const priceNumber = d.price.toLocaleString('ru-RU').replace(/,/g, ' ');
+
     if (state.booked) {
       const b = state.booked;
       wBody.innerHTML = `<div class="success">
         <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></div>
-        <h4>Navbatingiz band qilindi!</h4>
-        <p>${b.mode === 'at_clinic' ? 'Toʻlov qabulxonada amalga oshiriladi.' : 'Toʻlov qabul qilindi.'}</p>
+        <h4>${esc(tr('booking.success.title'))}</h4>
+        <p>${b.mode === 'at_clinic' ? esc(tr('booking.confirm.payAtDesk', { price: priceNumber })) : 'Toʻlov qabul qilindi.'}</p>
         <div class="sum-card" style="margin-top:14px;text-align:left">
-          ${state.patientName ? `<div class="sum-row"><span class="k">Bemor</span><span class="v">${state.patientName}</span></div>` : ''}
+          ${state.patientName ? `<div class="sum-row"><span class="k">Bemor</span><span class="v">${esc(state.patientName)}</span></div>` : ''}
           <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
           <div class="sum-row"><span class="k">Sana · vaqt</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
-          <div class="sum-row total"><span class="k">Narx</span><span class="v">${fmtPrice(d.price)}</span></div>
+          <div class="sum-row total"><span class="k">${esc(tr('booking.confirm.price'))}</span><span class="v">${fmtPrice(d.price)}</span></div>
         </div>
-        <p class="pay-note">Tasdiq Telegram botga yuborildi. Qabulga 1 soat qolganda eslatma keladi.</p>
+        <p class="pay-note">${esc(tr('booking.success.telegram'))}</p>
         <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap">
           <a class="btn sm" href="/kabinet">Kabinetda koʻrish</a>
           <button class="btn btn-ghost btn-sm" id="resetBtn">Yana navbat olish</button>
@@ -444,7 +561,18 @@ import DeptIcon from './DeptIcon.astro';
       return;
     }
 
-    wBody.innerHTML = `<div class="pane-label">Bron maʼlumotlari</div>
+    /*
+      Tasdiqlash qadami (B2): onlayn to'lov yo'q — narx katta ko'rsatiladi,
+      "qabulxona kassasiga to'laysiz" matni va Tasdiqlash tugmasi. Server
+      PAYMENT_ENABLED bilan onlayn rejimga o'tsa, javobdagi redirectUrl
+      quyida avvalgidek ishlaydi.
+    */
+    wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.confirm.title'))}</div>
+      <div class="price-box">
+        <div class="price-lab">${esc(tr('booking.confirm.price'))}</div>
+        <div class="price-big">${fmtPrice(d.price)}</div>
+        <div class="price-note">${esc(tr('booking.confirm.payAtDesk', { price: priceNumber }))}</div>
+      </div>
       <div class="sum-card">
         <div class="sum-row" id="whoRow" hidden><span class="k">Bemor</span>
           <span class="v"><b id="whoName"></b>
@@ -453,11 +581,10 @@ import DeptIcon from './DeptIcon.astro';
         <div class="sum-row"><span class="k">Yoʻnalish</span><span class="v">${d.job}</span></div>
         <div class="sum-row"><span class="k">Sana</span><span class="v">${state.dateLabel}</span></div>
         <div class="sum-row"><span class="k">Vaqt</span><span class="v">${state.time} · ${d.slotMinutes} daqiqa</span></div>
-        <div class="sum-row total"><span class="k">Qabul narxi</span><span class="v">${fmtPrice(d.price)}</span></div>
       </div>
       <p class="book-msg" id="bookMsg" role="status" aria-live="polite"></p>
-      <button class="btn w-full" id="wBook">Navbatni band qilish</button>
-      <p class="pay-note">Band qilish uchun Telegram orqali kirgan boʻlishingiz kerak. Bekor qilish yoʻq — qabuldan 1 soat oldingacha vaqtni koʻchirish mumkin.</p>
+      <button class="btn w-full" id="wBook">${esc(tr('booking.confirm.button'))}</button>
+      <p class="pay-note">${esc(tr('booking.confirm.note'))}</p>
       <button class="back-link">← orqaga</button>`;
 
     wBody.querySelector('.back-link').addEventListener('click', () => setStep(4));
@@ -475,7 +602,7 @@ import DeptIcon from './DeptIcon.astro';
 
     btn.addEventListener('click', async () => {
       btn.disabled = true;
-      msg.textContent = 'Band qilinmoqda…';
+      msg.textContent = tr('booking.confirm.working');
       msg.className = 'book-msg';
 
       try {
@@ -488,6 +615,7 @@ import DeptIcon from './DeptIcon.astro';
             date: state.date,
             time: state.time,
             ...(state.patientId ? { patientId: state.patientId } : {}),
+            privacyAccepted: state.privacyAccepted,
           }),
         });
         const data = await res.json();
@@ -558,9 +686,17 @@ import DeptIcon from './DeptIcon.astro';
           uchun), lekin "faolsiz" bo'lgani uchun bemorga ko'rinmasligi
           kerak — kartasi olib tashlanadi.
         */
-        const live = new Set(docs.map((d) => d.id));
+        const liveIds = new Set(docs.map((d) => d.id));
         document.querySelectorAll('[data-doc-card]').forEach((card) => {
-          card.hidden = !live.has(card.dataset.docCard);
+          card.hidden = !liveIds.has(card.dataset.docCard);
+        });
+
+        // Bemor baholari (G2): o'rtacha va soni shifokor kartasida.
+        docs.forEach((d) => {
+          const chip = document.querySelector(`[data-doc-card="${d.id}"] [data-doc-rating]`);
+          if (!chip) return;
+          chip.hidden = !d.ratingCount;
+          if (d.ratingCount) chip.textContent = tr('doctor.rating', { avg: d.ratingAvg, n: d.ratingCount });
         });
 
         // Shifokori qolmagan bo'lim: son o'rniga izoh, tugma o'chiq.
@@ -584,9 +720,8 @@ import DeptIcon from './DeptIcon.astro';
   })();
 
   /*
-    Bo'lim/shifokor kartalaridagi "Navbat olish" tugmalari. Bu skript
-    (define:vars tufayli) inline bo'lgani uchun kartalar DOM'ga tushishidan
-    oldin ishlaydi — shuning uchun delegatsiya ishlatiladi.
+    Bo'lim/shifokor kartalaridagi "Navbat olish" tugmalari. Kartalar
+    sahifada ko'p va qayta chizilishi mumkin — delegatsiya ishlatiladi.
   */
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-book-dept]');
@@ -612,7 +747,7 @@ import DeptIcon from './DeptIcon.astro';
 <style>
   .widget {
     border-radius: 22px;
-    padding: 22px;
+    padding: var(--card-pad);
     position: relative;
   }
 
@@ -636,7 +771,7 @@ import DeptIcon from './DeptIcon.astro';
   .live-dot {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     font-size: 12px;
     font-weight: 600;
     color: var(--leaf);
@@ -663,7 +798,7 @@ import DeptIcon from './DeptIcon.astro';
 
   .steps {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: 16px;
   }
 
@@ -672,14 +807,14 @@ import DeptIcon from './DeptIcon.astro';
     border: none;
     background: var(--busy);
     border-radius: 10px;
-    padding: 7px 4px;
+    padding: 8px 4px;
     font-size: 11.5px;
     font-weight: 650;
     color: var(--muted);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
     transition:
       background 0.2s,
       color 0.2s;
@@ -735,7 +870,7 @@ import DeptIcon from './DeptIcon.astro';
     text-transform: uppercase;
     letter-spacing: 0.09em;
     color: var(--muted);
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
 
   .widget :global(.dept-grid) {
@@ -747,12 +882,12 @@ import DeptIcon from './DeptIcon.astro';
   .widget :global(.dept-btn) {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     text-align: left;
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 13px;
-    padding: 11px 13px;
+    padding: 8px 16px;
     font-size: 13.5px;
     font-weight: 600;
     transition:
@@ -804,12 +939,12 @@ import DeptIcon from './DeptIcon.astro';
   .widget :global(.doc-btn) {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
     text-align: left;
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 13px;
-    padding: 9px 12px;
+    padding: 8px 16px;
     transition: border-color 0.15s;
   }
 
@@ -836,23 +971,40 @@ import DeptIcon from './DeptIcon.astro';
     color: var(--muted);
   }
 
-  .widget :global(.doc-btn .slot-tag) {
+  .widget :global(.doc-btn .tags) {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .widget :global(.doc-btn .rate-tag) {
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--warn);
+    background: var(--warn-bg);
+    border-radius: 999px;
+    padding: 4px 8px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.doc-btn .slot-tag) {
     font-size: 11px;
     font-weight: 650;
     color: var(--leaf);
     background: var(--leaf-soft);
     border-radius: 999px;
-    padding: 4px 9px;
+    padding: 4px 8px;
     white-space: nowrap;
   }
 
   .widget :global(.date-row) {
     display: flex;
-    gap: 7px;
+    gap: 8px;
     overflow-x: auto;
-    padding-bottom: 6px;
-    margin-bottom: 14px;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
   }
 
   .widget :global(.date-pill) {
@@ -860,7 +1012,7 @@ import DeptIcon from './DeptIcon.astro';
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
     border-radius: 12px;
-    padding: 7px 6px;
+    padding: 8px;
     text-align: center;
     font-size: 11px;
     font-weight: 600;
@@ -895,7 +1047,7 @@ import DeptIcon from './DeptIcon.astro';
   .widget :global(.slot-grid) {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 7px;
+    gap: 8px;
     max-height: 210px;
     overflow-y: auto;
     padding-right: 2px;
@@ -940,7 +1092,7 @@ import DeptIcon from './DeptIcon.astro';
     gap: 16px;
     font-size: 11.5px;
     color: var(--muted);
-    margin-top: 12px;
+    margin-top: 16px;
   }
 
   .widget :global(.slot-legend i) {
@@ -948,7 +1100,7 @@ import DeptIcon from './DeptIcon.astro';
     width: 10px;
     height: 10px;
     border-radius: 3px;
-    margin-right: 5px;
+    margin-right: 4px;
     vertical-align: -1px;
   }
 
@@ -965,16 +1117,16 @@ import DeptIcon from './DeptIcon.astro';
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 14px;
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
   }
 
   .widget :global(.sum-row) {
     display: flex;
     justify-content: space-between;
     font-size: 14px;
-    padding: 5px 0;
-    gap: 12px;
+    padding: 4px 0;
+    gap: 16px;
   }
 
   .widget :global(.sum-row .k) {
@@ -989,8 +1141,8 @@ import DeptIcon from './DeptIcon.astro';
 
   .widget :global(.sum-row.total) {
     border-top: 1px dashed var(--line);
-    margin-top: 6px;
-    padding-top: 11px;
+    margin-top: 8px;
+    padding-top: 8px;
   }
 
   .widget :global(.sum-row.total .v) {
@@ -1004,16 +1156,50 @@ import DeptIcon from './DeptIcon.astro';
     width: 100%;
   }
 
+  /* Tasdiqlash qadami: narx katta, to'lov kassada (B2) */
+  .widget :global(.price-box) {
+    text-align: center;
+    padding: 16px;
+    margin-bottom: 16px;
+    border-radius: 14px;
+    background: var(--rose-soft);
+  }
+
+  .widget :global(.price-lab) {
+    font-size: 11.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+  }
+
+  .widget :global(.price-big) {
+    font-family: var(--font-display);
+    font-size: 34px;
+    font-weight: 800;
+    color: var(--rose);
+    line-height: 1.15;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.price-note) {
+    margin-top: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
   .widget :global(.pay-note) {
     font-size: 12px;
     color: var(--muted);
-    margin-top: 11px;
+    margin-top: 8px;
     line-height: 1.5;
   }
 
   .widget :global(.book-msg) {
     min-height: 20px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     font-size: 13px;
     font-weight: 600;
     color: var(--muted);
@@ -1030,7 +1216,7 @@ import DeptIcon from './DeptIcon.astro';
     font-size: 12.5px;
     font-weight: 600;
     padding: 0;
-    margin-top: 14px;
+    margin-top: 16px;
     text-decoration: underline;
     text-underline-offset: 3px;
   }
@@ -1041,7 +1227,7 @@ import DeptIcon from './DeptIcon.astro';
 
   .widget :global(.success) {
     text-align: center;
-    padding: 10px 4px;
+    padding: 8px 4px;
   }
 
   .widget :global(.success .badge) {
@@ -1050,7 +1236,7 @@ import DeptIcon from './DeptIcon.astro';
     border-radius: 50%;
     background: var(--leaf);
     color: #fff;
-    margin: 0 auto 14px;
+    margin: 0 auto 16px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1065,7 +1251,7 @@ import DeptIcon from './DeptIcon.astro';
   .widget :global(.success h4) {
     font-size: 19px;
     font-weight: 750;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
 
   .widget :global(.success p) {
@@ -1086,22 +1272,17 @@ import DeptIcon from './DeptIcon.astro';
     cursor: pointer;
   }
 
-  .widget :global(.who-pick) {
-    margin: 12px 0;
-    padding: 12px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--bg);
-  }
-
   .widget :global(.who-list) {
     display: grid;
-    gap: 6px;
-    margin: 8px 0 10px;
+    gap: 8px;
+    margin: 8px 0;
   }
 
   .widget :global(.who-item) {
-    padding: 10px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 16px;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--card);
@@ -1122,17 +1303,29 @@ import DeptIcon from './DeptIcon.astro';
     font-weight: 650;
   }
 
+  .widget :global(.who-bd) {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.who-bd.none) {
+    color: var(--warn);
+  }
+
   .widget :global(.who-form) {
     display: grid;
-    gap: 7px;
-    margin-top: 10px;
-    padding-top: 10px;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
     border-top: 1px solid var(--line);
   }
 
-  .widget :global(.who-form input) {
+  .widget :global(.who-form input),
+  .widget :global(.birth-sel) {
     width: 100%;
-    padding: 10px 12px;
+    padding: 8px 16px;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--card);
@@ -1141,8 +1334,49 @@ import DeptIcon from './DeptIcon.astro';
     font-size: 14px;
   }
 
-  .widget :global(.who-form input:focus-visible) {
+  .widget :global(.who-form input:focus-visible),
+  .widget :global(.birth-sel:focus-visible) {
     outline: none;
     border-color: var(--leaf);
+  }
+
+  .widget :global(.consent) {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 16px 0 4px;
+    font-size: 13px;
+    line-height: 1.45;
+    cursor: pointer;
+  }
+
+  .widget :global(.consent input) {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+    accent-color: var(--rose);
+  }
+
+  .widget :global(.consent a) {
+    color: var(--rose);
+    font-weight: 650;
+  }
+
+  .widget :global(.fld-label) {
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .widget :global(.birth-row) {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr 1.2fr;
+    gap: 8px;
+  }
+
+  .widget :global(.birth-sel) {
+    padding: 8px;
   }
 </style>

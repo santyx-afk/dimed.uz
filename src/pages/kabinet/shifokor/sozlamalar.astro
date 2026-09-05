@@ -1,0 +1,223 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+import { LANGS, LANG_NAMES } from '../../../data/i18n';
+---
+
+<Cabinet
+  title="Sozlamalar — Shifokor kabineti"
+  description="Shifokor hisobi va til sozlamalari."
+  eyebrow="Shifokor kabineti"
+  heading="Sozlamalar"
+  area="doctor"
+  active="sozlamalar"
+>
+  <div id="loading" class="state">Yuklanmoqda…</div>
+
+  <div id="denied" class="state" hidden>
+    <p id="deniedText">Bu bo‘lim faqat shifokorlar uchun.</p>
+    <a class="btn" href="/kirish?next=/kabinet/shifokor/sozlamalar">Kirish</a>
+  </div>
+
+  <div id="content" class="grid" hidden>
+    <div class="card glass">
+      <h2>Hisob</h2>
+      <div class="kv"><span class="k">Shifokor</span><span class="v" id="vName">—</span></div>
+      <div class="kv"><span class="k">Lavozim</span><span class="v" id="vJob">—</span></div>
+      <div class="kv"><span class="k">Qabul narxi</span><span class="v" id="vPrice">—</span></div>
+      <div class="kv"><span class="k">Qabul davomiyligi</span><span class="v" id="vSlot">—</span></div>
+      <div class="kv"><span class="k">Telegram</span><span class="v ok">bog‘langan</span></div>
+      <p class="note">
+        Narx, lavozim va rasmni administrator o‘zgartiradi. Jadval va qabul davomiyligi —
+        <a href="/kabinet/shifokor/jadval">Jadvalim</a> bo‘limida.
+      </p>
+      <button class="btn btn-ghost btn-sm" id="logout" type="button">Chiqish</button>
+    </div>
+
+    <div class="card glass">
+      <h2>Til</h2>
+      <p class="note top">Sayt va bot xabarlari tili.</p>
+      <div class="seg" id="langSeg">
+        {LANGS.map((l) => <button type="button" data-lang-pick={l}>{LANG_NAMES[l]}</button>)}
+      </div>
+      <p class="msg" id="langMsg" role="status" aria-live="polite"></p>
+      <p class="note">
+        Bemorlarga boradigan xabarlar ularning o‘z tilida ketadi; bu sozlama faqat sizning
+        kabinetingiz uchun.
+      </p>
+    </div>
+  </div>
+</Cabinet>
+
+<script>
+  import { fetchDoctor, showDenied, fmtPrice, logout } from '../../../lib/doctor-cabinet';
+  import { getLang, setLang, applyLang } from '../../../lib/lang';
+  import { isLang } from '../../../data/i18n';
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  const setMsg = (text: string, kind: 'error' | 'ok' | '' = '') => {
+    const m = el('langMsg');
+    m.textContent = text;
+    m.className = `msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  function bindLang() {
+    applyLang(getLang(), el('langSeg'));
+    el('langSeg')
+      .querySelectorAll<HTMLButtonElement>('[data-lang-pick]')
+      .forEach((btn) =>
+        btn.addEventListener('click', async () => {
+          const picked = btn.dataset.langPick;
+          if (!isLang(picked)) return;
+          setLang(picked);
+          applyLang(picked, el('langSeg'));
+          setMsg('Saqlanmoqda…');
+          try {
+            const res = await fetch('/api/settings', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ lang: picked }),
+            });
+            setMsg(res.ok ? 'Til saqlandi.' : 'Saqlab boʻlmadi.', res.ok ? 'ok' : 'error');
+          } catch {
+            setMsg('Internetga ulanishda muammo.', 'error');
+          }
+        }),
+      );
+  }
+
+  el('logout').addEventListener('click', logout);
+
+  async function init() {
+    const res = await fetchDoctor();
+    if (!res.ok) return showDenied(res.status);
+    const { doctor } = res.data;
+    el('vName').textContent = doctor.name;
+    el('vJob').textContent = doctor.job;
+    el('vPrice').textContent = fmtPrice(doctor.price);
+    el('vSlot').textContent = `${doctor.slotMinutes} daqiqa`;
+    bindLang();
+    el('loading').hidden = true;
+    el('content').hidden = false;
+  }
+
+  init();
+</script>
+
+<style>
+  .state {
+    text-align: center;
+    padding: 48px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  @media (max-width: 820px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: var(--card-pad);
+  }
+
+  .card h2 {
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    font-family: var(--font-sans);
+    margin-bottom: 16px;
+  }
+
+  .kv {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--line);
+    font-size: 14px;
+  }
+
+  .kv .k {
+    color: var(--muted);
+  }
+
+  .kv .v {
+    font-weight: 650;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .kv .v.ok {
+    color: var(--leaf);
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 16px 0;
+    line-height: 1.55;
+  }
+
+  .note.top {
+    margin-top: 0;
+  }
+
+  .note a {
+    color: var(--rose);
+    font-weight: 650;
+  }
+
+  .seg {
+    display: flex;
+    gap: 4px;
+  }
+
+  .seg button {
+    flex: 1;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 10px;
+    padding: 8px 4px;
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .seg button.on {
+    background: var(--rose);
+    border-color: var(--rose);
+    color: #fff;
+  }
+
+  .msg {
+    min-height: 20px;
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .msg.error {
+    color: var(--rose);
+  }
+
+  .msg.ok {
+    color: var(--leaf);
+  }
+</style>

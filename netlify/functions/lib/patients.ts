@@ -27,11 +27,33 @@ type IndividualRecord = {
   DeletionMark?: boolean;
 };
 
-/** 25.04.1990 yoki 1990-04-25 → 1990-04-25. Boshqasi — o'zgarishsiz. */
-const normalizeBirthday = (raw: string): string => {
-  const m = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : raw;
+/** 25.04.1990 yoki 1990-04-25(T…) → 1990-04-25. Boshqasi — o'zgarishsiz. */
+export const normalizeBirthday = (raw: string): string => {
+  const dmy = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  return iso?.[1] ?? raw;
 };
+
+const MIN_BIRTH_YEAR = 1900;
+
+/**
+ * Tug'ilgan sanani tekshiradi (B1): YYYY-MM-DD, haqiqiy kun (30-fevral
+ * emas), 1900 dan bugungacha. Bemor yozuviga faqat shu ko'rinishda yoziladi.
+ */
+export function checkBirthDate(raw: unknown): { ok: true; value: string } | { ok: false; error: string } {
+  const value = typeof raw === 'string' ? normalizeBirthday(raw.trim()) : '';
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return { ok: false, error: 'Tug‘ilgan sana kerak (YYYY-MM-DD)' };
+
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  const real = date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d;
+  if (!real || y < MIN_BIRTH_YEAR || date.getTime() > Date.now()) {
+    return { ok: false, error: 'Tug‘ilgan sana noto‘g‘ri' };
+  }
+  return { ok: true, value };
+}
 
 /*
   1C bemor kodini son sifatida saqlaydi, matnga o'girganda esa guruh
@@ -160,6 +182,8 @@ export type PatientOption = {
   id: string;
   name: string;
   source: '1c' | 'local';
+  /** YYYY-MM-DD; bron uchun majburiy (B1). Yo'q bo'lsa avval so'raladi. */
+  birthDate: string | null;
 };
 
 /** Saytda qo'lda qo'shilgan oila a'zosi (dimed_users ichida saqlanadi). */
@@ -168,6 +192,7 @@ type LocalPatient = {
   first_name: string;
   last_name: string;
   patronymic?: string;
+  birth_date?: string;
 };
 
 type UserRecord = {
@@ -175,6 +200,11 @@ type UserRecord = {
   active_patient_id?: string;
   telegram_name?: string;
   name?: string;
+  /*
+    1C bemorida Birthday bo'lmasa, saytda kiritilgani shu yerda turadi
+    (1C jadvaliga sayt yozmaydi). Kalit — 1C bemor kodi.
+  */
+  birth_dates?: Record<string, string>;
 };
 
 /** "Familiya Ism Sharif" — bo'sh bo'laklarsiz. */
@@ -214,12 +244,16 @@ export async function listPatients(
     readUser(telegramId),
   ]);
 
+  const overrides = user.birth_dates ?? {};
+
   const fromOneC = ((found.Items ?? []) as IndividualRecord[])
     .filter((one) => one.DeletionMark !== true)
     .map((one) => {
       const raw = one.sort_key !== 'PROFILE' ? one.sort_key : one.Code;
+      const id = raw ? normalizeCode(raw) : '';
+      const fromOneCBirthday = one.Birthday ? checkBirthDate(one.Birthday) : null;
       return {
-        id: raw ? normalizeCode(raw) : '',
+        id,
         name:
           one.FullName?.trim() ||
           fullNameOf({
@@ -228,6 +262,8 @@ export async function listPatients(
             patronymic: one.Patronymic,
           }),
         source: '1c' as const,
+        // 1C bergan sana ustun; bo'lmasa saytda kiritilgani.
+        birthDate: fromOneCBirthday?.ok ? fromOneCBirthday.value : (overrides[id] ?? null),
       };
     })
     .filter((one) => one.id && one.name);
@@ -236,6 +272,7 @@ export async function listPatients(
     id: p.id,
     name: fullNameOf(p),
     source: 'local' as const,
+    birthDate: p.birth_date ?? null,
   }));
 
   const patients = [...fromOneC, ...local];
@@ -270,13 +307,17 @@ const cleanName = (raw: unknown): string =>
  */
 export async function addLocalPatient(
   telegramId: string,
-  input: { firstName: unknown; lastName: unknown; patronymic?: unknown },
+  input: { firstName: unknown; lastName: unknown; patronymic?: unknown; birthDate?: unknown },
 ): Promise<PatientOption | { error: string }> {
   const first_name = cleanName(input.firstName);
   const last_name = cleanName(input.lastName);
   const patronymic = cleanName(input.patronymic);
 
   if (!first_name || !last_name) return { error: 'Ism va familiya kerak' };
+
+  // Tug'ilgan sana majburiy (B1): shifokor va laboratoriya uchun kerak.
+  const birth = checkBirthDate(input.birthDate);
+  if (!birth.ok) return { error: birth.error };
 
   const user = await readUser(telegramId);
   if ((user.patients ?? []).length >= 20) {
@@ -288,6 +329,7 @@ export async function addLocalPatient(
     first_name,
     last_name,
     ...(patronymic ? { patronymic } : {}),
+    birth_date: birth.value,
   };
 
   /*
@@ -306,7 +348,52 @@ export async function addLocalPatient(
     }),
   );
 
-  return { id: patient.id, name: fullNameOf(patient), source: 'local' };
+  return { id: patient.id, name: fullNameOf(patient), source: 'local', birthDate: birth.value };
+}
+
+/**
+ * Mavjud bemorga tug'ilgan sana kiritadi (B1).
+ *
+ * Saytda qo'shilgan bemorda — ro'yxatdagi yozuvning o'zi yangilanadi;
+ * 1C bemorida — `birth_dates` xaritasiga yoziladi (1C jadvaliga sayt
+ * yozmaydi; 1C keyin Birthday yuborsa, u ustun bo'ladi). Bemor
+ * topilmasa — null.
+ */
+export async function setPatientBirthDate(
+  phone: string,
+  telegramId: string,
+  id: string,
+  birthDate: string,
+): Promise<PatientOption | null> {
+  const { patients } = await listPatients(phone, telegramId);
+  const patient = patients.find((p) => p.id === id);
+  if (!patient) return null;
+
+  const user = await readUser(telegramId);
+
+  if (patient.source === 'local') {
+    const list = (user.patients ?? []).map((p) => (p.id === id ? { ...p, birth_date: birthDate } : p));
+    await db.send(
+      new UpdateCommand({
+        TableName: TABLES.users,
+        Key: { telegram_id: telegramId },
+        UpdateExpression: 'SET #p = :list',
+        ExpressionAttributeNames: { '#p': 'patients' },
+        ExpressionAttributeValues: { ':list': list },
+      }),
+    );
+  } else {
+    await db.send(
+      new UpdateCommand({
+        TableName: TABLES.users,
+        Key: { telegram_id: telegramId },
+        UpdateExpression: 'SET birth_dates = :map',
+        ExpressionAttributeValues: { ':map': { ...(user.birth_dates ?? {}), [id]: birthDate } },
+      }),
+    );
+  }
+
+  return { ...patient, birthDate };
 }
 
 /** Tanlangan bemorni eslab qoladi (kabinet va bron shu bo'yicha ishlaydi). */

@@ -6,6 +6,8 @@ export const site = {
   phone: '+998 55 9009 103',
   phoneHref: 'tel:+998559009103',
   address: 'Chinoz shahri, Navoiy koʻchasi, 18',
+  /** Google Maps'dagi joylashuv — manzil shu havolaga olib boradi (A4). */
+  mapsUrl: 'https://maps.app.goo.gl/KSEuyF3FfngcSpU49',
   addressNote: 'Abdurashid savdo markazi yonida',
   hours: 'Har kuni 08:00 – 22:00',
   hoursNote: 'boʻlimlar jadvali shifokorga qarab farq qiladi',

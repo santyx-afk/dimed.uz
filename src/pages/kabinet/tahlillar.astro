@@ -1,0 +1,353 @@
+---
+import Cabinet from '../../layouts/Cabinet.astro';
+---
+
+<Cabinet
+  title="Tahlillarim — Dimed klinikasi"
+  description="Laboratoriya tahlillaringizning natijalari."
+  eyebrow="Shaxsiy kabinet"
+  heading="Tahlillarim"
+  area="patient"
+  active="tahlillar"
+>
+  <a class="btn btn-ghost btn-sm" href="/tahlillar" slot="actions">Tahlil turlari va narxlar</a>
+
+  <div class="who-bar" id="whoBar" hidden>
+    <span class="who-lab">Kim:</span>
+    <div class="who-chips" id="whoChips"></div>
+  </div>
+
+  <div id="loading" class="state">Yuklanmoqda…</div>
+
+  <div id="guest" class="state" hidden>
+    <p>Tahlil natijalaringizni ko‘rish uchun Telegram orqali kiring.</p>
+    <a class="btn" href="/kirish?next=/kabinet/tahlillar">Kirish</a>
+  </div>
+
+  <div id="content" hidden>
+    <div class="list glass" id="results"></div>
+    <p class="note">
+      Natijalar laboratoriya tizimidan avtomatik keladi. Qator bosilganda natija sahifasi ochiladi —
+      u yerdan PDF yuklash va ulashish mumkin.
+    </p>
+  </div>
+</Cabinet>
+
+<script>
+  import { t } from '../../data/i18n';
+  import { getLang } from '../../lib/lang';
+
+  /* /api/me dagi bitta laboratoriya buyurtmasi (C2). */
+  type ResultGroup = {
+    id: string;
+    title: string;
+    date: string;
+    patientName: string | null;
+    doctor: string | null;
+    biomaterial: string | null;
+    status: 'ready' | 'pending';
+    seen: boolean;
+    items: { id: string; title: string; value: string | null }[];
+  };
+
+  const lang = getLang();
+  const tr = (key: Parameters<typeof t>[0], vars?: Record<string, string | number>) => t(key, lang, vars);
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) =>
+    s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+
+  const fmtDateTime = (iso: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  let whoFilter = '';
+  const matchesWho = (name: string | null) => !whoFilter || name === whoFilter;
+
+  function renderWhoBar(groups: ResultGroup[]) {
+    const names = [
+      ...new Set(groups.map((g) => g.patientName).filter((n): n is string => Boolean(n))),
+    ].sort((a, b) => a.localeCompare(b));
+
+    if (names.length < 2) {
+      el('whoBar').hidden = true;
+      return;
+    }
+    el('whoBar').hidden = false;
+    el('whoChips').innerHTML = [
+      `<button class="who-chip${whoFilter ? '' : ' on'}" data-who="">Hammasi</button>`,
+      ...names.map(
+        (n) => `<button class="who-chip${whoFilter === n ? ' on' : ''}" data-who="${esc(n)}">${esc(n)}</button>`,
+      ),
+    ].join('');
+    el('whoChips')
+      .querySelectorAll<HTMLButtonElement>('[data-who]')
+      .forEach((b) =>
+        b.addEventListener('click', () => {
+          whoFilter = b.dataset.who ?? '';
+          renderWhoBar(groups);
+          renderResults(groups);
+        }),
+      );
+  }
+
+  /*
+    Har qator — bitta buyurtma: tahlil nomi, holati (Tayyor / Kutilmoqda),
+    ikkinchi qatorda kulrang sana · shifokor · ko'rsatkichlar soni.
+    Bosilganda to'liq natija sahifasi ochiladi (accordion yo'q).
+  */
+  function renderResults(groups: ResultGroup[]) {
+    const shown = groups.filter((g) => matchesWho(g.patientName));
+    el('results').innerHTML = shown.length
+      ? shown
+          .map((g) => {
+            const meta = [
+              fmtDateTime(g.date),
+              g.patientName,
+              g.doctor,
+              tr('results.count', { n: g.items.length }),
+            ]
+              .filter(Boolean)
+              .map((x) => esc(String(x)))
+              .join(' · ');
+            const ready = g.status === 'ready';
+            return `<a class="lab-row" href="/natija?id=${encodeURIComponent(g.id)}">
+              <span class="lab-ic ${ready ? 'ready' : 'pending'}" aria-hidden="true">${
+                ready
+                  ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
+                  : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2.5"/></svg>'
+              }</span>
+              <span class="lab-body">
+                <span class="nm">${esc(g.title)}${g.seen ? '' : ' <span class="pill new">yangi</span>'}</span>
+                <span class="dt">${meta}</span>
+              </span>
+              <span class="lab-side">
+                <span class="pill ${ready ? 'ok' : 'warn'}">${esc(tr(ready ? 'results.status.ready' : 'results.status.pending'))}</span>
+                <span class="view">${esc(tr('results.view'))} ›</span>
+              </span>
+            </a>`;
+          })
+          .join('')
+      : `<p class="empty">${esc(tr('results.empty'))}</p>`;
+  }
+
+  async function load() {
+    let data: { results: ResultGroup[] };
+    try {
+      const res = await fetch('/api/me?include=results', { credentials: 'same-origin' });
+      if (res.status === 401) {
+        el('loading').hidden = true;
+        el('guest').hidden = false;
+        return;
+      }
+      if (!res.ok) throw new Error(String(res.status));
+      data = await res.json();
+    } catch {
+      el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
+      return;
+    }
+
+    el('loading').hidden = true;
+    el('content').hidden = false;
+    renderWhoBar(data.results);
+    renderResults(data.results);
+  }
+
+  load();
+</script>
+
+<style>
+  .state {
+    text-align: center;
+    padding: 48px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  .list {
+    border-radius: 16px;
+    padding: 8px;
+  }
+
+  .note {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .list :global(.empty) {
+    color: var(--muted);
+    font-size: 14px;
+    text-align: center;
+    padding: 24px 16px;
+    line-height: 1.7;
+  }
+
+  .list :global(.lab-row) {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    border-radius: 12px;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.15s;
+  }
+
+  .list :global(.lab-row + .lab-row) {
+    border-top: 1px solid var(--line);
+    border-radius: 0 0 12px 12px;
+  }
+
+  .list :global(.lab-row:hover),
+  .list :global(.lab-row:focus-visible) {
+    background: var(--rose-soft);
+    outline: none;
+  }
+
+  .list :global(.lab-ic) {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .list :global(.lab-ic svg) {
+    width: 18px;
+    height: 18px;
+  }
+
+  .list :global(.lab-ic.ready) {
+    background: var(--ok-bg);
+    color: var(--ok);
+  }
+
+  .list :global(.lab-ic.pending) {
+    background: var(--warn-bg);
+    color: var(--warn);
+  }
+
+  .list :global(.lab-body) {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .list :global(.nm) {
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 1.3;
+  }
+
+  .list :global(.dt) {
+    font-size: 12.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .list :global(.lab-side) {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .list :global(.view) {
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--rose);
+    white-space: nowrap;
+  }
+
+  .list :global(.pill) {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 4px 8px;
+    white-space: nowrap;
+  }
+
+  .list :global(.pill.ok) {
+    color: var(--ok);
+    background: var(--ok-bg);
+  }
+
+  .list :global(.pill.warn) {
+    color: var(--warn);
+    background: var(--warn-bg);
+  }
+
+  .list :global(.pill.new) {
+    color: var(--rose);
+    background: var(--rose-soft);
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
+  @media (max-width: 600px) {
+    .list :global(.lab-row) {
+      flex-wrap: wrap;
+      padding: 16px;
+    }
+
+    .list :global(.lab-side) {
+      width: 100%;
+      justify-content: space-between;
+      padding-left: calc(36px + var(--sp-3));
+    }
+  }
+
+  /* Bemor filtri */
+  .who-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .who-lab {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .who-chips {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .who-chips :global(.who-chip) {
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    border-radius: 999px;
+    padding: 8px 16px;
+    cursor: pointer;
+  }
+
+  .who-chips :global(.who-chip:hover) {
+    border-color: var(--leaf);
+  }
+
+  .who-chips :global(.who-chip.on) {
+    border-color: var(--leaf);
+    background: color-mix(in srgb, var(--leaf) 12%, var(--card));
+    font-weight: 650;
+  }
+</style>

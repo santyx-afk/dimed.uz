@@ -15,20 +15,27 @@ for (const a of analyses) {
   description={`Dimed klinikasi laboratoriyasida ${analyses.length} ta tahlil turi. Narxlar, guruhlar va natija tayyor bo'lish muddati.`}
 >
   <section class="wrap page">
-    <div class="sec-head">
-      <div class="eyebrow">Laboratoriya</div>
-      <h2>Tahlillar va narxlar</h2>
-      <p>
-        Jami {analyses.length} ta tahlil. Koʻpchilik natijalar 30–60 daqiqada tayyor va shaxsiy
-        kabinetingizga avtomatik tushadi — PDF va matn koʻrinishida.
-      </p>
+    <div class="head">
+      <div class="sec-head">
+        <div class="eyebrow">Laboratoriya</div>
+        <h2>Tahlillar va narxlar</h2>
+        <p>
+          Jami <span data-analyses-count>{analyses.length}</span> ta tahlil. Koʻpchilik natijalar 30–60
+          daqiqada tayyor va shaxsiy kabinetingizga avtomatik tushadi — PDF va matn koʻrinishida.
+        </p>
+      </div>
+      <!-- Kirgan bemor → Tahlillarim; kirmagan → kirish, keyin Tahlillarim (C3) -->
+      <a class="btn mine" href="/kabinet/tahlillar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6v5.5l4.5 8A2 2 0 0 1 17.8 20H6.2a2 2 0 0 1-1.7-3.5L9 8.5V3z"/><path d="M8 3h8"/></svg>
+        Mening tahlillarim
+      </a>
     </div>
 
     {
       [...groups].map(([group, items]) => (
-        <div class="group rv">
+        <div class="group rv" data-analysis-group>
           <h3>
-            {group} <span class="count">{items.length} ta</span>
+            {group} <span class="count" data-group-count>{items.length} ta</span>
           </h3>
           <div class="table-wrap glass">
             <table>
@@ -41,10 +48,10 @@ for (const a of analyses) {
               </thead>
               <tbody>
                 {items.map((a) => (
-                  <tr>
+                  <tr data-analysis-row>
                     <td>{a.title}</td>
                     <td class="dur">{a.duration}</td>
-                    <td class="price">{a.price} soʻm</td>
+                    <td class="price" data-price-code={a.code}>{a.price} soʻm</td>
                   </tr>
                 ))}
               </tbody>
@@ -61,22 +68,48 @@ for (const a of analyses) {
   </section>
 </Base>
 
+<script>
+  // Narxlar bazadan (admin panel) — statik jadval yuklangach yangilanadi (F2).
+  import { applyLivePrices } from '../lib/live-prices';
+  applyLivePrices();
+</script>
+
 <style>
   .page {
-    padding: 48px 0 64px;
+    padding: var(--sp-6) 0 var(--section-pad);
+  }
+
+  .head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .mine svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  @media (max-width: 600px) {
+    .mine {
+      width: 100%;
+      margin-bottom: 24px;
+    }
   }
 
   .group {
-    margin-bottom: 34px;
+    margin-bottom: 32px;
   }
 
   .group h3 {
     font-size: 18px;
     font-weight: 700;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
 
   .count {
@@ -87,7 +120,7 @@ for (const a of analyses) {
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 999px;
-    padding: 3px 10px;
+    padding: 4px 8px;
   }
 
   .table-wrap {
@@ -109,13 +142,13 @@ for (const a of analyses) {
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--muted);
-    padding: 13px 20px;
+    padding: 16px 24px;
     border-bottom: 1px solid var(--line);
     white-space: nowrap;
   }
 
   td {
-    padding: 11px 20px;
+    padding: 8px 24px;
     border-bottom: 1px solid var(--line);
   }
 
@@ -141,7 +174,7 @@ for (const a of analyses) {
   .foot-note {
     font-size: 13.5px;
     color: var(--muted);
-    margin-top: 26px;
+    margin-top: 24px;
   }
 
   .foot-note a {

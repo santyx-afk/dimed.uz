@@ -1,0 +1,489 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+import analyses from '../../../data/analyses.json';
+
+/*
+  Admin — Narxlar (F2). Tahlil turlari statik ro'yxatdan (birinchi
+  chizish) va bazadagi `prices` jadvalidan birlashtiriladi: bazada bor
+  qator ustun turadi, yo'g'i "bazada yo'q" deb belgilanadi va saqlansa
+  bazaga yoziladi. Shifokor qabuli narxi doctors jadvalida.
+*/
+const staticAnalyses = JSON.stringify(
+  analyses.map((a) => ({
+    code: a.code,
+    title: a.title,
+    group: a.group,
+    duration: a.duration,
+    price: Number(String(a.price).replace(/[^\d]/g, '')) || 0,
+  })),
+);
+---
+
+<Cabinet
+  title="Narxlar — Admin"
+  description="Shifokor qabuli va tahlil turlari narxlarini tahrirlash."
+  eyebrow="Administrator"
+  heading="Narxlar"
+  area="admin"
+  active="narxlar"
+>
+  <span class="sub" id="subtitle" slot="sub"></span>
+
+  <div id="loading" class="state">Yuklanmoqda…</div>
+
+  <div id="denied" class="state" hidden>
+    <p id="deniedText">Bu bo‘lim faqat administrator uchun.</p>
+    <p id="idHint" class="id-hint" hidden></p>
+    <a class="btn" href="/kirish?next=/kabinet/admin/narxlar">Kirish</a>
+  </div>
+
+  <div id="content" hidden>
+    <div class="card glass">
+      <div class="card-head">
+        <h2>Shifokor qabuli</h2>
+        <span class="hint">Narx so‘mda. O‘zgarish bron oynasida darhol ko‘rinadi.</span>
+      </div>
+      <div class="rows" id="doctorRows"></div>
+    </div>
+
+    <div class="card glass">
+      <div class="card-head">
+        <h2>Tahlil turlari</h2>
+        <span class="hint">
+          Narx va tayyor bo‘lish muddati. «Saytda» belgisi olinsa tahlil ro‘yxatdan yashiriladi.
+        </span>
+      </div>
+      <p class="seed-note" id="seedNote" hidden>
+        Baza hali bo‘sh — narxlar statik ro‘yxatdan ko‘rsatilmoqda. Qator saqlansa u bazaga yoziladi;
+        hammasini birdan yozish uchun terminalda <code>npm run seed-prices</code>.
+      </p>
+      <div id="analysisGroups"></div>
+    </div>
+  </div>
+
+  <script is:inline type="application/json" id="staticAnalyses" set:html={staticAnalyses} />
+</Cabinet>
+
+<script>
+  type Analysis = { code: string; title: string; group: string; duration: string; price: number; active: boolean; inDb: boolean };
+  type Doctor = { id: string; name: string; job: string; price: number; active: boolean };
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) =>
+    s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+
+  const staticList = JSON.parse(el('staticAnalyses').textContent ?? '[]') as Omit<Analysis, 'active' | 'inDb'>[];
+
+  let analyses: Analysis[] = [];
+  let doctors: Doctor[] = [];
+
+  const post = (body: unknown) =>
+    fetch('/api/admin-prices', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  const setRowMsg = (row: HTMLElement, text: string, kind: 'ok' | 'error' | '') => {
+    const m = row.querySelector<HTMLElement>('.row-msg');
+    if (!m) return;
+    m.textContent = text;
+    m.className = `row-msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  // ---------- shifokorlar ----------
+  function renderDoctors() {
+    el('doctorRows').innerHTML = doctors
+      .map(
+        (d) => `<div class="row${d.active ? '' : ' off'}" data-doc="${esc(d.id)}">
+          <div class="row-main">
+            <b>${esc(d.name)}</b>
+            <small>${esc(d.job)}${d.active ? '' : ' · saytda ko‘rinmaydi'}</small>
+          </div>
+          <label class="price-fld"><input type="number" min="0" step="1000" value="${d.price}" aria-label="${esc(d.name)} narxi" /><span>so‘m</span></label>
+          <button class="mini" data-save-doc="${esc(d.id)}" type="button">Saqlash</button>
+          <span class="row-msg"></span>
+        </div>`,
+      )
+      .join('');
+
+    el('doctorRows')
+      .querySelectorAll<HTMLButtonElement>('[data-save-doc]')
+      .forEach((btn) =>
+        btn.addEventListener('click', async () => {
+          const row = btn.closest<HTMLElement>('.row')!;
+          const price = Number(row.querySelector<HTMLInputElement>('input')?.value);
+          btn.disabled = true;
+          setRowMsg(row, 'Saqlanmoqda…', '');
+          try {
+            const res = await post({ kind: 'doctor', id: btn.dataset.saveDoc, price });
+            const data = (await res.json()) as { error?: string };
+            setRowMsg(row, res.ok ? 'Saqlandi' : (data.error ?? 'Xato'), res.ok ? 'ok' : 'error');
+            if (res.ok) {
+              const d = doctors.find((x) => x.id === btn.dataset.saveDoc);
+              if (d) d.price = price;
+            }
+          } catch {
+            setRowMsg(row, 'Internetga ulanishda muammo', 'error');
+          } finally {
+            btn.disabled = false;
+          }
+        }),
+      );
+  }
+
+  // ---------- tahlillar ----------
+  function renderAnalyses() {
+    const groups = [...new Set(analyses.map((a) => a.group))];
+    el('analysisGroups').innerHTML = groups
+      .map(
+        (g) => `<div class="group">
+          <h3>${esc(g)} <span class="count">${analyses.filter((a) => a.group === g).length} ta</span></h3>
+          <div class="rows">
+            ${analyses
+              .filter((a) => a.group === g)
+              .map(
+                (a) => `<div class="row${a.active ? '' : ' off'}" data-code="${esc(a.code)}">
+                  <div class="row-main">
+                    <b>${esc(a.title)}</b>
+                    <small>kod ${esc(a.code)}${a.inDb ? '' : ' · <i>bazada yo‘q</i>'}</small>
+                  </div>
+                  <label class="dur-fld"><input type="text" value="${esc(a.duration)}" aria-label="Tayyor bo‘lishi" placeholder="30-60 daqiqa" /></label>
+                  <label class="price-fld"><input type="number" min="0" step="1000" value="${a.price}" aria-label="${esc(a.title)} narxi" /><span>so‘m</span></label>
+                  <label class="chk"><input type="checkbox"${a.active ? ' checked' : ''} /> Saytda</label>
+                  <button class="mini" data-save-an="${esc(a.code)}" type="button">Saqlash</button>
+                  <span class="row-msg"></span>
+                </div>`,
+              )
+              .join('')}
+          </div>
+        </div>`,
+      )
+      .join('');
+
+    el('analysisGroups')
+      .querySelectorAll<HTMLButtonElement>('[data-save-an]')
+      .forEach((btn) =>
+        btn.addEventListener('click', async () => {
+          const row = btn.closest<HTMLElement>('.row')!;
+          const a = analyses.find((x) => x.code === btn.dataset.saveAn);
+          if (!a) return;
+          const price = Number(row.querySelector<HTMLInputElement>('.price-fld input')?.value);
+          const duration = row.querySelector<HTMLInputElement>('.dur-fld input')?.value.trim() ?? '';
+          const active = row.querySelector<HTMLInputElement>('.chk input')?.checked ?? true;
+
+          btn.disabled = true;
+          setRowMsg(row, 'Saqlanmoqda…', '');
+          try {
+            const res = await post({ kind: 'analysis', code: a.code, title: a.title, group: a.group, duration, price, active });
+            const data = (await res.json()) as { error?: string };
+            if (res.ok) {
+              Object.assign(a, { price, duration, active, inDb: true });
+              row.classList.toggle('off', !active);
+              row.querySelector('small')!.textContent = `kod ${a.code}`;
+              el('seedNote').hidden = analyses.every((x) => x.inDb);
+            }
+            setRowMsg(row, res.ok ? 'Saqlandi' : (data.error ?? 'Xato'), res.ok ? 'ok' : 'error');
+          } catch {
+            setRowMsg(row, 'Internetga ulanishda muammo', 'error');
+          } finally {
+            btn.disabled = false;
+          }
+        }),
+      );
+  }
+
+  async function load() {
+    let data: { analyses: Omit<Analysis, 'inDb'>[]; doctors: Doctor[] };
+    try {
+      const res = await fetch('/api/admin-prices', { credentials: 'same-origin' });
+      if (res.status === 401 || res.status === 403) {
+        el('loading').hidden = true;
+        el('denied').hidden = false;
+        if (res.status === 403) {
+          const body = (await res.json()) as { telegramId?: string };
+          el('deniedText').textContent = 'Bu hisobda administrator huquqi yo‘q.';
+          if (body.telegramId) {
+            el('idHint').hidden = false;
+            el('idHint').textContent = `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`;
+          }
+        }
+        return;
+      }
+      if (!res.ok) throw new Error(String(res.status));
+      data = await res.json();
+    } catch {
+      el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
+      return;
+    }
+
+    // Bazadagi qatorlar statik ro'yxat ustidan; bazada bor lekin statikda yo'q kodlar ham ko'rinadi.
+    const inDb = new Map(data.analyses.map((a) => [a.code, a]));
+    analyses = staticList.map((s) => {
+      const live = inDb.get(s.code);
+      return live ? { ...s, ...live, inDb: true } : { ...s, active: true, inDb: false };
+    });
+    for (const live of data.analyses) {
+      if (!analyses.some((a) => a.code === live.code)) analyses.push({ ...live, inDb: true });
+    }
+    doctors = data.doctors;
+
+    el('subtitle').textContent = `${doctors.length} ta shifokor · ${analyses.length} ta tahlil turi` +
+      (analyses.some((a) => !a.inDb) ? ` · ${analyses.filter((a) => !a.inDb).length} tasi bazada yo‘q` : '');
+    el('seedNote').hidden = analyses.every((a) => a.inDb);
+    el('loading').hidden = true;
+    el('content').hidden = false;
+    renderDoctors();
+    renderAnalyses();
+  }
+
+  load();
+</script>
+
+<style>
+  .sub {
+    display: block;
+    color: var(--rose);
+    font-weight: 650;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  .state {
+    text-align: center;
+    padding: 48px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  .id-hint {
+    color: var(--ink);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 10px;
+    padding: 16px;
+    margin: 16px auto 0;
+    max-width: 460px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: var(--card-pad);
+    margin-bottom: 16px;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .card h2 {
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    font-family: var(--font-sans);
+  }
+
+  .hint {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .seed-note {
+    font-size: 13px;
+    color: var(--warn);
+    background: var(--warn-bg);
+    border-radius: 10px;
+    padding: 8px 16px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .seed-note code {
+    background: rgb(255 255 255 / 0.5);
+    border-radius: 6px;
+    padding: 1px 8px;
+    font-size: 12px;
+  }
+
+  #analysisGroups :global(.group) {
+    margin-bottom: 24px;
+  }
+
+  #analysisGroups :global(h3) {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #analysisGroups :global(.count) {
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 650;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+
+  .rows,
+  #analysisGroups :global(.rows) {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  :global(.row) {
+    display: flex;
+    align-items: center;
+    gap: 8px 16px;
+    flex-wrap: wrap;
+    padding: 16px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 12px;
+  }
+
+  :global(.row.off) {
+    opacity: 0.6;
+  }
+
+  :global(.row-main) {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  :global(.row-main b) {
+    font-size: 14.5px;
+    font-weight: 650;
+  }
+
+  :global(.row-main small) {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  :global(.row-main i) {
+    color: var(--warn);
+    font-style: normal;
+    font-weight: 650;
+  }
+
+  :global(.price-fld),
+  :global(.dur-fld) {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  :global(.price-fld input),
+  :global(.dur-fld input) {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  :global(.price-fld input) {
+    width: 120px;
+    text-align: right;
+  }
+
+  :global(.dur-fld input) {
+    width: 140px;
+  }
+
+  :global(.price-fld input:focus),
+  :global(.dur-fld input:focus) {
+    border-color: var(--leaf);
+    outline: none;
+  }
+
+  :global(.chk) {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  :global(.chk input) {
+    accent-color: var(--leaf);
+    width: 16px;
+    height: 16px;
+  }
+
+  :global(.mini) {
+    border: 1px solid var(--card-brd);
+    background: var(--card);
+    color: var(--leaf);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  :global(.mini:hover) {
+    border-color: var(--leaf);
+  }
+
+  :global(.mini:disabled) {
+    opacity: 0.6;
+  }
+
+  :global(.row-msg) {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    min-width: 72px;
+  }
+
+  :global(.row-msg.ok) {
+    color: var(--leaf);
+  }
+
+  :global(.row-msg.error) {
+    color: var(--rose);
+  }
+
+  @media (max-width: 600px) {
+    .card {
+      padding: 16px;
+    }
+
+    :global(.row) {
+      padding: 16px;
+    }
+
+    :global(.price-fld input) {
+      width: 110px;
+    }
+  }
+</style>

@@ -1,0 +1,133 @@
+---
+import Base from './Base.astro';
+
+/*
+  Kabinet sahifalarining umumiy qolipi (C1): sarlavha, bo'lim ichidagi
+  tab-havolalar va kontent. Header'dagi Kabinet menyusi ham shu
+  bo'limlarga olib boradi — tablar sahifa ichida yurish uchun.
+*/
+type Area = 'patient' | 'doctor' | 'admin';
+
+interface Props {
+  title: string;
+  description?: string;
+  eyebrow: string;
+  heading: string;
+  area: Area;
+  active: string;
+}
+
+const { title, description, eyebrow, heading, area, active } = Astro.props;
+
+const tabs: Record<Area, { key: string; href: string; label: string }[]> = {
+  patient: [
+    { key: 'navbatlar', href: '/kabinet/navbatlar', label: 'Navbatlarim' },
+    { key: 'tahlillar', href: '/kabinet/tahlillar', label: 'Tahlillarim' },
+    { key: 'sozlamalar', href: '/kabinet/sozlamalar', label: 'Sozlamalar' },
+  ],
+  doctor: [
+    { key: 'bugun', href: '/kabinet/shifokor', label: 'Bugungi navbatlar' },
+    { key: 'jadval', href: '/kabinet/shifokor/jadval', label: 'Jadvalim' },
+    { key: 'dam', href: '/kabinet/shifokor/dam', label: 'Ishga chiqa olmayman' },
+    { key: 'sozlamalar', href: '/kabinet/shifokor/sozlamalar', label: 'Sozlamalar' },
+  ],
+  admin: [
+    { key: 'shifokorlar', href: '/kabinet/admin', label: 'Shifokorlar' },
+    { key: 'narxlar', href: '/kabinet/admin/narxlar', label: 'Narxlar' },
+    { key: 'baholar', href: '/kabinet/admin/baholar', label: 'Baholar' },
+  ],
+};
+---
+
+<Base title={title} description={description}>
+  <section class="wrap page">
+    <div class="head">
+      <div>
+        <div class="eyebrow">{eyebrow}</div>
+        <h1>{heading}</h1>
+        <slot name="sub" />
+      </div>
+      <div class="head-actions">
+        <slot name="actions" />
+      </div>
+    </div>
+
+    <nav class="tabs" aria-label="Kabinet bo‘limlari">
+      {tabs[area].map((t) => (
+        <a class:list={['tab', { on: t.key === active }]} href={t.href} aria-current={t.key === active ? 'page' : undefined}>
+          {t.label}
+        </a>
+      ))}
+    </nav>
+
+    <slot />
+  </section>
+</Base>
+
+<style>
+  .page {
+    padding: var(--sp-5) 0 var(--section-pad);
+    min-height: 60vh;
+  }
+
+  .head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .head-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  h1 {
+    font-size: clamp(24px, 3.2vw, 34px);
+    font-weight: 750;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    flex: none;
+    padding: 8px 16px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .tab:hover {
+    color: var(--ink);
+    background: var(--chip-bg);
+  }
+
+  .tab.on {
+    background: var(--rose);
+    color: #fff;
+  }
+
+  @media (max-width: 600px) {
+    .page {
+      padding: var(--sp-4) 0 var(--section-pad);
+    }
+  }
+</style>

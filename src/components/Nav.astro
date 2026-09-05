@@ -10,35 +10,262 @@ const links = [
 ];
 ---
 
-<nav class="nav wrap">
-  <div class="nav-in glass">
-    <a class="nav-logo" href="/" aria-label="Dimed bosh sahifa">
-      <Logo height={26} label="Dimed logotipi" />
-    </a>
-    <div class="nav-links">
-      {links.map((l) => <a href={l.href}>{l.label}</a>)}
+<!--
+  Header ikki qatlamli: tashqi `.nav-bar` butun kenglikda yopishqoq turadi
+  va orqasidagi kontentni yopadigan fon beradi; ichidagi `.nav-in` esa
+  odatdagi shisha kartochka. Avval faqat kartochka bor edi — uning
+  atrofidagi 12px bo'shliqdan sarlavhalar ko'rinib qolardi.
+-->
+<header class="nav-bar" id="siteHeader">
+  <nav class="nav wrap" aria-label="Asosiy navigatsiya">
+    <div class="nav-in glass">
+      <a class="nav-logo" href="/" aria-label="Dimed bosh sahifa">
+        <Logo height={26} label="Dimed logotipi" />
+      </a>
+      <div class="nav-links">
+        {links.map((l) => <a href={l.href}>{l.label}</a>)}
+      </div>
+      <div class="nav-cta">
+        <!-- Kirgan foydalanuvchida JS bu tugmani ism/avatar bilan menyu tugmasiga almashtiradi (C1) -->
+        <a class="btn btn-ghost btn-sm nav-kabinet" id="navKabinet" href="/kabinet">Kabinet</a>
+        <a class="btn btn-sm nav-book" href="/#navbat-widget">Navbat olish</a>
+        <button
+          class="burger"
+          id="navBurger"
+          type="button"
+          aria-label="Menyuni ochish"
+          aria-expanded="false"
+          aria-controls="navMenu"
+        >
+          <span></span><span></span><span></span>
+        </button>
+      </div>
     </div>
-    <div class="nav-cta">
-      <a class="btn btn-ghost btn-sm" href="/kabinet">Kabinet</a>
-      <a class="btn btn-sm" href="/#navbat-widget">Navbat olish</a>
+
+    <!-- Mobil menyu: burger ostida ochiladi. Kabinet tugmasi bu yerga kirmaydi — u headerda doim ko'rinadi. -->
+    <div class="nav-menu glass" id="navMenu" hidden>
+      {links.map((l) => <a class="nav-menu-link" href={l.href}>{l.label}</a>)}
+      <a class="btn nav-menu-book" href="/#navbat-widget">Navbat olish</a>
     </div>
-  </div>
-</nav>
+
+    <!-- Kabinet menyusi (kirgan foydalanuvchi): ism, telefon va bo'limlar -->
+    <div class="acct-menu glass" id="acctMenu" hidden></div>
+  </nav>
+</header>
+
+<script>
+  import { t } from '../data/i18n';
+  import { getLang } from '../lib/lang';
+
+  const header = document.getElementById('siteHeader');
+  const burger = document.getElementById('navBurger') as HTMLButtonElement | null;
+  const menu = document.getElementById('navMenu');
+  const acctMenu = document.getElementById('acctMenu');
+  const kabinet = document.getElementById('navKabinet') as HTMLAnchorElement | null;
+
+  /* ---------- burger (mobil havolalar) ---------- */
+  const setMenuOpen = (open: boolean) => {
+    if (!menu || !burger || !header) return;
+    menu.hidden = !open;
+    header.classList.toggle('open', open);
+    burger.setAttribute('aria-expanded', String(open));
+    burger.setAttribute('aria-label', open ? 'Menyuni yopish' : 'Menyuni ochish');
+    if (open) setAcctOpen(false);
+  };
+
+  /* ---------- kabinet menyusi (C1) ---------- */
+  let acctBtn: HTMLButtonElement | null = null;
+
+  const setAcctOpen = (open: boolean) => {
+    if (!acctMenu || !acctBtn) return;
+    acctMenu.hidden = !open;
+    acctBtn.setAttribute('aria-expanded', String(open));
+    if (open) setMenuOpen(false);
+  };
+
+  if (header && burger && menu) {
+    burger.addEventListener('click', () => setMenuOpen(menu.hidden));
+    menu.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('a')) setMenuOpen(false);
+    });
+    document.addEventListener('click', (e) => {
+      const target = e.target as Node;
+      if (!menu.hidden && !header.contains(target)) setMenuOpen(false);
+      if (acctMenu && !acctMenu.hidden && !header.contains(target)) setAcctOpen(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (!menu.hidden) {
+        setMenuOpen(false);
+        burger.focus();
+      }
+      if (acctMenu && !acctMenu.hidden) {
+        setAcctOpen(false);
+        acctBtn?.focus();
+      }
+    });
+    // Desktop kenglikka o'tilsa ochiq menyu qolib ketmasin.
+    window.matchMedia('(min-width: 901px)').addEventListener('change', (e) => {
+      if (e.matches) setMenuOpen(false);
+    });
+  }
+
+  type SessionInfo = {
+    role: 'guest' | 'patient' | 'doctor' | 'admin';
+    admin?: boolean;
+    doctor?: { id: string; name: string; job: string } | null;
+    phone?: string;
+    name?: string;
+    lang?: string;
+  };
+
+  /*
+    Sessiya cookie'si HttpOnly — kim kirganini faqat /api/session aytadi.
+    Har sahifada so'ramaslik uchun javob 5 daqiqa sessionStorage'da
+    turadi; kirish va chiqish uni tozalaydi.
+  */
+  const CACHE_KEY = 'dimed_session';
+  const CACHE_TTL = 5 * 60_000;
+
+  async function loadSession(): Promise<SessionInfo | null> {
+    try {
+      const raw = sessionStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw) as { t: number; data: SessionInfo };
+        if (Date.now() - cached.t < CACHE_TTL) return cached.data;
+      }
+    } catch {
+      /* xotira yopiq — har safar so'raymiz */
+    }
+    try {
+      const res = await fetch('/api/session', { credentials: 'same-origin' });
+      if (!res.ok) return null;
+      const data = (await res.json()) as SessionInfo;
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), data }));
+      } catch {
+        /* saqlanmasa ham ishlaydi */
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  const esc = (s: string) =>
+    s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+
+  /** "Yoʻldoshev Anvar Baxtiyorovich" → ism "Anvar", bosh harflar "YA". */
+  const nameParts = (name: string) => {
+    const words = name.trim().split(/\s+/).filter(Boolean);
+    const first = words.length >= 2 ? words[1] : words[0];
+    const initials = words
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() ?? '')
+      .join('');
+    return { first: first ?? '', initials };
+  };
+
+  function renderAccount(info: SessionInfo) {
+    if (!kabinet || !acctMenu) return;
+    const lang = getLang();
+    const tr = (key: Parameters<typeof t>[0]) => t(key, lang);
+    const { first, initials } = nameParts(info.name ?? '');
+    const label = first || info.phone || 'Kabinet';
+    const avatar = initials || '•';
+
+    // "Kabinet" havolasi o'rniga menyu tugmasi.
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-ghost btn-sm acct-btn';
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-controls', 'acctMenu');
+    btn.innerHTML = `<span class="av" aria-hidden="true">${esc(avatar)}</span><span class="acct-name">${esc(label)}</span>`;
+    kabinet.replaceWith(btn);
+    acctBtn = btn;
+
+    const link = (href: string, text: string) => `<a class="acct-link" href="${href}" role="menuitem">${esc(text)}</a>`;
+    const sections: string[] = [];
+
+    sections.push(
+      `<div class="acct-sec" role="none">
+        ${link('/kabinet/navbatlar', tr('cabinet.menu.appointments'))}
+        ${link('/kabinet/tahlillar', tr('cabinet.menu.results'))}
+        ${link('/#navbat-widget', tr('cabinet.menu.book'))}
+        ${link('/kabinet/sozlamalar', tr('cabinet.menu.settings'))}
+      </div>`,
+    );
+    if (info.doctor) {
+      sections.push(
+        `<div class="acct-sec" role="none"><div class="acct-lab">Shifokor kabineti · ${esc(info.doctor.name)}</div>
+          ${link('/kabinet/shifokor', tr('cabinet.menu.today'))}
+          ${link('/kabinet/shifokor/jadval', tr('cabinet.menu.schedule'))}
+          ${link('/kabinet/shifokor/dam', tr('cabinet.menu.dayOff'))}
+          ${link('/kabinet/shifokor/sozlamalar', tr('cabinet.menu.settings'))}
+        </div>`,
+      );
+    }
+    if (info.admin) {
+      sections.push(
+        `<div class="acct-sec" role="none"><div class="acct-lab">Administrator</div>
+          ${link('/kabinet/admin', tr('cabinet.menu.doctors'))}
+          ${link('/kabinet/admin/narxlar', tr('cabinet.menu.prices'))}
+          ${link('/kabinet/admin/baholar', tr('cabinet.menu.ratings'))}
+        </div>`,
+      );
+    }
+
+    acctMenu.setAttribute('role', 'menu');
+    acctMenu.innerHTML = `<div class="acct-head">
+        <span class="av big" aria-hidden="true">${esc(avatar)}</span>
+        <div class="acct-who"><b>${esc(info.name || info.phone || '')}</b><small>${esc(info.phone ?? '')}</small></div>
+      </div>
+      ${sections.join('')}
+      <button class="acct-out" id="acctLogout" type="button" role="menuitem">${esc(tr('cabinet.menu.logout'))}</button>`;
+
+    btn.addEventListener('click', () => setAcctOpen(acctMenu.hidden));
+    acctMenu.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('a')) setAcctOpen(false);
+    });
+    document.getElementById('acctLogout')?.addEventListener('click', async () => {
+      await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+      try {
+        sessionStorage.removeItem(CACHE_KEY);
+      } catch {
+        /* bo'sh */
+      }
+      window.location.href = '/';
+    });
+  }
+
+  loadSession().then((info) => {
+    if (info && info.role !== 'guest') renderAccount(info);
+  });
+</script>
 
 <style>
-  .nav {
+  .nav-bar {
     position: sticky;
     top: 0;
     z-index: 50;
-    padding: 12px 0;
+    /* Orqadagi kontent ko'rinmasin: sahifa foniga yaqin, biroz shaffof + blur. */
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  }
+
+  .nav {
+    position: relative;
+    padding: var(--sp-2) var(--wrap-pad);
   }
 
   .nav-in {
     display: flex;
     align-items: center;
-    gap: 26px;
+    gap: 24px;
     border-radius: 16px;
-    padding: 10px 18px;
+    padding: var(--sp-2) var(--sp-3);
   }
 
   .nav-logo {
@@ -49,7 +276,7 @@ const links = [
 
   .nav-links {
     display: flex;
-    gap: 20px;
+    gap: 24px;
     margin-left: auto;
     font-size: 14.5px;
     font-weight: 500;
@@ -68,23 +295,257 @@ const links = [
 
   .nav-cta {
     display: flex;
-    gap: 9px;
+    align-items: center;
+    gap: 8px;
     margin-left: auto;
-  }
-
-  @media (max-width: 460px) {
-    .nav-cta .btn-ghost {
-      display: none;
-    }
   }
 
   .nav-links + .nav-cta {
     margin-left: 0;
   }
 
+  /* --- kabinet tugmasi (kirgan foydalanuvchi) --- */
+  .nav-cta :global(.acct-btn) {
+    gap: 8px;
+    padding-left: 8px;
+    max-width: 180px;
+  }
+
+  .nav-cta :global(.acct-name) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nav :global(.av) {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--rose);
+    color: #fff;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: 0.02em;
+  }
+
+  .nav :global(.av.big) {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
+
+  .acct-menu {
+    position: absolute;
+    right: 24px;
+    top: calc(100% - 4px);
+    width: min(320px, calc(100% - 48px));
+    border-radius: 16px;
+    padding: 8px;
+    background: color-mix(in srgb, var(--card-solid) 96%, transparent);
+    z-index: 2;
+  }
+
+  .acct-menu[hidden] {
+    display: none;
+  }
+
+  .acct-menu :global(.acct-head) {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 4px;
+  }
+
+  .acct-menu :global(.acct-who) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .acct-menu :global(.acct-who b) {
+    font-size: 14.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .acct-menu :global(.acct-who small) {
+    font-size: 12.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .acct-menu :global(.acct-sec) {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0;
+  }
+
+  .acct-menu :global(.acct-sec + .acct-sec) {
+    border-top: 1px solid var(--line);
+  }
+
+  .acct-menu :global(.acct-lab) {
+    padding: 8px 16px 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+
+  .acct-menu :global(.acct-link) {
+    padding: 8px 16px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--ink);
+    font-weight: 600;
+    font-size: 14.5px;
+  }
+
+  .acct-menu :global(.acct-link:hover),
+  .acct-menu :global(.acct-link:focus-visible) {
+    background: var(--rose-soft);
+    color: var(--rose);
+    outline: none;
+  }
+
+  .acct-menu :global(.acct-out) {
+    width: 100%;
+    margin-top: 4px;
+    padding: 8px 16px;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0 0 10px 10px;
+    background: none;
+    text-align: left;
+    font-weight: 600;
+    font-size: 14.5px;
+    color: var(--muted);
+  }
+
+  .acct-menu :global(.acct-out:hover) {
+    color: var(--rose);
+  }
+
+  /* --- burger --- */
+  .burger {
+    display: none;
+    width: 40px;
+    height: 36px;
+    border: 1.5px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    padding: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .burger span {
+    display: block;
+    width: 16px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--ink);
+    transition:
+      transform 0.2s,
+      opacity 0.2s;
+  }
+
+  .burger:focus-visible {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
+  }
+
+  .open .burger span:nth-child(1) {
+    transform: translateY(6px) rotate(45deg);
+  }
+
+  .open .burger span:nth-child(2) {
+    opacity: 0;
+  }
+
+  .open .burger span:nth-child(3) {
+    transform: translateY(-6px) rotate(-45deg);
+  }
+
+  .nav-menu {
+    position: absolute;
+    left: 24px;
+    right: 24px;
+    top: calc(100% - 4px);
+    border-radius: 16px;
+    padding: 8px;
+    /* Shisha emas, deyarli yaxlit fon: ostidagi matn menyu orqali o'qilmasin. */
+    background: color-mix(in srgb, var(--card-solid) 96%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .nav-menu[hidden] {
+    display: none;
+  }
+
+  .nav-menu-link {
+    padding: 16px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--ink);
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .nav-menu-link:hover,
+  .nav-menu-link:focus-visible {
+    background: var(--rose-soft);
+    color: var(--rose);
+  }
+
+  .nav-menu-book {
+    margin: 8px 8px 4px;
+  }
+
   @media (max-width: 900px) {
-    .nav-links {
+    .nav-links,
+    .nav-book {
       display: none;
+    }
+
+    .burger {
+      display: flex;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .nav {
+      padding: var(--sp-2) var(--wrap-pad);
+    }
+
+    .nav-in {
+      padding: var(--sp-2) var(--sp-3);
+      gap: 16px;
+    }
+
+    .nav-menu,
+    .acct-menu {
+      left: 16px;
+      right: 16px;
+      width: auto;
+    }
+
+    .nav-cta :global(.acct-btn) {
+      max-width: 140px;
     }
   }
 </style>

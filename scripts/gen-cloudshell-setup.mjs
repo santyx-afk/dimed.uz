@@ -29,7 +29,8 @@ const marshal = (v) => {
 
 /**
  * `doctors` jadvaliga yoziladigan maydonlar: baza nomi -> doctors.ts
- * dagi manba nomi. `active` har doim true, shuning uchun manbasi yo'q.
+ * dagi manba nomi. `active` alohida hisoblanadi: doctors.ts da
+ * `active: false` bo'lmasa true (faolsiz shifokor seed'da yoqilmaydi).
  *
  * Hammasi `#f0` kabi taxallus bilan yoziladi: DynamoDB'ning band
  * so'zlari ro'yxati uzun (name, hour, status, ...) va u kengayib
@@ -70,7 +71,10 @@ export function buildScript(tableDefs, doctors) {
 
   const doctorBlocks = doctors.map((d) => {
     const values = Object.fromEntries(
-      FIELDS.map(([attr, src], i) => [`:v${i}`, marshal(attr === 'active' ? true : d[src] ?? '')]),
+      FIELDS.map(([attr, src], i) => [
+        `:v${i}`,
+        marshal(attr === 'active' ? d.active !== false : d[src] ?? ''),
+      ]),
     );
     // $NOW qobiqda hisoblanadi, shuning uchun bitta tirnoqdan chiqamiz.
     values[':upd'] = { S: '__NOW__' };

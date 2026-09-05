@@ -1,15 +1,14 @@
 import type { Context } from '@netlify/functions';
-import { UpdateCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { UpdateCommand, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, doctorFor } from './lib/auth.ts';
 import { slotTimes, type Shift } from './lib/slots.ts';
-import { isDateKey, toTashkent, addDays } from './lib/time.ts';
+import { isDateKey, toTashkent, addDays, weekdayOf } from './lib/time.ts';
 import { dayAppointments, holdsSlot } from './lib/appointments.ts';
 import {
   checkShifts,
   isAllowedSlotMinutes,
   maskPhone,
-  shiftsFor,
   ALLOWED_SLOT_MINUTES,
 } from './lib/schedule.ts';
 import { logToAdmin } from './lib/telegram.ts';
@@ -42,12 +41,20 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       /*
         Slotlar kunga qarab: shifokor shu kunga alohida jadval qo'ygan
         yoki kunni yopgan bo'lishi mumkin — doimiy smenalar emas,
-        shiftsFor haqiqatni beradi.
+        kunlik yozuv haqiqatni beradi. Kabinet "kun yopiq" ekanini
+        ham ko'rsatadi (E1), shuning uchun yozuvning o'zi o'qiladi.
       */
-      const [shifts, appointments] = await Promise.all([
-        shiftsFor(doctor.doctor_id, date, doctor.shifts),
+      const [override, appointments] = await Promise.all([
+        db.send(
+          new GetCommand({ TableName: TABLES.schedules, Key: { doctor_id: doctor.doctor_id, date } }),
+        ),
         dayAppointments(doctor.doctor_id, date),
       ]);
+      const dayRow = override.Item as
+        | { shifts?: Shift[]; day_off?: boolean; off_reason?: string }
+        | undefined;
+      const dayOff = Boolean(dayRow?.day_off);
+      const shifts = dayOff ? [] : (dayRow?.shifts ?? doctor.shifts);
 
       return json(
         {
@@ -62,6 +69,9 @@ export default async (request: Request, _context: Context): Promise<Response> =>
           },
           today,
           date,
+          dayOff,
+          offReason: dayOff ? (dayRow?.off_reason ?? null) : null,
+          isWorkday: doctor.workdays.includes(weekdayOf(date)),
           slots: slotTimes(shifts, doctor.slot_minutes),
           // Navbatda faqat kuchdagi yozuvlar: bekor qilingan va
           // ko'chirilganlar slotni bo'shatgan.
@@ -72,6 +82,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
               phone: maskPhone(a.phone),
               status: a.status,
               patientName: a.patient_name ?? null,
+              patientBirthDate: a.patient_birth_date ?? null,
             }))
             .sort((a, b) => a.time.localeCompare(b.time)),
         },

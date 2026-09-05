@@ -88,6 +88,35 @@
   --scrim: rgb(0 0 0 / 0.6);
 }
 
+/*
+  Oraliq shkalasi (A3): 4 / 8 / 16 / 24 / 32 / 48 / 64.
+  Barcha padding, margin va gap qiymatlari shu shkaladan olinadi —
+  yon (gorizontal) va tik (vertikal) bo'shliqlar bir xil qadamda.
+  Sahifa ritmi uchun uchta hosila token: konteyner yon bo'shlig'i,
+  bo'limlar orasidagi masofa va karta ichki bo'shlig'i (mobilda bir
+  qadam kichik).
+*/
+:root {
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 16px;
+  --sp-4: 24px;
+  --sp-5: 32px;
+  --sp-6: 48px;
+  --sp-7: 64px;
+  --wrap-pad: var(--sp-4);
+  --section-pad: var(--sp-7);
+  --card-pad: var(--sp-4);
+}
+
+@media (max-width: 600px) {
+  :root {
+    --wrap-pad: var(--sp-3);
+    --section-pad: var(--sp-6);
+    --card-pad: var(--sp-3);
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -142,7 +171,7 @@ header {
 .wrap {
   max-width: 1140px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 var(--wrap-pad);
 }
 
 .glass {
@@ -161,8 +190,8 @@ header {
   color: var(--rose);
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 18px;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
 }
 
 .eyebrow::before {
@@ -176,13 +205,14 @@ header {
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   justify-content: center;
   background: var(--rose);
   color: #fff;
   border: none;
   border-radius: 999px;
-  padding: 11px 22px;
+  padding: var(--sp-2) var(--sp-4);
+  min-height: 44px;
   font-weight: 600;
   font-size: 15px;
   text-decoration: none;
@@ -209,7 +239,8 @@ header {
 }
 
 .btn-sm {
-  padding: 8px 16px;
+  padding: var(--sp-1) var(--sp-3);
+  min-height: 36px;
   font-size: 13.5px;
 }
 
@@ -227,7 +258,7 @@ header {
 
 .sec-head {
   max-width: 640px;
-  margin-bottom: 40px;
+  margin-bottom: var(--sp-5);
 }
 
 .sec-head h2 {
@@ -236,7 +267,7 @@ header {
 }
 
 .sec-head p {
-  margin-top: 12px;
+  margin-top: var(--sp-3);
   color: var(--muted);
   font-size: 16px;
 }

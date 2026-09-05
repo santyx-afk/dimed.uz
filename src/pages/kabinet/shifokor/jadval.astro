@@ -1,0 +1,452 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+
+const slotOptions = [10, 15, 20, 30, 60];
+---
+
+<Cabinet
+  title="Jadvalim — Shifokor kabineti"
+  description="Smenalar, tanaffuslar va qabul davomiyligi."
+  eyebrow="Shifokor kabineti"
+  heading="Jadvalim"
+  area="doctor"
+  active="jadval"
+>
+  <span class="sub" id="subtitle" slot="sub"></span>
+
+  <div id="loading" class="state">Yuklanmoqda…</div>
+
+  <div id="denied" class="state" hidden>
+    <p id="deniedText">Bu bo‘lim faqat shifokorlar uchun.</p>
+    <a class="btn" href="/kirish?next=/kabinet/shifokor/jadval">Kirish</a>
+  </div>
+
+  <div id="content" class="grid" hidden>
+    <div class="card glass">
+      <h2>Smenalar va tanaffuslar</h2>
+      <p class="hint">
+        Har bir smena — boshlanish va tugash vaqti. Smenalar orasidagi bo‘shliq tanaffus hisoblanadi,
+        unga slot tushmaydi.
+      </p>
+      <div id="shifts" class="shifts"></div>
+      <button class="add" id="addShift" type="button">+ smena qo‘shish</button>
+
+      <h2 class="mt">Qabul davomiyligi</h2>
+      <p class="hint">Bitta bemor uchun ajratiladigan vaqt. Standart — 60 daqiqa.</p>
+      <div class="seg" id="slotSeg">
+        {slotOptions.map((m) => <button type="button" data-min={m}>{m} daq</button>)}
+      </div>
+
+      <p class="msg" id="msg" role="status" aria-live="polite"></p>
+      <button class="btn save" id="save" type="button">Saqlash</button>
+      <p class="note">
+        O‘zgarishlar faqat kelgusidagi bo‘sh slotlarga ta’sir qiladi — band qilingan navbatlar
+        saqlanadi.
+      </p>
+    </div>
+
+    <div class="side">
+      <div class="card glass">
+        <h2>Ish kunlari</h2>
+        <div class="wd" id="workdays"></div>
+        <p class="note">Ish kunlarini administrator o‘zgartiradi.</p>
+      </div>
+
+      <div class="card glass">
+        <h2>Bir kunlik slotlar</h2>
+        <p class="hint">Hozirgi sozlama bo‘yicha bemor tanlaydigan vaqtlar:</p>
+        <div class="slots" id="slotPreview"></div>
+      </div>
+    </div>
+  </div>
+</Cabinet>
+
+<script>
+  import { fetchDoctor, showDenied, logout as _logout, type Shift } from '../../../lib/doctor-cabinet';
+  import { WD } from '../../../lib/dates';
+
+  void _logout;
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  let shifts: Shift[] = [];
+  let slotMinutes = 60;
+
+  const toMin = (t: string) => {
+    const [h = 0, m = 0] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const toHHMM = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+
+  const setMsg = (text: string, kind: 'error' | 'ok' | '' = '') => {
+    const msg = el('msg');
+    msg.textContent = text;
+    msg.className = `msg${kind ? ` ${kind}` : ''}`;
+  };
+
+  /** Ikki smena orasidagi bo'shliq — tanaffus. */
+  const gapLabel = (i: number) => {
+    const cur = shifts[i];
+    const next = shifts[i + 1];
+    if (!cur || !next) return '';
+    return cur.end < next.start ? `<div class="gap">tanaffus ${cur.end} – ${next.start}</div>` : '';
+  };
+
+  function renderShifts() {
+    el('shifts').innerHTML = shifts
+      .map(
+        (s, i) => `<div class="shift">
+          <span class="shift-n">${i + 1}-smena</span>
+          <label class="fld"><span>dan</span>
+            <input type="time" value="${s.start}" data-i="${i}" data-k="start" aria-label="${i + 1}-smena boshlanishi"></label>
+          <label class="fld"><span>gacha</span>
+            <input type="time" value="${s.end}" data-i="${i}" data-k="end" aria-label="${i + 1}-smena tugashi"></label>
+          <button class="del" data-del="${i}" type="button" aria-label="Smenani oʻchirish">✕</button>
+        </div>${gapLabel(i)}`,
+      )
+      .join('');
+
+    el('shifts')
+      .querySelectorAll<HTMLInputElement>('input[data-i]')
+      .forEach((input) =>
+        input.addEventListener('change', () => {
+          const shift = shifts[Number(input.dataset.i)];
+          if (shift) shift[input.dataset.k as 'start' | 'end'] = input.value;
+          renderShifts();
+          renderPreview();
+        }),
+      );
+
+    el('shifts')
+      .querySelectorAll<HTMLButtonElement>('[data-del]')
+      .forEach((btn) =>
+        btn.addEventListener('click', () => {
+          if (shifts.length === 1) return setMsg('Kamida bitta smena qolishi kerak.', 'error');
+          shifts.splice(Number(btn.dataset.del), 1);
+          renderShifts();
+          renderPreview();
+        }),
+      );
+  }
+
+  function renderSlotSeg() {
+    el('slotSeg')
+      .querySelectorAll<HTMLButtonElement>('button')
+      .forEach((btn) => {
+        btn.classList.toggle('on', Number(btn.dataset.min) === slotMinutes);
+        btn.onclick = () => {
+          slotMinutes = Number(btn.dataset.min);
+          renderSlotSeg();
+          renderPreview();
+        };
+      });
+  }
+
+  /** Slotlar shu yerda hisoblanadi — server bilan bir xil qoida. */
+  function renderPreview() {
+    const times: string[] = [];
+    for (const s of [...shifts].sort((a, b) => toMin(a.start) - toMin(b.start))) {
+      if (!s.start || !s.end) continue;
+      const end = toMin(s.end);
+      for (let t = toMin(s.start); t + slotMinutes <= end; t += slotMinutes) times.push(toHHMM(t));
+    }
+    el('slotPreview').innerHTML = times.length
+      ? times.map((t) => `<span class="slot">${t}</span>`).join('')
+      : '<span class="hint">Smena vaqtlari to‘g‘ri kiritilmagan.</span>';
+  }
+
+  el('addShift').addEventListener('click', () => {
+    const last = shifts.at(-1);
+    shifts.push(last ? { start: last.end, end: last.end } : { start: '09:00', end: '13:00' });
+    renderShifts();
+    renderPreview();
+    setMsg('');
+  });
+
+  el('save').addEventListener('click', async () => {
+    const btn = el<HTMLButtonElement>('save');
+    btn.disabled = true;
+    setMsg('Saqlanmoqda…');
+    try {
+      const res = await fetch('/api/doctor-schedule', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ shifts, slotMinutes }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (res.ok) setMsg('Jadval saqlandi.', 'ok');
+      else setMsg(data.error ?? 'Saqlab boʻlmadi.', 'error');
+    } catch {
+      setMsg('Internetga ulanishda muammo.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function init() {
+    const res = await fetchDoctor();
+    if (!res.ok) return showDenied(res.status);
+    const { doctor } = res.data;
+
+    el('subtitle').textContent = `${doctor.name} · ${doctor.job}`;
+    shifts = doctor.shifts.map((s) => ({ ...s }));
+    slotMinutes = doctor.slotMinutes;
+
+    el('workdays').innerHTML = [1, 2, 3, 4, 5, 6, 0]
+      .map((d) => `<span class="wd-chip${doctor.workdays.includes(d) ? ' on' : ''}">${WD[d]}</span>`)
+      .join('');
+
+    renderShifts();
+    renderSlotSeg();
+    renderPreview();
+    el('loading').hidden = true;
+    el('content').hidden = false;
+  }
+
+  init();
+</script>
+
+<style>
+  .sub {
+    display: block;
+    color: var(--rose);
+    font-weight: 650;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  .state {
+    text-align: center;
+    padding: 48px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .side {
+    display: grid;
+    gap: 16px;
+  }
+
+  @media (max-width: 820px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: var(--card-pad);
+  }
+
+  .card h2 {
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    font-family: var(--font-sans);
+    margin-bottom: 8px;
+  }
+
+  .card h2.mt {
+    margin-top: 24px;
+  }
+
+  .hint {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .shifts :global(.shift) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 16px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 12px;
+    margin-bottom: 8px;
+  }
+
+  .shifts :global(.shift-n) {
+    font-size: 12.5px;
+    font-weight: 700;
+    min-width: 64px;
+  }
+
+  .shifts :global(.fld) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .shifts :global(.fld input) {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .shifts :global(.fld input:focus) {
+    border-color: var(--leaf);
+    outline: none;
+  }
+
+  .shifts :global(.del) {
+    margin-left: auto;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 8px;
+    border-radius: 8px;
+  }
+
+  .shifts :global(.del:hover) {
+    color: var(--rose);
+    background: var(--rose-soft);
+  }
+
+  .shifts :global(.gap) {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--busy);
+    border-radius: 8px;
+    padding: 4px 16px;
+    margin: 0 0 8px 16px;
+    display: inline-block;
+  }
+
+  .add {
+    border: 1.5px dashed var(--line);
+    background: none;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--muted);
+  }
+
+  .add:hover {
+    border-color: var(--leaf);
+    color: var(--leaf);
+  }
+
+  .seg {
+    display: flex;
+    gap: 4px;
+  }
+
+  .seg button {
+    flex: 1;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 10px;
+    padding: 8px 4px;
+    font-size: 13px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .seg button.on {
+    background: var(--leaf);
+    border-color: var(--leaf);
+    color: #fff;
+  }
+
+  .seg button:focus-visible {
+    outline: 2px solid var(--leaf);
+    outline-offset: 2px;
+  }
+
+  .msg {
+    min-height: 20px;
+    margin: 16px 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .msg.error {
+    color: var(--rose);
+  }
+
+  .msg.ok {
+    color: var(--leaf);
+  }
+
+  .save {
+    width: 100%;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 16px;
+    line-height: 1.55;
+  }
+
+  .wd {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .wd :global(.wd-chip) {
+    font-size: 12.5px;
+    font-weight: 650;
+    border-radius: 999px;
+    padding: 8px 16px;
+    background: var(--busy);
+    color: var(--muted);
+  }
+
+  .wd :global(.wd-chip.on) {
+    background: var(--leaf-soft);
+    color: var(--leaf);
+  }
+
+  .slots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .slots :global(.slot) {
+    font-size: 13px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 8px;
+    padding: 8px;
+  }
+
+  @media (max-width: 600px) {
+    .card {
+      padding: 16px;
+    }
+  }
+</style>

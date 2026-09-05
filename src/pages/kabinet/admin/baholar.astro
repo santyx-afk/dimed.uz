@@ -1,0 +1,472 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+
+/*
+  Admin — Baholar (F3). Bemorlar qabuldan keyin botda qo'ygan baholar:
+  shifokor, bemor, yulduz, izoh, sana. Baho o'chirilmaydi — "Yashirish"
+  uni saytdagi o'rtachadan chiqaradi, istalgan payt qaytariladi.
+*/
+---
+
+<Cabinet
+  title="Baholar — Admin"
+  description="Bemorlarning shifokorlarga qo‘ygan baholari va izohlari."
+  eyebrow="Administrator"
+  heading="Bemor baholari"
+  area="admin"
+  active="baholar"
+>
+  <span class="sub" id="subtitle" slot="sub"></span>
+
+  <div id="loading" class="state">Yuklanmoqda…</div>
+
+  <div id="denied" class="state" hidden>
+    <p id="deniedText">Bu bo‘lim faqat administrator uchun.</p>
+    <p id="idHint" class="id-hint" hidden></p>
+    <a class="btn" href="/kirish?next=/kabinet/admin/baholar">Kirish</a>
+  </div>
+
+  <div id="content" hidden>
+    <div class="card glass">
+      <div class="card-head">
+        <h2>Shifokorlar bo‘yicha</h2>
+        <span class="hint">O‘rtacha baho saytdagi shifokor kartasida ko‘rinadi. Yashirilgan baho o‘rtachaga kirmaydi.</span>
+      </div>
+      <div class="doc-chips" id="docChips"></div>
+    </div>
+
+    <div class="card glass">
+      <div class="card-head">
+        <h2>Barcha baholar</h2>
+        <div class="filters">
+          <select id="docFilter" aria-label="Shifokor bo‘yicha saralash">
+            <option value="">Barcha shifokorlar</option>
+          </select>
+          <label class="chk"><input type="checkbox" id="showHidden" checked /> Yashirilganlarni ham ko‘rsatish</label>
+        </div>
+      </div>
+      <p class="empty" id="empty" hidden>
+        Hozircha baho yo‘q. Bemor qabuldan keyin botda yulduz bosganda shu yerda ko‘rinadi.
+      </p>
+      <div class="rows" id="rows"></div>
+    </div>
+  </div>
+</Cabinet>
+
+<script>
+  type Rating = {
+    id: string;
+    doctorId: string;
+    doctorName: string;
+    patientName: string;
+    phone: string;
+    rating: number;
+    comment: string;
+    date: string;
+    time: string;
+    createdAt: string;
+    hidden: boolean;
+  };
+  type Doctor = { id: string; name: string; job: string; active: boolean; ratingAvg: number | null; ratingCount: number };
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) =>
+    s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+  const starsOf = (n: number) => '★'.repeat(n) + '☆'.repeat(5 - n);
+  const fmtDate = (key: string) => {
+    const [y, m, d] = key.split('-');
+    return y && m && d ? `${d}.${m}.${y}` : key;
+  };
+  const fmtStamp = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+
+  let ratings: Rating[] = [];
+  let doctors: Doctor[] = [];
+
+  async function load() {
+    let data: { ratings: Rating[]; doctors: Doctor[] };
+    try {
+      const res = await fetch('/api/admin-ratings', { credentials: 'same-origin' });
+      if (res.status === 401 || res.status === 403) {
+        el('loading').hidden = true;
+        el('denied').hidden = false;
+        if (res.status === 403) {
+          const body = (await res.json()) as { telegramId?: string };
+          el('deniedText').textContent = 'Bu hisobda administrator huquqi yo‘q.';
+          if (body.telegramId) {
+            const hint = el('idHint');
+            hint.hidden = false;
+            hint.textContent = `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`;
+          }
+        }
+        return;
+      }
+      if (!res.ok) throw new Error(String(res.status));
+      data = await res.json();
+    } catch {
+      el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
+      return;
+    }
+
+    ratings = data.ratings;
+    doctors = data.doctors;
+    el('loading').hidden = true;
+    el('content').hidden = false;
+
+    const filter = el<HTMLSelectElement>('docFilter');
+    filter.innerHTML =
+      '<option value="">Barcha shifokorlar</option>' +
+      doctors.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
+    renderAll();
+  }
+
+  function renderAll() {
+    const shown = ratings.filter((r) => !r.hidden);
+    const avg = shown.length ? (shown.reduce((s, r) => s + r.rating, 0) / shown.length).toFixed(1) : null;
+    el('subtitle').textContent =
+      `${shown.length} ta baho` +
+      (avg ? ` · o‘rtacha ${avg}` : '') +
+      (ratings.length > shown.length ? ` · ${ratings.length - shown.length} tasi yashirilgan` : '');
+
+    el('docChips').innerHTML = doctors
+      .map(
+        (d) => `<span class="doc-chip${d.active ? '' : ' off'}">
+          <b>${esc(d.name)}</b>
+          ${d.ratingCount ? `<span class="val">★ ${d.ratingAvg}</span><small>${d.ratingCount} ta</small>` : '<small>baho yo‘q</small>'}
+        </span>`,
+      )
+      .join('');
+    renderRows();
+  }
+
+  function renderRows() {
+    const docId = el<HTMLSelectElement>('docFilter').value;
+    const withHidden = el<HTMLInputElement>('showHidden').checked;
+    const list = ratings.filter((r) => (!docId || r.doctorId === docId) && (withHidden || !r.hidden));
+
+    el('empty').hidden = list.length > 0;
+    el('rows').innerHTML = list
+      .map(
+        (r) => `<div class="row rating-row${r.hidden ? ' off' : ''}" data-id="${esc(r.id)}">
+          <div class="stars" aria-label="${r.rating} / 5">${starsOf(r.rating)}</div>
+          <div class="row-main">
+            <b>${esc(r.doctorName)}</b>
+            <small>${esc(r.patientName || 'Bemor')}${r.phone ? ` · ${esc(r.phone)}` : ''} · qabul ${fmtDate(r.date)} ${esc(r.time)}</small>
+            ${r.comment ? `<p class="comment">“${esc(r.comment)}”</p>` : ''}
+          </div>
+          <span class="when">${fmtStamp(r.createdAt)}</span>
+          ${r.hidden ? '<span class="tag off">yashirilgan</span>' : ''}
+          <button class="mini${r.hidden ? ' okbtn' : ' danger'}" type="button" data-toggle="${esc(r.id)}" data-hidden="${r.hidden ? '0' : '1'}">
+            ${r.hidden ? 'Ko‘rsatish' : 'Yashirish'}
+          </button>
+          <span class="row-msg"></span>
+        </div>`,
+      )
+      .join('');
+
+    el('rows')
+      .querySelectorAll<HTMLButtonElement>('[data-toggle]')
+      .forEach((btn) => btn.addEventListener('click', () => toggle(btn)));
+  }
+
+  async function toggle(btn: HTMLButtonElement) {
+    const id = btn.dataset.toggle ?? '';
+    const hidden = btn.dataset.hidden === '1';
+    const row = btn.closest<HTMLElement>('.row')!;
+    const msg = row.querySelector<HTMLElement>('.row-msg')!;
+    btn.disabled = true;
+    msg.textContent = '…';
+    msg.className = 'row-msg';
+    try {
+      const res = await fetch('/api/admin-ratings', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, hidden }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        msg.textContent = data.error ?? 'Xato';
+        msg.className = 'row-msg error';
+        return;
+      }
+      // Ro'yxat va o'rtachalar serverdan qayta olinadi — yig'indi shu yerda.
+      await load();
+    } catch {
+      msg.textContent = 'Internetga ulanishda muammo';
+      msg.className = 'row-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  el('docFilter').addEventListener('change', renderRows);
+  el('showHidden').addEventListener('change', renderRows);
+  load();
+</script>
+
+<style>
+  .sub {
+    display: block;
+    color: var(--rose);
+    font-weight: 650;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  .state {
+    text-align: center;
+    padding: 48px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .state .btn {
+    margin-top: 16px;
+  }
+
+  .id-hint {
+    color: var(--ink);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 10px;
+    padding: 16px;
+    margin: 16px auto 0;
+    max-width: 460px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: var(--card-pad);
+    margin-bottom: 16px;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .card h2 {
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    font-family: var(--font-sans);
+  }
+
+  .hint {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .filters {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .filters select {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 13.5px;
+  }
+
+  .chk {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .chk input {
+    accent-color: var(--leaf);
+    width: 16px;
+    height: 16px;
+  }
+
+  .empty {
+    color: var(--muted);
+    font-size: 14px;
+    padding: 8px 0;
+  }
+
+  /* Ro'yxat JS bilan chiziladi — :global (Astro qamrovi JS tugunlariga yetmaydi). */
+  .doc-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .doc-chips :global(.doc-chip) {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  .doc-chips :global(.doc-chip.off) {
+    opacity: 0.55;
+  }
+
+  .doc-chips :global(.doc-chip b) {
+    font-weight: 650;
+  }
+
+  .doc-chips :global(.doc-chip .val) {
+    color: var(--warn);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .doc-chips :global(.doc-chip small) {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .rows :global(.row) {
+    display: flex;
+    align-items: center;
+    gap: 8px 16px;
+    flex-wrap: wrap;
+    padding: 16px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 12px;
+  }
+
+  .rows :global(.row.off) {
+    opacity: 0.6;
+  }
+
+  .rows :global(.stars) {
+    color: var(--warn);
+    font-size: 16px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    width: 96px;
+  }
+
+  .rows :global(.row-main) {
+    flex: 1;
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .rows :global(.row-main b) {
+    font-size: 14.5px;
+    font-weight: 650;
+  }
+
+  .rows :global(.row-main small) {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .rows :global(.comment) {
+    margin-top: 4px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+
+  .rows :global(.when) {
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .rows :global(.tag) {
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 4px 8px;
+    color: var(--muted);
+    background: var(--busy);
+  }
+
+  .rows :global(.mini) {
+    border: 1px solid var(--card-brd);
+    background: var(--card);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .rows :global(.mini.danger) {
+    color: var(--rose);
+  }
+
+  .rows :global(.mini.danger:hover) {
+    border-color: var(--rose);
+    background: var(--rose-soft);
+  }
+
+  .rows :global(.mini.okbtn) {
+    color: var(--leaf);
+  }
+
+  .rows :global(.mini.okbtn:hover) {
+    border-color: var(--leaf);
+  }
+
+  .rows :global(.mini:disabled) {
+    opacity: 0.6;
+  }
+
+  .rows :global(.row-msg) {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .rows :global(.row-msg.error) {
+    color: var(--rose);
+  }
+
+  @media (max-width: 600px) {
+    .card {
+      padding: 16px;
+    }
+
+    .rows :global(.row) {
+      padding: 16px;
+    }
+
+    .rows :global(.stars) {
+      width: auto;
+    }
+  }
+</style>

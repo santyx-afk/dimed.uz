@@ -8,7 +8,12 @@ const year = new Date().getFullYear();
 <footer class="wrap">
   <div class="foot-in">
     <Logo height={22} />
-    <p>© {year} Dimed klinikasi · {site.address}</p>
+    <p>
+      © {year} Dimed klinikasi ·
+      <a class="foot-link" href={site.mapsUrl} target="_blank" rel="noopener">{site.address}</a>
+      <span class="sep" aria-hidden="true">·</span>
+      <a class="foot-link" href="/maxfiylik">Maxfiylik siyosati</a>
+    </p>
     <div class="foot-soc">
       <a href={site.telegramBot} target="_blank" rel="noopener" aria-label="Telegram">
         <svg viewBox="0 0 24 24" aria-hidden="true"
@@ -37,16 +42,16 @@ const year = new Date().getFullYear();
 
 <style>
   footer {
-    padding: 34px 0 46px;
+    padding: var(--sp-5) 0 var(--sp-6);
     border-top: 1px solid var(--line);
-    margin-top: 30px;
+    margin-top: var(--sp-5);
   }
 
   .foot-in {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 18px;
+    gap: 16px;
     flex-wrap: wrap;
   }
 
@@ -55,9 +60,23 @@ const year = new Date().getFullYear();
     color: var(--muted);
   }
 
+  .sep {
+    margin: 0 8px;
+  }
+
+  .foot-link {
+    color: var(--muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .foot-link:hover {
+    color: var(--rose);
+  }
+
   .foot-soc {
     display: flex;
-    gap: 10px;
+    gap: 8px;
   }
 
   .foot-soc a {
