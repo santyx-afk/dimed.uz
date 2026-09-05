@@ -325,8 +325,15 @@ yarim tunga yaqin ertangi kunga tushib, «shifokor chiqmadi» testi bilan
 kesishardi. Avval sana UTC bo'yicha hisoblanardi va testlar sutkasiga
 330 daqiqa yiqilardi.
 
+**Brauzer testlari** (`npm run test:e2e`): `astro preview` ko'tariladi,
+API javoblari soxta, Playwright bron vidjetini va yopiq sahifalarni
+mobil hamda desktopda tekshiradi. Sababi amaliy: "bemor tanlanmasdan
+5-qadamga o'tib ketardi" xatosi hamma test yashil turganda sodir
+bo'lgan edi — u faqat brauzerda ko'rinadi. Lokal ishga tushirishda
+`DIMED_CHROMIUM` bilan brauzer yo'lini ko'rsatish mumkin.
+
 **CI:** `.github/workflows/ci.yml` har PR va master'ga push'da
-`typecheck → test → build` ni yurgizadi. Kalit kerak emas.
+`typecheck → test → build → test:e2e` ni yurgizadi. Kalit kerak emas.
 
 TypeScript fayllar testlarda `node --experimental-strip-types` bilan
 to'g'ridan-to'g'ri import qilinadi — shuning uchun `lib/` ichidagi importlar
