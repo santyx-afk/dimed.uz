@@ -917,7 +917,7 @@ await test('ulashish havolasi sessiyasiz ochiladi, buzuq va eskirgan token 404',
 console.log('\nYangi natija haqida bot xabari (G1):');
 await test('birinchi ishga tushish tarixni jimgina belgilaydi', async () => {
   telegramCalls.length = 0;
-  const res = await call(notifyResults, 'https://dimed.uz/api/notify-results', { method: 'POST' });
+  const res = await call(notifyResults, 'https://dimed.uz/api/notify-results?mode=recent', { method: 'POST' });
   assert.equal(res.status, 200);
   const user = tableOf('test_users').get('777');
   assert.ok(Array.isArray(user.results_notified), 'ro\'yxat yaratilishi kerak');
@@ -928,7 +928,7 @@ await test('birinchi ishga tushish tarixni jimgina belgilaydi', async () => {
 
 await test('yangi tayyor natija tushganda havola bilan xabar ketadi, takrorlanmaydi', async () => {
   telegramCalls.length = 0;
-  await call(notifyResults, 'https://dimed.uz/api/notify-results', { method: 'POST' });
+  await call(notifyResults, 'https://dimed.uz/api/notify-results?mode=recent', { method: 'POST' });
   assert.equal(telegramCalls.filter((c) => c.body.chat_id === '777').length, 0, 'yangisi yo\'q — xabar yo\'q');
 
   seed('test_analysis_results', '+998901234567|doc-yangi', {
@@ -936,7 +936,7 @@ await test('yangi tayyor natija tushganda havola bilan xabar ketadi, takrorlanma
     AnalysisName: 'Umumiy siydik tahlili',
     AnalysisResults: [{ Analyte: 'Oqsil', Result: 'manfiy' }],
   });
-  await call(notifyResults, 'https://dimed.uz/api/notify-results', { method: 'POST' });
+  await call(notifyResults, 'https://dimed.uz/api/notify-results?mode=recent', { method: 'POST' });
   const xabar = telegramCalls.find((c) => c.body.chat_id === '777');
   assert.ok(xabar, 'bemorga xabar ketishi kerak');
   assert.ok(xabar.body.text.includes('Tahlil natijangiz tayyor'));
@@ -949,18 +949,26 @@ await test('yangi tayyor natija tushganda havola bilan xabar ketadi, takrorlanma
   assert.equal(open.status, 200, 'havola sessiyasiz ochiladi');
 
   telegramCalls.length = 0;
-  await call(notifyResults, 'https://dimed.uz/api/notify-results', { method: 'POST' });
+  await call(notifyResults, 'https://dimed.uz/api/notify-results?mode=recent', { method: 'POST' });
   assert.equal(telegramCalls.filter((c) => c.body.chat_id === '777').length, 0, 'ikkinchi marta yuborilmaydi');
 });
 
-await test('tez yugurish faqat yaqinda kelgan bemorni qaraydi', async () => {
-  // Tarixi belgilangan, lekin yaqinda navbati bo'lmagan bemor — o'tkazib
-  // yuboriladi; tungi to'liq aylanishda esa qaraladi.
+await test('tez yugurish navbati yo\'q bemorni qaraydi, oldindagisini o\'tkazmaydi', async () => {
+  // Tarixi belgilangan, lekin klinika bilan ochiq aloqasi bo'lmagan bemor —
+  // o'tkazib yuboriladi; tungi to'liq aylanishda esa qaraladi.
+  // 777 esa kelgusi navbati borligi uchun tez yugurishda ham qaraladi:
+  // bemor navbat olib qo'yib, qabuldan oldin tahlil topshirishi odatiy hol.
   const user = tableOf('test_users').get('888');
   seed('test_users', '888', { ...user, results_notified: [] });
   seed('test_analysis_results', '+998907777777|uzoq-1', {
     phone: '+998907777777', sort_key: 'uzoq-1', Date: '01.02.2026 10:00:00',
     AnalysisResults: [{ Analyte: 'Gemoglobin', Result: '130', AnalyteUnit: 'g/L' }],
+  });
+  // 777 ning yagona navbati BOOK_DATE — bugundan keyin.
+  seed('test_analysis_results', '+998901234567|doc-navbatdan-oldin', {
+    phone: '+998901234567', sort_key: 'doc-navbatdan-oldin', Date: '09.03.2026 08:00:00',
+    AnalysisName: 'Qondagi shakar',
+    AnalysisResults: [{ Analyte: 'Glyukoza', Result: '5.1', AnalyteUnit: 'mmol/L' }],
   });
 
   telegramCalls.length = 0;
@@ -972,6 +980,10 @@ await test('tez yugurish faqat yaqinda kelgan bemorni qaraydi', async () => {
     telegramCalls.filter((c) => c.body.chat_id === '888').length,
     0,
     'yaqinda kelmagan bemorga xabar yo\'q',
+  );
+  assert.ok(
+    telegramCalls.some((c) => c.body.chat_id === '777' && c.body.text?.includes('Qondagi shakar')),
+    'qabuldan oldin kelgan natija tungi aylanishni kutmaydi',
   );
 
   // Tungi to'liq aylanishda esa u ham qaraladi va natijasi yetib boradi.
