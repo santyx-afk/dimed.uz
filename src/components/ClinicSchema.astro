@@ -1,0 +1,82 @@
+---
+import { site } from '../data/site';
+import { activeDoctors, jobText } from '../data/doctors';
+import { departments, deptName } from '../data/departments';
+import { h, HTML_LANG } from '../data/home';
+import type { Lang } from '../data/i18n';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const origin = (Astro.site ?? new URL('https://dimed.uz')).origin;
+
+/*
+  Google uchun klinika kartochkasi (schema.org).
+  
+  Bularsiz qidiruv natijasida faqat sarlavha va matn chiqadi; razmetka
+  bilan esa manzil, ish vaqti, telefon va shifokorlar ro'yxati ham
+  ko'rinishi mumkin. Klinika uchun bu — «yaqinimdagi shifokor» deb
+  qidirayotgan odam bizni topishining asosiy yo'li.
+
+  Ma'lumot bir joydan olinadi: `site.ts`, `doctors.ts`, `departments.ts`.
+  Shunda saytdagi matn bilan razmetka hech qachon ajralib qolmaydi.
+*/
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'MedicalClinic',
+  '@id': `${origin}/#clinic`,
+  name: 'Dimed',
+  alternateName: h('meta.title', lang),
+  description: h('meta.description', lang),
+  url: origin,
+  logo: `${origin}/images/logo/logo.svg`,
+  image: [`${origin}/images/klinika-bino.webp`, `${origin}/images/og-cover.jpg`],
+  telephone: site.phone,
+  inLanguage: HTML_LANG[lang],
+  currenciesAccepted: 'UZS',
+  paymentAccepted: 'Cash, Payme',
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: h('contact.address.value', lang),
+    addressLocality: 'Chinoz',
+    addressRegion: 'Toshkent viloyati',
+    addressCountry: 'UZ',
+  },
+  hasMap: site.mapsUrl,
+  openingHoursSpecification: [
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+      opens: '08:00',
+      closes: '22:00',
+    },
+  ],
+  sameAs: [site.telegramBot, site.instagram, site.facebook],
+  availableService: departments.map((d) => ({
+    '@type': 'MedicalProcedure',
+    name: deptName(d, lang),
+  })),
+  employee: activeDoctors.map((d) => ({
+    '@type': 'Physician',
+    name: d.name,
+    jobTitle: jobText(d, lang),
+    image: `${origin}${d.photo}`,
+    medicalSpecialty: jobText(d, lang),
+  })),
+  potentialAction: {
+    '@type': 'ReserveAction',
+    target: {
+      '@type': 'EntryPoint',
+      urlTemplate: `${origin}/#navbat-widget`,
+      actionPlatform: [
+        'https://schema.org/DesktopWebPlatform',
+        'https://schema.org/MobileWebPlatform',
+      ],
+    },
+    result: { '@type': 'Reservation', name: h('hero.cta', lang) },
+  },
+};
+---
+
+<script type="application/ld+json" set:html={JSON.stringify(schema)} is:inline />

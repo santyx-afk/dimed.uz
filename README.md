@@ -52,7 +52,7 @@ netlify/
 scripts/          create-tables, seed-doctors, seed-prices, migrate-slot-minutes,
                   link-doctor, import-patients, build-analyses, gen-cloudshell-setup,
                   fake-dynamo (testlar), test-*.mjs
-docs/             ISHGA-TUSHIRISH, HANDOFF, 1c-integration, 1c-sync, payme-integration
+docs/             QOLGAN-ISHLAR, ISHGA-TUSHIRISH, HANDOFF, 1c-integration, 1c-sync, payme-integration
 legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
 ```
 
@@ -109,8 +109,9 @@ baho so'rovi — `rating_asked_at` bilan bir martaga bog'langan.
   to'lov yoqilsa slot 5 daqiqaga *hold* qilinadi va to'lov o'tmasa
   avtomatik bo'shaydi.)
 - Klinika vaqti — Asia/Tashkent (UTC+5), server UTC'da ishlasa ham.
-- **Bekor qilish yo'q** — bemor faqat vaqtni ko'chira oladi, shifokor
-  o'zgarmaydi. Eski yozuv `moved` bo'ladi va sloti bo'shaydi.
+- Bemor navbatni **boshqa vaqtga ko'chira** (`moved`) yoki **bekor qila**
+  (`cancelled`) oladi — ikkalasi ham 1 soat qoidasiga bo'ysunadi va
+  slotni bo'shatadi. Shifokor o'zgarmaydi: boshqa shifokor — yangi navbat.
 - Shifokor kunni yopsa (`/api/doctor-off`) o'sha kundagi navbatlar
   `cancelled_by_clinic` bo'ladi, bemorlarga bot orqali xabar ketadi va
   slotlar bo'shaydi.
@@ -174,6 +175,7 @@ tizimini ulaydigan dasturchiga (kassa ochilgach).
 
 | Fayl | Kim uchun |
 | --- | --- |
+| [`docs/QOLGAN-ISHLAR.md`](docs/QOLGAN-ISHLAR.md) | Klinika egasi — hozir nima qilish kerak (joriy ro'yxat) |
 | [`docs/ISHGA-TUSHIRISH.md`](docs/ISHGA-TUSHIRISH.md) | Klinika egasi — qadamma-qadam ishga tushirish |
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | Sayt dasturchisi — texnik qarorlar, kod tuzilishi, tuzoqlar |
 | [`docs/1c-integration.md`](docs/1c-integration.md) | 1C dasturchisi — bemor profili va tahlil natijalari |

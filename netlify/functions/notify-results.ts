@@ -31,13 +31,21 @@ const MAX_SEPARATE = 3;
   bitta bemor — ikki jadvalga so'rov. Bemor soni o'sgani sari bu
   chiziqli qimmatlashadi va bir kuni cron vaqtga sig'may qoladi.
 
-  Shuning uchun tez-tez ishlaydigan yugurish faqat yaqinda klinikada
-  bo'lgan bemorlarni qaraydi — natija qabuldan keyin keladi. Botdan
-  o'tgan, lekin saytdan navbat olmagan bemorlar (masalan to'g'ridan
-  to'g'ri laboratoriyaga kelganlar) kuniga bir marta, tunda
-  qaraladigan to'liq aylanishda qamrab olinadi.
+  Shuning uchun tez-tez ishlaydigan yugurish faqat klinika bilan
+  aloqasi ochiq bemorlarni qaraydi. Botdan o'tgan, lekin saytdan
+  navbat olmagan bemorlar (masalan to'g'ridan to'g'ri laboratoriyaga
+  kelganlar) kuniga bir marta, tunda qaraladigan to'liq aylanishda
+  qamrab olinadi.
 */
+/** Shuncha kun orqaga: natija odatda qabuldan keyin keladi. */
 const RECENT_DAYS = 21;
+/*
+  Va shuncha kun oldinga: bemor navbat olib qo'yib, qabulga borgunicha
+  tahlil topshirishi odatiy hol. Bunda uning yagona yozuvi kelajakda
+  turadi — faqat orqaga qarasak, tayyor natija tungi aylanishgacha
+  kutib qolardi.
+*/
+const UPCOMING_DAYS = 30;
 /** To'liq aylanish Toshkent vaqti bilan shu soatda (cron har 15 daqiqada). */
 const FULL_SWEEP_HOUR = 3;
 
@@ -48,10 +56,11 @@ type UserRow = {
   results_notified?: string[];
 };
 
-/** Oxirgi kunlarda klinikada bo'lgan bemorlar telefonlari. */
-async function recentPatients(now: Date): Promise<Set<string>> {
+/** Yaqinda klinikada bo'lgan yoki navbati oldinda turgan bemorlar telefonlari. */
+async function activePatients(now: Date): Promise<Set<string>> {
   const today = toTashkent(now).dateKey;
-  const days = Array.from({ length: RECENT_DAYS }, (_, i) => addDays(today, -i));
+  const span = RECENT_DAYS + UPCOMING_DAYS + 1;
+  const days = Array.from({ length: span }, (_, i) => addDays(today, i - RECENT_DAYS));
   const rows = await Promise.all(
     days.map((day) => appointmentsOnDate(day).catch(() => [])),
   );
@@ -79,9 +88,9 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       har doim qaraladi — aks holda u tungi aylanishgacha kutib qolardi
       va oradagi natijalar "yangi" bo'lib bir yo'la kelib tushardi.
     */
-    const recent = fullSweep ? null : await recentPatients(now);
-    const users = recent
-      ? all.filter((u) => !u.results_notified || recent.has(u.phone as string))
+    const active = fullSweep ? null : await activePatients(now);
+    const users = active
+      ? all.filter((u) => !u.results_notified || active.has(u.phone as string))
       : all;
 
     let checked = 0;

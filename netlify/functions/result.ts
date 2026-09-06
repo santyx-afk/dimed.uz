@@ -5,6 +5,7 @@ import { createShareToken, readShareToken } from './lib/share.ts';
 import { optional } from './lib/env.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
+import { hitLimit, tooMany, clientIp } from './lib/rate-limit.ts';
 
 /**
  * GET /api/result — bitta tahlil natijasi (natija sahifasi, D1).
@@ -15,7 +16,12 @@ import { json, error } from './lib/http.ts';
  *
  * Natija telefon bo'yicha o'qiladi: sessiyadagi yoki tokendagi telefon.
  * Boshqa bemorning id'si so'ralsa — 404 (ma'lumot chiqmaydi).
+ *
+ * Bu yagona yo'l sessiyasiz ochiladi, shuning uchun IP bo'yicha
+ * cheklanadi: token HMAC bilan imzolangan va topib bo'lmaydi, lekin
+ * cheksiz urinish laboratoriya jadvalini bekorga qizdiradi.
  */
+const MAX_SHARED_PER_HOUR = 120;
 export default async (request: Request, _context: Context): Promise<Response> => {
   if (request.method !== 'GET') return error('Faqat GET', 405);
 
@@ -26,6 +32,9 @@ export default async (request: Request, _context: Context): Promise<Response> =>
 
   try {
     if (token) {
+      const rate = await hitLimit(`natija#${clientIp(request)}`, MAX_SHARED_PER_HOUR, 60 * 60);
+      if (!rate.ok) return tooMany(rate.retryAfter);
+
       const shared = readShareToken(token);
       if (!shared) return error('Havola yaroqsiz yoki muddati o‘tgan', 404);
       const result = await findResult(shared.phone, shared.id);

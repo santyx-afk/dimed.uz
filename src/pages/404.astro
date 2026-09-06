@@ -1,0 +1,97 @@
+---
+import Base from '../layouts/Base.astro';
+import { site } from '../data/site';
+import { t } from '../data/i18n';
+
+const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
+
+/*
+  404. Bitta manzilda turadi — Netlify uni har qanday noma'lum yo'lda
+  ko'rsatadi, shuning uchun til prefiksli nusxasi yo'q: matn `data-t`
+  orqali brauzerda almashadi (kirish sahifasidagi kabi).
+*/
+---
+
+<Base title={uz('notfound.title')} description={uz('notfound.text')}>
+  <section class="wrap page">
+    <div class="card glass">
+      <div class="code" aria-hidden="true">404</div>
+      <h1 data-t="notfound.heading">{uz('notfound.heading')}</h1>
+      <p class="lede" data-t="notfound.text">{uz('notfound.text')}</p>
+      <div class="acts">
+        <a class="btn" href="/" data-t="notfound.home">{uz('notfound.home')}</a>
+        <a class="btn btn-ghost" href="/tahlillar" data-t="nav.analyses">{uz('nav.analyses')}</a>
+        <a class="btn btn-ghost" href="/kabinet" data-t="notfound.cabinet">
+          {uz('notfound.cabinet')}
+        </a>
+      </div>
+      <p class="help">
+        <span data-t="signin.page.questions">{uz('nav.contact')}:</span>
+        <a href={site.phoneHref}>{site.phone}</a>
+      </p>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { getLang, applyPageLang } from '../lib/lang';
+  applyPageLang(getLang());
+</script>
+
+<style>
+  .page {
+    padding: var(--sp-8) 0 var(--section-pad);
+    display: flex;
+    justify-content: center;
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: var(--sp-8);
+    max-width: 560px;
+    text-align: center;
+  }
+
+  .code {
+    font-family: var(--font-display);
+    font-size: 72px;
+    font-weight: 750;
+    line-height: 1;
+    background: linear-gradient(92deg, var(--rose) 10%, var(--leaf) 95%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  h1 {
+    margin-top: 16px;
+    font-size: 26px;
+    font-weight: 700;
+  }
+
+  .lede {
+    margin-top: 16px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .acts {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 32px;
+  }
+
+  .help {
+    margin-top: 24px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  @media (max-width: 600px) {
+    .card {
+      padding: var(--sp-6) var(--sp-4);
+    }
+  }
+</style>

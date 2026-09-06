@@ -1,14 +1,23 @@
 /**
  * Brauzerdagi til tanlovi (uz / ru / en).
  *
- * Tartib: `?lang=` parametri → localStorage (`dimed_lang`) → sahifa
- * `<html lang>` → uz. Tanlov localStorage'da eslab qolinadi, shuning
- * uchun bot havolasidan `?lang=ru` bilan kelgan bemor keyingi
- * sahifalarda ham ruscha ko'radi.
+ * Tartib: `?lang=` parametri → manzildagi til prefiksi (`/ru/`, `/en/`)
+ * → localStorage (`dimed_lang`) → sahifa `<html lang>` → uz.
+ *
+ * Manzil har doim ustun: ommaviy sahifalar uch tilda alohida yig'iladi,
+ * shuning uchun `/ru/` ni ochgan odam kabinetda bir marta o'zbekchani
+ * tanlagan bo'lsa ham ruscha ko'rishi kerak. Tanlov localStorage'da
+ * eslab qolinadi — keyingi kabinet sahifalari ham shu tilda chiqadi.
  */
-import { isLang, type Lang } from '../data/i18n';
+import { isLang, t, type Lang } from '../data/i18n';
 
 const KEY = 'dimed_lang';
+
+/** `/ru/...` yoki `/en/...` — ommaviy sahifalarning til prefiksi. */
+function fromPath(): Lang | null {
+  const first = location.pathname.split('/')[1];
+  return isLang(first) ? first : null;
+}
 
 export function getLang(): Lang {
   try {
@@ -16,6 +25,11 @@ export function getLang(): Lang {
     if (isLang(fromUrl)) {
       localStorage.setItem(KEY, fromUrl);
       return fromUrl;
+    }
+    const inPath = fromPath();
+    if (inPath) {
+      localStorage.setItem(KEY, inPath);
+      return inPath;
     }
     const stored = localStorage.getItem(KEY);
     if (isLang(stored)) return stored;
@@ -65,4 +79,24 @@ export function bindLangSwitch(root: ParentNode = document, onChange?: (lang: La
     });
   });
   return current;
+}
+
+/**
+ * Serverda o'zbekcha yozilgan matnni tanlangan tilga almashtiradi.
+ *
+ * `data-t="kalit"` — tugun matni, `data-t-placeholder="kalit"` —
+ * input'ning placeholder'i. Statik HTML o'zbekcha bo'lib qoladi:
+ * JS o'chiq bo'lsa ham sahifa o'qiladi, bo'sh emas.
+ */
+export function applyPageLang(lang: Lang, root: ParentNode = document): void {
+  root.querySelectorAll<HTMLElement>('[data-t]').forEach((el) => {
+    const key = el.dataset.t;
+    if (key) el.textContent = t(key as Parameters<typeof t>[0], lang);
+  });
+  root.querySelectorAll<HTMLElement>('[data-t-placeholder]').forEach((el) => {
+    const key = el.dataset.tPlaceholder;
+    if (key && el instanceof HTMLInputElement) {
+      el.placeholder = t(key as Parameters<typeof t>[0], lang);
+    }
+  });
 }

@@ -75,6 +75,26 @@ ttl() {
   echo "     TTL yoqildi: $maydon"
 }
 
+pitr() {
+  local toliq="${PREFIX}_$1"
+
+  # Zaxira nusxa ham faqat ACTIVE jadvalda yoqiladi.
+  ddb wait table-exists --table-name "$toliq"
+
+  local hozir
+  hozir=$(ddb describe-continuous-backups --table-name "$toliq" \
+    --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus' \
+    --output text 2>/dev/null || echo DISABLED)
+  if [ "$hozir" = "ENABLED" ]; then
+    echo "     zaxira nusxa allaqachon yoqilgan"
+    return
+  fi
+
+  ddb update-continuous-backups --table-name "$toliq" \
+    --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true >/dev/null
+  echo "     zaxira nusxa yoqildi (35 kun)"
+}
+
 jadval "users" "$(cat <<JSON
 {
   "TableName": "${PREFIX}_users",
@@ -128,6 +148,7 @@ jadval "users" "$(cat <<JSON
 }
 JSON
 )"
+pitr "users"
 
 jadval "otp_codes" "$(cat <<JSON
 {
@@ -177,6 +198,7 @@ jadval "individuals" "$(cat <<JSON
 }
 JSON
 )"
+pitr "individuals"
 
 jadval "doctors" "$(cat <<JSON
 {
@@ -215,6 +237,7 @@ jadval "doctors" "$(cat <<JSON
 }
 JSON
 )"
+pitr "doctors"
 
 jadval "schedules" "$(cat <<JSON
 {
@@ -243,6 +266,7 @@ jadval "schedules" "$(cat <<JSON
 }
 JSON
 )"
+pitr "schedules"
 
 jadval "appointments" "$(cat <<JSON
 {
@@ -317,6 +341,7 @@ jadval "appointments" "$(cat <<JSON
 }
 JSON
 )"
+pitr "appointments"
 
 jadval "analysis_results" "$(cat <<JSON
 {
@@ -345,6 +370,7 @@ jadval "analysis_results" "$(cat <<JSON
 }
 JSON
 )"
+pitr "analysis_results"
 
 jadval "payments" "$(cat <<JSON
 {
@@ -365,6 +391,7 @@ jadval "payments" "$(cat <<JSON
 }
 JSON
 )"
+pitr "payments"
 
 jadval "lab_results" "$(cat <<JSON
 {
@@ -393,6 +420,7 @@ jadval "lab_results" "$(cat <<JSON
 }
 JSON
 )"
+pitr "lab_results"
 
 jadval "prices" "$(cat <<JSON
 {
@@ -413,6 +441,7 @@ jadval "prices" "$(cat <<JSON
 }
 JSON
 )"
+pitr "prices"
 
 jadval "rate_limits" "$(cat <<JSON
 {
@@ -462,6 +491,7 @@ jadval "ratings" "$(cat <<JSON
 }
 JSON
 )"
+pitr "ratings"
 
 # --- 2-qadam: jadvallar tayyor bo'lishini kutamiz ---
 echo

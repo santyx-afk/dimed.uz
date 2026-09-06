@@ -1,12 +1,28 @@
 ---
-import Base from '../layouts/Base.astro';
-import BookingWidget from '../components/BookingWidget.astro';
-import DeptIcon from '../components/DeptIcon.astro';
-import { departments } from '../data/departments';
-import { ageChip } from '../lib/age';
-import { activeDoctors, doctorsByDept } from '../data/doctors';
-import { site } from '../data/site';
-import analyses from '../data/analyses.json';
+import Base from '../../layouts/Base.astro';
+import BookingWidget from '../../components/BookingWidget.astro';
+import ClinicSchema from '../../components/ClinicSchema.astro';
+import DeptIcon from '../../components/DeptIcon.astro';
+import { departments, deptName, deptText } from '../../data/departments';
+import { ageChip } from '../../lib/age';
+import { activeDoctors, doctorsByDept, jobText, experienceText, hoursText } from '../../data/doctors';
+import { site } from '../../data/site';
+import { LANGS, type Lang } from '../../data/i18n';
+import { h, langHref } from '../../data/home';
+import { analysisTitle, analysisGroup, analysisDuration } from '../../data/analyses-i18n';
+import analyses from '../../data/analyses.json';
+
+/*
+  Bitta fayl — uchta sahifa: `/`, `/ru/`, `/en/`. O'zbekcha ildizda
+  turadi (asosiy til), qolganlari prefiks bilan. Shu sababli matn
+  serverda yoziladi: Google ruscha sahifani ham indeksga oladi, JS
+  ishga tushishini kutmaydi.
+*/
+export function getStaticPaths() {
+  return LANGS.map((code) => ({ params: { lang: code === 'uz' ? undefined : code }, props: { lang: code } }));
+}
+
+const { lang } = Astro.props as { lang: Lang };
 
 const featured = ['19', '57', '23', '29', '798', '693', '691'];
 const featuredAnalyses = featured
@@ -14,28 +30,26 @@ const featuredAnalyses = featured
   .filter((a): a is (typeof analyses)[number] => Boolean(a));
 ---
 
-<Base>
+<Base lang={lang} title={h('meta.title', lang)} description={h('meta.description', lang)}>
+  <ClinicSchema lang={lang} slot="head" />
   <header class="hero wrap" id="navbat">
     <div class="hero-grid">
       <div>
-        <div class="eyebrow">Chinoz · Koʻp ixtisosli tibbiy markaz</div>
-        <h1>Shifokorga navbat — <span class="grad">endi telefoningizda</span></h1>
-        <p class="hero-sub">
-          Boʻlimni tanlang, boʻsh vaqtni band qiling — bron Telegram botda darhol tasdiqlanadi.
-          Tahlil natijalari esa shaxsiy kabinetingizga avtomatik tushadi.
-        </p>
+        <div class="eyebrow">{h('hero.eyebrow', lang)}</div>
+        <h1>{h('hero.title', lang)} <span class="grad">{h('hero.title.grad', lang)}</span></h1>
+        <p class="hero-sub">{h('hero.sub', lang)}</p>
         <div class="hero-cta">
-          <a class="btn" href="#navbat-widget">Navbat olish</a>
-          <a class="btn btn-ghost" href="#bolimlar">Boʻlimlar bilan tanishish</a>
+          <a class="btn" href="#navbat-widget">{h('hero.cta', lang)}</a>
+          <a class="btn btn-ghost" href="#bolimlar">{h('hero.cta2', lang)}</a>
         </div>
         <div class="hero-stats">
-          <div class="stat-chip"><b>{departments.length}</b> boʻlim</div>
-          <div class="stat-chip"><b class="g" id="statDoctors">{activeDoctors.length}</b> shifokor</div>
-          <div class="stat-chip"><b data-analyses-count>{analyses.length}</b> tahlil turi</div>
-          <div class="stat-chip"><b class="g">08:00–22:00</b> har kuni</div>
+          <div class="stat-chip"><b>{departments.length}</b> {h('hero.stat.depts', lang)}</div>
+          <div class="stat-chip"><b class="g" id="statDoctors">{activeDoctors.length}</b> {h('hero.stat.doctors', lang)}</div>
+          <div class="stat-chip"><b data-analyses-count>{analyses.length}</b> {h('hero.stat.analyses', lang)}</div>
+          <div class="stat-chip"><b class="g">08:00–22:00</b> {h('hero.stat.daily', lang)}</div>
         </div>
       </div>
-      <BookingWidget />
+      <BookingWidget lang={lang} />
     </div>
   </header>
 
@@ -48,11 +62,8 @@ const featuredAnalyses = featured
             <circle cx="12" cy="12" r="3.2"></circle>
           </svg>
         </div>
-        <h3>Yangi texnologiyalar</h3>
-        <p>
-          Aniq va tez diagnostika uchun zamonaviy uskunalar: UTT, EEG, ekspress-laboratoriya. Natijalar
-          kabinetingizga avtomatik yetkaziladi.
-        </p>
+        <h3>{h('feat.tech.title', lang)}</h3>
+        <p>{h('feat.tech.text', lang)}</p>
       </div>
       <div class="feat glass rv">
         <div class="ic leaf">
@@ -62,11 +73,8 @@ const featuredAnalyses = featured
             <path d="M17.8 8.2l1.4-1.4M4.8 6.8l1.4 1.4"></path>
           </svg>
         </div>
-        <h3>Malakali shifokorlar</h3>
-        <p>
-          Oliy toifali va 40 yilgacha tajribaga ega tor soha mutaxassislari. Har bir bemorga alohida
-          yondashuv.
-        </p>
+        <h3>{h('feat.docs.title', lang)}</h3>
+        <p>{h('feat.docs.text', lang)}</p>
       </div>
       <div class="feat glass rv">
         <div class="ic rose">
@@ -75,23 +83,17 @@ const featuredAnalyses = featured
             <path d="M12 7.5V12l3 2.5"></path>
           </svg>
         </div>
-        <h3>Navbatsiz xizmat</h3>
-        <p>
-          Onlayn bron — kutish zallarisiz. Qabulingizga 1 soat qolganda Telegram bot sizga eslatma
-          yuboradi.
-        </p>
+        <h3>{h('feat.queue.title', lang)}</h3>
+        <p>{h('feat.queue.text', lang)}</p>
       </div>
     </div>
   </section>
 
   <section class="wrap" id="bolimlar">
     <div class="sec-head rv">
-      <div class="eyebrow">Boʻlimlar</div>
-      <h2>{departments.length} yoʻnalish — bitta manzilda</h2>
-      <p>
-        Har bir boʻlimda oʻz sohasining mutaxassislari qabul qiladi. Boʻlimni tanlab, toʻgʻridan-toʻgʻri
-        navbat oling.
-      </p>
+      <div class="eyebrow">{h('dept.eyebrow', lang)}</div>
+      <h2>{departments.length} {h('dept.title', lang)}</h2>
+      <p>{h('dept.text', lang)}</p>
     </div>
     <div class="dept-cards">
       {
@@ -101,12 +103,12 @@ const featuredAnalyses = featured
               <div class="ic">
                 <DeptIcon icon={d.icon} />
               </div>
-              <span class="cnt" data-dept-cnt={d.id}>{doctorsByDept(d.id).length} shifokor</span>
+              <span class="cnt" data-dept-cnt={d.id}>{doctorsByDept(d.id).length} {h('dept.count', lang)}</span>
             </div>
-            <h3>{d.name}</h3>
-            <p>{d.description}</p>
+            <h3>{deptName(d, lang)}</h3>
+            <p>{deptText(d, lang)}</p>
             <button class="go" data-book-dept={d.id}>
-              Navbat olish
+              {h('hero.cta', lang)}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M5 12h14m-6-6 6 6-6 6" />
               </svg>
@@ -119,12 +121,9 @@ const featuredAnalyses = featured
 
   <section class="wrap" id="shifokorlar">
     <div class="sec-head rv">
-      <div class="eyebrow">Jamoa</div>
-      <h2>Shifokorlarimiz</h2>
-      <p>
-        Qabul jadvali va davomiyligini har bir shifokorning oʻzi belgilaydi — siz esa faqat boʻsh vaqtni
-        tanlaysiz.
-      </p>
+      <div class="eyebrow">{h('docs.eyebrow', lang)}</div>
+      <h2>{h('docs.title', lang)}</h2>
+      <p>{h('docs.text', lang)}</p>
     </div>
     <div class="doc-cards">
       {
@@ -134,12 +133,16 @@ const featuredAnalyses = featured
               <img src={d.photo} alt={d.name} width="64" height="64" loading="lazy" />
               <div>
                 <h3>{d.name}</h3>
-                <div class="jb">{d.job}</div>
+                <div class="jb">{jobText(d, lang)}</div>
               </div>
             </div>
             <div class="meta">
-              {d.experience && <span class="m-chip exp">{d.experience} tajriba</span>}
-              <span class="m-chip">{d.hours}</span>
+              {d.experience && (
+                <span class="m-chip exp">
+                  {experienceText(d.experience, lang)} {h('docs.experience', lang)}
+                </span>
+              )}
+              <span class="m-chip">{hoursText(d.hours, lang)}</span>
               <span class="m-chip age" data-doc-age hidden={!ageChip(d.ageGroup ?? 'all')}>
                 {ageChip(d.ageGroup ?? 'all')}
               </span>
@@ -147,10 +150,10 @@ const featuredAnalyses = featured
             </div>
             <div class="foot">
               <span class="slotlen">
-                qabul: <b>{d.slotMinutes} daqiqa</b>
+                {h('docs.slot', lang)} <b>{d.slotMinutes} {h('docs.minutes', lang)}</b>
               </span>
               <button class="btn btn-sm" data-book-dept={d.deptId} data-book-doc={d.id}>
-                Navbat olish
+                {h('hero.cta', lang)}
               </button>
             </div>
           </div>
@@ -161,52 +164,45 @@ const featuredAnalyses = featured
 
   <section class="wrap" id="qanday">
     <div class="sec-head rv">
-      <div class="eyebrow">Qanday ishlaydi</div>
-      <h2>SMS yoʻq. Parol yoʻq. Faqat Telegram.</h2>
-      <p>Roʻyxatdan oʻtish, kirish, bron tasdigʻi va eslatmalar — hammasi bitta botda.</p>
+      <div class="eyebrow">{h('how.eyebrow', lang)}</div>
+      <h2>{h('how.title', lang)}</h2>
+      <p>{h('how.text', lang)}</p>
     </div>
     <div class="how-grid">
       <div class="how-steps">
         <div class="how-step rv">
           <div class="how-num">1</div>
           <div>
-            <h3>Botga /start yuborasiz</h3>
+            <h3>{h('how.1.title', lang)}</h3>
             <p>
-              Saytdagi tugma sizni <b>Dimed klinikasi</b> botiga olib oʻtadi. Kontaktni ulashasiz — telefon
-              raqami avtomatik bogʻlanadi.
+              {h('how.1.text.a', lang)} <b>Dimed</b> {h('how.1.text.b', lang)}
             </p>
           </div>
         </div>
         <div class="how-step rv">
           <div class="how-num">2</div>
           <div>
-            <h3>6 xonali kod bilan kirasiz</h3>
-            <p>
-              Bot bir martalik kod yuboradi. Kodni saytga kiritasiz — shaxsiy kabinetingiz ochiladi. Hech
-              qanday parol eslab qolish shart emas.
-            </p>
+            <h3>{h('how.2.title', lang)}</h3>
+            <p>{h('how.2.text', lang)}</p>
           </div>
         </div>
         <div class="how-step rv">
           <div class="how-num">3</div>
           <div>
-            <h3>Boʻsh slotni tanlaysiz</h3>
-            <p>Boʻlim → shifokor → sana → vaqt. Slotlar shifokorning real jadvalidan koʻrsatiladi.</p>
+            <h3>{h('how.3.title', lang)}</h3>
+            <p>{h('how.3.text', lang)}</p>
           </div>
         </div>
         <div class="how-step rv">
           <div class="how-num">4</div>
           <div>
-            <h3>Bron tayyor — botga tasdiq keladi</h3>
-            <p>
-              Slot band qilinadi va botga tasdiq keladi. Toʻlov — qabulxona kassasida, qabul
-              kuni. Qabulga 1 soat qolganda eslatma yuboriladi.
-            </p>
-            <span class="rule">Bekor qilish yoʻq — qabuldan 1 soat oldingacha boshqa vaqtga koʻchirish mumkin</span>
+            <h3>{h('how.4.title', lang)}</h3>
+            <p>{h('how.4.text', lang)}</p>
+            <span class="rule">{h('how.rule', lang)}</span>
           </div>
         </div>
       </div>
-      <div class="phone glass rv" aria-label="Telegram bot suhbati namunasi">
+      <div class="phone glass rv" aria-label={h('how.phone.alt', lang)}>
         <div class="phone-top">
           <div class="av">
             <svg viewBox="0 0 24 24" aria-hidden="true"
@@ -217,55 +213,99 @@ const featuredAnalyses = featured
           </div>
           <div>
             <div class="nm">Dimed Klinika Bot</div>
-            <div class="st">onlayn</div>
+            <div class="st">{h('how.phone.online', lang)}</div>
           </div>
         </div>
         <div class="chat">
           <div class="bub usr">/start<span class="t">08:41</span></div>
           <div class="bub bot">
-            Assalomu alaykum! Dimed klinikasiga xush kelibsiz. Kirish uchun pastdagi tugma orqali
-            kontaktingizni ulashing.<span class="t">08:41</span>
+            {h('how.chat.hello', lang)}<span class="t">08:41</span>
           </div>
           <div class="bub bot">
-            Saytga kirish kodingiz:<span class="otp">4 8 2 9 1 7</span>Kod 5 daqiqa amal qiladi.<span
+            {h('how.chat.code', lang)}<span class="otp">4 8 2 9 1 7</span>{h('how.chat.code.note', lang)}<span
               class="t">08:42</span
             >
           </div>
           <div class="bub bot">
-            ✅ Broningiz tasdiqlandi!<br />Kardiolog — Ashurov T.A.<br />Seshanba, 12-avgust, 09:15<span
+            {h('how.chat.booked', lang)}<br />{h('how.chat.doctor', lang)}<br />{h('how.chat.when', lang)}<span
               class="t">08:47</span
             >
           </div>
-          <div class="bub bot">⏰ Eslatma: qabulingizga 1 soat qoldi.<span class="t">08:15</span></div>
+          <div class="bub bot">{h('how.chat.remind', lang)}<span class="t">08:15</span></div>
         </div>
       </div>
     </div>
   </section>
 
+  <section class="wrap" id="klinika">
+    <div class="sec-head rv">
+      <div class="eyebrow">{h('gallery.eyebrow', lang)}</div>
+      <h2>{h('gallery.title', lang)}</h2>
+      <p>{h('gallery.text', lang)}</p>
+    </div>
+    <div class="gallery">
+      <figure class="shot big rv">
+        <img
+          src="/images/klinika-bino.webp"
+          alt={h('gallery.building', lang)}
+          width="1200"
+          height="900"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption>{h('gallery.building', lang)}</figcaption>
+      </figure>
+      <figure class="shot rv">
+        <img
+          src="/images/klinika-xona.webp"
+          alt={h('gallery.room', lang)}
+          width="1200"
+          height="901"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption>{h('gallery.room', lang)}</figcaption>
+      </figure>
+      <figure class="shot rv">
+        <img
+          src="/images/klinika-laboratoriya.webp"
+          alt={h('gallery.lab', lang)}
+          width="1200"
+          height="558"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption>{h('gallery.lab', lang)}</figcaption>
+      </figure>
+    </div>
+  </section>
+
   <section class="wrap" id="tahlillar-preview">
     <div class="sec-head rv">
-      <div class="eyebrow">Laboratoriya</div>
-      <h2>Tahlillar va narxlar</h2>
-      <p>
-        Koʻpchilik natijalar 30–60 daqiqada tayyor va shaxsiy kabinetingizga avtomatik tushadi — PDF va
-        matn koʻrinishida.
-      </p>
+      <div class="eyebrow">{h('lab.eyebrow', lang)}</div>
+      <h2>{h('lab.title', lang)}</h2>
+      <p>{h('lab.text', lang)}</p>
     </div>
     <div class="table-wrap glass rv">
       <table>
         <thead>
-          <tr><th>Tahlil</th><th>Guruh</th><th>Tayyor boʻlishi</th><th>Narx</th></tr>
+          <tr>
+            <th>{h('lab.col.name', lang)}</th>
+            <th>{h('lab.col.group', lang)}</th>
+            <th>{h('lab.col.ready', lang)}</th>
+            <th>{h('lab.col.price', lang)}</th>
+          </tr>
         </thead>
         <tbody>
           {
             featuredAnalyses.map((a) => (
               <tr data-analysis-row>
-                <td>{a.title}</td>
+                <td>{analysisTitle(a.code, a.title, lang)}</td>
                 <td>
-                  <span class="g-chip">{a.group}</span>
+                  <span class="g-chip">{analysisGroup(a.group, lang)}</span>
                 </td>
-                <td class="dur">{a.duration}</td>
-                <td class="price" data-price-code={a.code}>{a.price} soʻm</td>
+                <td class="dur">{analysisDuration(a.duration, lang)}</td>
+                <td class="price" data-price-code={a.code}>{a.price} {h('lab.sum', lang)}</td>
               </tr>
             ))
           }
@@ -273,8 +313,10 @@ const featuredAnalyses = featured
       </table>
     </div>
     <div class="tbl-note rv">
-      <a class="btn btn-ghost btn-sm" href="/tahlillar">Barcha <span data-analyses-count>{analyses.length}</span> ta tahlilni koʻrish</a>
-      <span>Narxlar amaldagi pricelistdan olingan.</span>
+      <a class="btn btn-ghost btn-sm" href={langHref('/tahlillar', lang)}>
+        {h('lab.all.a', lang)} <span data-analyses-count>{analyses.length}</span> {h('lab.all.b', lang)}
+      </a>
+      <span>{h('lab.note', lang)}</span>
     </div>
   </section>
 
@@ -282,8 +324,8 @@ const featuredAnalyses = featured
     <div class="contact-grid">
       <div class="contact-card glass rv">
         <div class="sec-head contact-head">
-          <div class="eyebrow">Bogʻlanish</div>
-          <h2>Bizni topish oson</h2>
+          <div class="eyebrow">{h('contact.eyebrow', lang)}</div>
+          <h2>{h('contact.title', lang)}</h2>
         </div>
         <div class="c-row">
           <div class="ic">
@@ -293,10 +335,12 @@ const featuredAnalyses = featured
             </svg>
           </div>
           <div>
-            <div class="k">Manzil</div>
+            <div class="k">{h('contact.address', lang)}</div>
             <div class="v">
-              <a class="plain map-link" href={site.mapsUrl} target="_blank" rel="noopener">{site.address}</a>
-              <small>{site.addressNote}</small>
+              <a class="plain map-link" href={site.mapsUrl} target="_blank" rel="noopener">
+                {h('contact.address.value', lang)}
+              </a>
+              <small>{h('contact.address.note', lang)}</small>
             </div>
           </div>
         </div>
@@ -307,7 +351,7 @@ const featuredAnalyses = featured
             </svg>
           </div>
           <div>
-            <div class="k">Telefon</div>
+            <div class="k">{h('contact.phone', lang)}</div>
             <div class="v"><a class="plain" href={site.phoneHref}>{site.phone}</a></div>
           </div>
         </div>
@@ -319,16 +363,18 @@ const featuredAnalyses = featured
             </svg>
           </div>
           <div>
-            <div class="k">Ish vaqti</div>
-            <div class="v">{site.hours}<small>{site.hoursNote}</small></div>
+            <div class="k">{h('contact.hours', lang)}</div>
+            <div class="v">
+              {h('contact.hours.value', lang)}<small>{h('contact.hours.note', lang)}</small>
+            </div>
           </div>
         </div>
       </div>
       <div class="cta-card rv">
-        <h3>Navbatni hoziroq oling</h3>
-        <p>Telegram botga oʻting, kontaktni ulashing — 2 daqiqada broningiz tayyor.</p>
+        <h3>{h('contact.cta.title', lang)}</h3>
+        <p>{h('contact.cta.text', lang)}</p>
         <a class="btn" href={site.telegramBot} target="_blank" rel="noopener">
-          Dimed klinikasi botiga oʻtish
+          {h('contact.cta.btn', lang)}
         </a>
       </div>
     </div>
@@ -337,11 +383,65 @@ const featuredAnalyses = featured
 
 <script>
   // Tahlil narxlari bazadan (admin panel) yangilanadi (F2).
-  import { applyLivePrices } from '../lib/live-prices';
+  import { applyLivePrices } from '../../lib/live-prices';
   applyLivePrices();
 </script>
 
 <style>
+
+  /* Klinika suratlari: katta bino chapda, ikki kichigi o'ngda ustma-ust. */
+  .gallery {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    grid-template-rows: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .shot {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+  }
+
+  .shot.big {
+    grid-row: span 2;
+  }
+
+  .shot img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .shot figcaption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 24px 16px 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(to top, rgb(0 0 0 / 0.62), transparent);
+  }
+
+  @media (max-width: 760px) {
+    .gallery {
+      grid-template-columns: 1fr;
+      grid-template-rows: none;
+    }
+
+    .shot.big {
+      grid-row: auto;
+    }
+
+    .shot img {
+      aspect-ratio: 4 / 3;
+    }
+  }
   section {
     padding: var(--section-pad) 0;
   }

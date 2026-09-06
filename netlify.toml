@@ -17,6 +17,17 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    # Kamera, mikrofon, joylashuv — saytga kerak emas, o'chirib qo'yamiz.
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    # Sayt hamma narsani o'zidan yuklaydi: tashqi skript, shrift yoki
+    # rasm yo'q. Shuning uchun `default-src 'self'` — bemor ma'lumotini
+    # begona manzilga jo'natadigan in'ektsiya ishlamaydi.
+    #
+    # `'unsafe-inline'` skriptlar uchun hozircha qoladi: Astro kichik
+    # modulni sahifa ichiga joylaydi, hash esa har build'da o'zgaradi
+    # va bu faylga qo'lda yozib bo'lmaydi. Qolgan yo'nalishlar
+    # (object, base, form, frame) qat'iy.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 
 [[headers]]
   for = "/fonts/*"

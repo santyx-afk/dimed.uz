@@ -237,6 +237,112 @@ await test('telefon raqami har xil yozilsa ham qabul qilinadi', async () => {
   await ctx.close();
 });
 
+
+await test('/ru/ sahifasi rus tilida chiqadi va vidjet ham ruschada', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  const jsErrors = [];
+  page.on('pageerror', (e) => jsErrors.push(e.message));
+  await page.goto(`${base}/ru/`, { waitUntil: 'networkidle' });
+
+  assert.equal(await page.getAttribute('html', 'lang'), 'ru', '<html lang> ruscha bo‘lishi kerak');
+  assert.match(await page.textContent('h1'), /Запись к врачу/, 'sarlavha ruscha');
+  assert.match(
+    await page.textContent('.widget-title'),
+    /Онлайн-запись/,
+    'vidjet sarlavhasi ham ruscha',
+  );
+
+  // Bo'lim nomlari ham tarjima bilan chiziladi (ma'lumot ichidagi name_ru).
+  await page.click('[data-book-dept="terapiya"]');
+  await page.waitForTimeout(300);
+  const pane = await page.textContent('.pane-label');
+  assert.match(pane, /Выберите врача/, `2-qadam ruscha bo‘lishi kerak, keldi: ${pane}`);
+
+  assert.deepEqual(jsErrors, [], 'JS xatosi bo‘lmasligi kerak');
+  await ctx.close();
+});
+
+await test('til tugmasi va hreflang uch sahifani bog‘laydi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
+
+  const hrefs = await page.$$eval('link[rel="alternate"][hreflang]', (ls) =>
+    ls.map((l) => `${l.getAttribute('hreflang')}:${new URL(l.href).pathname}`),
+  );
+  assert.deepEqual(
+    hrefs.filter((x) => !x.startsWith('x-default')).sort(),
+    ['en:/en/', 'ru:/ru/', 'uz:/'],
+    `hreflang uchtasini ko‘rsatishi kerak, keldi: ${hrefs.join(' ')}`,
+  );
+
+  await page.click('.nav-cta .lang-btn[hreflang="ru"]');
+  await page.waitForLoadState('domcontentloaded');
+  assert.equal(new URL(page.url()).pathname, '/ru/', 'til tugmasi /ru/ ga olib borishi kerak');
+
+  // Manzil tanlovni eslab qoladi: kabinetga o'tsa ham ruscha qoladi.
+  const stored = await page.evaluate(() => localStorage.getItem('dimed_lang'));
+  assert.equal(stored, 'ru', 'til brauzerda eslab qolinishi kerak');
+  await ctx.close();
+});
+
+await test('/en/tahlillar tahlil nomlarini inglizchada beradi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/en/tahlillar`, { waitUntil: 'domcontentloaded' });
+
+  assert.equal(await page.getAttribute('html', 'lang'), 'en');
+  const body = await page.textContent('body');
+  assert.ok(body.includes('Complete blood count'), 'tahlil nomi inglizchada bo‘lishi kerak');
+  assert.ok(body.includes('Blood biochemistry'), 'guruh nomi ham tarjima qilinadi');
+  assert.ok(!body.includes('Umumiy qon tahlili'), 'o‘zbekcha nom qolmasligi kerak');
+  await ctx.close();
+});
+
+
+await test('404 sahifasi yoʻl koʻrsatadi va tilga moslashadi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1000, height: 800 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/404?lang=ru`, { waitUntil: 'networkidle' });
+
+  const body = await page.textContent('.card');
+  assert.match(body, /Такой страницы нет/, `404 ruscha bo‘lishi kerak, keldi: ${body.slice(0, 80)}`);
+  assert.ok(!body.includes('notfound.'), 'kalit nomi ko‘rinib qolmasligi kerak');
+
+  // Uchta chiqish yo'li: bosh sahifa, tahlillar, kabinet.
+  const links = await page.$$eval('.acts a', (as) => as.map((a) => new URL(a.href).pathname));
+  assert.deepEqual(links, ['/', '/tahlillar', '/kabinet']);
+  await ctx.close();
+});
+
+await test('bosh sahifada klinika razmetkasi va suratlar bor', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
+
+  const raw = await page.textContent('script[type="application/ld+json"]');
+  const schema = JSON.parse(raw);
+  assert.equal(schema['@type'], 'MedicalClinic');
+  assert.ok(schema.employee.length > 0, 'shifokorlar razmetkaga kirishi kerak');
+  assert.equal(schema.address.addressLocality, 'Chinoz');
+  assert.ok(schema.openingHoursSpecification[0].opens, 'ish vaqti ko‘rsatilishi kerak');
+
+  // Suratlar: har birida alt matni bo'lsin (skrinrider uchun ham, SEO uchun ham).
+  const alts = await page.$$eval('#klinika img', (imgs) => imgs.map((i) => i.alt));
+  assert.equal(alts.length, 3, 'uchta surat');
+  assert.ok(
+    alts.every((a) => a.length > 5),
+    `har bir suratda alt bo‘lishi kerak, keldi: ${JSON.stringify(alts)}`,
+  );
+  await ctx.close();
+});
+
 await browser.close();
 stop();
 

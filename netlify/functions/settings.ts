@@ -4,6 +4,7 @@ import { db, TABLES } from './lib/db.ts';
 import { sessionFrom } from './lib/auth.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
+import { hitLimit, tooMany } from './lib/rate-limit.ts';
 
 /**
  * /api/settings — bemor sozlamalari (kabinet → Sozlamalar, C1).
@@ -18,11 +19,16 @@ const LANGS = ['uz', 'ru', 'en'] as const;
 type Lang = (typeof LANGS)[number];
 const isLang = (v: unknown): v is Lang => typeof v === 'string' && (LANGS as readonly string[]).includes(v);
 
+/** Bir hisobdan bir soatda shuncha so'rov — «bolg'alash»ga qarshi. */
+const MAX_PER_HOUR = 60;
+
 export default async (request: Request, _context: Context): Promise<Response> => {
   const session = sessionFrom(request);
   if (!session) return error('Avval Telegram orqali kiring', 401);
 
   try {
+    const rate = await hitLimit(`sozlama#${session.phone}`, MAX_PER_HOUR, 60 * 60);
+    if (!rate.ok) return tooMany(rate.retryAfter);
     if (request.method === 'GET') {
       const found = await db.send(
         new GetCommand({ TableName: TABLES.users, Key: { telegram_id: session.userId } }),

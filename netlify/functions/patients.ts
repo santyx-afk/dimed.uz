@@ -9,6 +9,7 @@ import {
 } from './lib/patients.ts';
 import { logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
+import { hitLimit, tooMany } from './lib/rate-limit.ts';
 
 /**
  * /api/patients — telefonga bog'langan bemorlar.
@@ -22,11 +23,16 @@ import { json, error } from './lib/http.ts';
  *        { action: "add", firstName, lastName, patronymic?, birthDate } yoki
  *        { action: "birthDate", id, birthDate } — mavjud bemorga sana
  */
+/** Bir hisobdan bir soatda shuncha so'rov — «bolg'alash»ga qarshi. */
+const MAX_PER_HOUR = 120;
+
 export default async (request: Request, _context: Context): Promise<Response> => {
   const session = sessionFrom(request);
   if (!session) return error('Avval Telegram orqali kiring', 401);
 
   try {
+    const rate = await hitLimit(`bemorlar#${session.phone}`, MAX_PER_HOUR, 60 * 60);
+    if (!rate.ok) return tooMany(rate.retryAfter);
     if (request.method === 'GET') {
       const data = await listPatients(session.phone, session.userId);
       return json(data, 200, { 'cache-control': 'private, no-store' });

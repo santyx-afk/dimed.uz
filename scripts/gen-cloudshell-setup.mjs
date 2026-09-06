@@ -66,7 +66,8 @@ export function buildScript(tableDefs, doctors) {
     };
     const json = JSON.stringify(body, null, 2).replaceAll('__PREFIX__', '${PREFIX}');
     const ttl = t.ttlAttribute ? `\nttl "${t.name}" "${t.ttlAttribute}"` : '';
-    return `jadval "${t.name}" "$(cat <<JSON\n${json}\nJSON\n)"${ttl}`;
+    const pitr = t.backup ? `\npitr "${t.name}"` : '';
+    return `jadval "${t.name}" "$(cat <<JSON\n${json}\nJSON\n)"${ttl}${pitr}`;
   });
 
   const names = Object.fromEntries(FIELDS.map(([attr], i) => [`#f${i}`, attr]));
@@ -165,6 +166,26 @@ ttl() {
   ddb update-time-to-live --table-name "$toliq" \\
     --time-to-live-specification "Enabled=true,AttributeName=$maydon" >/dev/null
   echo "     TTL yoqildi: $maydon"
+}
+
+pitr() {
+  local toliq="\${PREFIX}_$1"
+
+  # Zaxira nusxa ham faqat ACTIVE jadvalda yoqiladi.
+  ddb wait table-exists --table-name "$toliq"
+
+  local hozir
+  hozir=$(ddb describe-continuous-backups --table-name "$toliq" \\
+    --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus' \\
+    --output text 2>/dev/null || echo DISABLED)
+  if [ "$hozir" = "ENABLED" ]; then
+    echo "     zaxira nusxa allaqachon yoqilgan"
+    return
+  fi
+
+  ddb update-continuous-backups --table-name "$toliq" \\
+    --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true >/dev/null
+  echo "     zaxira nusxa yoqildi (35 kun)"
 }
 
 ${tableBlocks.join('\n\n')}
