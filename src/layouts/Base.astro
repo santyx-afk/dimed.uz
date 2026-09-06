@@ -60,6 +60,10 @@ const ogImage = new URL('/images/og-cover.jpg', origin).href;
       ))
     }
     {alternates.length > 0 && <link rel="alternate" hreflang="x-default" href={alternates[0]!.href} />}
+    <script is:inline>
+      // Animatsiya faqat JS ishlaganda: sinxron, miltillamasin uchun.
+      document.documentElement.classList.add('js-reveal');
+    </script>
     <slot name="head" />
   </head>
   <body>
@@ -69,18 +73,8 @@ const ogImage = new URL('/images/og-cover.jpg', origin).href;
     <Footer lang={lang} />
 
     <script>
-      const io = new IntersectionObserver(
-        (entries) => {
-          for (const e of entries) {
-            if (e.isIntersecting) {
-              e.target.classList.add('on');
-              io.unobserve(e.target);
-            }
-          }
-        },
-        { threshold: 0.12 },
-      );
-      document.querySelectorAll('.rv').forEach((el) => io.observe(el));
+      import { revealOnScroll } from '../lib/reveal';
+      revealOnScroll();
     </script>
 
     <style>

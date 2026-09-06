@@ -8,6 +8,7 @@ import { isConfirmed, type Appointment } from './lib/appointments.ts';
 import { isDateKey, isTime } from './lib/time.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
+import { hitLimit, tooMany } from './lib/rate-limit.ts';
 
 /**
  * POST /api/cancel — bemor bronni bekor qiladi.
@@ -21,6 +22,9 @@ import { json, error } from './lib/http.ts';
  */
 type Body = { doctor?: string; date?: string; time?: string };
 
+/** Bir hisobdan bir soatda shuncha so'rov — «bolg'alash»ga qarshi. */
+const MAX_PER_HOUR = 30;
+
 export default async (request: Request, _context: Context): Promise<Response> => {
   if (request.method !== 'POST') return error('Faqat POST', 405);
 
@@ -28,6 +32,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
   if (!session) return error('Avval Telegram orqali kiring', 401);
 
   try {
+    const rate = await hitLimit(`bekor#${session.phone}`, MAX_PER_HOUR, 60 * 60);
+    if (!rate.ok) return tooMany(rate.retryAfter);
     const { doctor: doctorId, date, time } = (await request.json().catch(() => ({}))) as Body;
     if (!doctorId || !date || !time) return error('doctor, date va time kerak');
     if (!isDateKey(date) || !isTime(time)) return error('Sana yoki vaqt formati noto‘g‘ri');

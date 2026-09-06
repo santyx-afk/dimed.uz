@@ -9,6 +9,7 @@ import { isConfirmed, type Appointment } from './lib/appointments.ts';
 import { isDateKey, isTime, toInstant, weekdayOf } from './lib/time.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { json, error } from './lib/http.ts';
+import { hitLimit, tooMany } from './lib/rate-limit.ts';
 
 type Body = {
   doctor?: string;
@@ -24,6 +25,9 @@ type Body = {
  * Klinikada bekor qilish yo'q: bemor faqat vaqtni almashtira oladi.
  * Shifokor o'zgarmaydi — boshqa shifokorga o'tish yangi bron demak.
  */
+/** Bir hisobdan bir soatda shuncha so'rov — «bolg'alash»ga qarshi. */
+const MAX_PER_HOUR = 30;
+
 export default async (request: Request, _context: Context): Promise<Response> => {
   if (request.method !== 'POST') return error('Faqat POST', 405);
 
@@ -31,6 +35,8 @@ export default async (request: Request, _context: Context): Promise<Response> =>
   if (!session) return error('Avval Telegram orqali kiring', 401);
 
   try {
+    const rate = await hitLimit(`kochirish#${session.phone}`, MAX_PER_HOUR, 60 * 60);
+    if (!rate.ok) return tooMany(rate.retryAfter);
     const { doctor: doctorId, date, time, toDate, toTime } = (await request.json()) as Body;
 
     if (!doctorId || !date || !time || !toDate || !toTime) {

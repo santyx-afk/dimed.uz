@@ -2391,5 +2391,39 @@ await test('yopilgan navbatni qayta bekor qilib bo\'lmaydi', async () => {
   assert.equal(yoq.status, 404);
 });
 
+console.log('\nSo\'rov cheklovlari:');
+
+await test('sessiyasiz natija havolasi IP bo\'yicha cheklanadi', async () => {
+  const token = createShareToken('+998901234567', 'doc-uuid-1', 7);
+  const url = `https://dimed.uz/api/result?t=${encodeURIComponent(token)}`;
+
+  // Cheklovga urilgunicha chaqiramiz — birinchisi albatta o'tishi kerak.
+  const birinchi = await call(resultApi, url);
+  assert.equal(birinchi.status, 200, 'birinchi so\'rov ochilishi kerak');
+
+  let tortildi = null;
+  for (let i = 0; i < 200 && !tortildi; i++) {
+    const res = await call(resultApi, url);
+    if (res.status === 429) tortildi = res;
+  }
+  assert.ok(tortildi, 'cheksiz urinishga yo\'l qo\'yilmasligi kerak');
+  assert.match((await tortildi.json()).error, /Juda ko‘p urinish/);
+});
+
+await test('bekor qilish ham bir hisobdan cheklanadi', async () => {
+  const body = () => ({
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ doctor: 'ashurov', date: ADM_DATE, time: '23:45' }),
+  });
+
+  let tortildi = null;
+  for (let i = 0; i < 60 && !tortildi; i++) {
+    const res = await call(cancelApi, 'https://dimed.uz/api/cancel', body());
+    if (res.status === 429) tortildi = res;
+  }
+  assert.ok(tortildi, 'bekor qilish urinishlari cheklanishi kerak');
+});
+
 stopFakeDynamo();
 console.log(`\n${passed} ta API tekshiruvi o'tdi.`);

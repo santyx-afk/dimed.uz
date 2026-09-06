@@ -31,7 +31,7 @@ kiritilmagan.** Kalitlar kiritilgach — bir kun ichida ishga tushadi.
 | Onlayn navbat | Bo'lim → shifokor → sana → vaqt → tasdiq |
 | Telegram orqali kirish | SMS yo'q, parol yo'q. Botga `/start`, kontakt ulashadi, 6 xonali kod oladi (5 daqiqa amal qiladi, bir martalik) |
 | Shaxsiy kabinet | Navbatlari, tahlil natijalari, holati |
-| Vaqtni ko'chirish | Boshqa vaqtga o'tkazadi. Bekor qilish yo'q — kelishuvga muvofiq |
+| Ko'chirish va bekor qilish | Bemor kabinetdan navbatni boshqa vaqtga o'tkazadi yoki bekor qiladi (qabulga 1 soatdan ko'p qolganda) |
 | Eslatma | Qabuldan ~1 soat oldin botga xabar |
 | Tahlil natijalari | 1C dan avtomatik keladi; yangi natija tushganda botda havola; natija sahifasi, PDF va ulashish — brauzerda |
 | Baho | Qabuldan keyin botda 1–5 yulduz va izoh; o'rtacha baho shifokor kartasida |
@@ -446,8 +446,9 @@ parallel yozishni to'xtatadi.
 
 1. **To'lov hozircha qabulxonada.** Slot band qilinadi, pul klinikada
    to'lanadi. Payme kassasi ochilgach onlayn to'lov yoqiladi
-2. **Bekor qilish yo'q.** Bemor faqat vaqtni ko'chira oladi. Shifokorni
-   almashtirish — bu yangi navbat. Bu kelishilgan qoida
+2. **Bekor qilish bor.** Bemor navbatni kabinetdan bekor qila oladi yoki
+   boshqa vaqtga ko'chira oladi — ikkalasi ham qabulga 1 soatdan ko'p
+   qolganda. Shifokorni almashtirish — bu yangi navbat
 3. **1 soat qoidasi.** Qabulga 1 soatdan kam qolgan bo'lsa bron ham,
    ko'chirish ham mumkin emas
 4. **Kirish faqat Telegram orqali.** Telegram'i yo'q bemor saytdan

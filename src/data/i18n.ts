@@ -326,9 +326,9 @@ export const messages = {
   'booking.confirm.button': { uz: 'Tasdiqlash', ru: 'Подтвердить', en: 'Confirm' },
   'booking.confirm.working': { uz: 'Band qilinmoqda…', ru: 'Бронируем…', en: 'Booking…' },
   'booking.confirm.note': {
-    uz: 'Band qilish uchun Telegram orqali kirgan boʻlishingiz kerak. Bekor qilish yoʻq — qabuldan 1 soat oldingacha vaqtni koʻchirish mumkin.',
-    ru: 'Для записи нужно войти через Telegram. Отмены нет — время можно перенести не позднее чем за 1 час до приёма.',
-    en: 'You must be signed in via Telegram to book. No cancellation — you can reschedule up to 1 hour before the visit.',
+    uz: 'Band qilish uchun Telegram orqali kirgan boʻlishingiz kerak. Qabulga 1 soat qolgunicha vaqtni koʻchirish yoki bekor qilish mumkin.',
+    ru: 'Для записи нужно войти через Telegram. Перенести или отменить можно не позднее чем за час до приёма.',
+    en: 'You must be signed in via Telegram to book. You can move or cancel up to one hour before the visit.',
   },
   'booking.success.title': { uz: 'Navbatingiz band qilindi!', ru: 'Вы записаны!', en: 'Your appointment is booked!' },
   'booking.success.telegram': {
