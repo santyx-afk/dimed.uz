@@ -175,6 +175,33 @@ const copy = {
     en: '⏰ Reminder: your visit starts in an hour.',
   },
 
+  'gallery.eyebrow': { uz: 'Klinika', ru: 'Клиника', en: 'The clinic' },
+  'gallery.title': {
+    uz: 'Bizda shunday',
+    ru: 'Как у нас',
+    en: 'Inside Dimed',
+  },
+  'gallery.text': {
+    uz: 'Chinoz markazidagi yangi bino, alohida palatalar va oʻz laboratoriyamiz — tahlil uchun boshqa joyga borish shart emas.',
+    ru: 'Новое здание в центре Чиноза, отдельные палаты и собственная лаборатория — за анализами никуда ехать не нужно.',
+    en: 'A new building in central Chinoz, private rooms and our own laboratory — no need to go elsewhere for tests.',
+  },
+  'gallery.building': {
+    uz: 'Dimed klinikasi binosi — Navoiy koʻchasi, 18',
+    ru: 'Здание клиники Dimed — улица Навои, 18',
+    en: 'The Dimed clinic building — 18 Navoiy street',
+  },
+  'gallery.room': {
+    uz: 'Statsionar palata',
+    ru: 'Палата стационара',
+    en: 'Inpatient room',
+  },
+  'gallery.lab': {
+    uz: 'Biokimyoviy analizator — oʻz laboratoriyamiz',
+    ru: 'Биохимический анализатор — собственная лаборатория',
+    en: 'Biochemistry analyser in our own laboratory',
+  },
+
   'lab.eyebrow': { uz: 'Laboratoriya', ru: 'Лаборатория', en: 'Laboratory' },
   'lab.title': { uz: 'Tahlillar va narxlar', ru: 'Анализы и цены', en: 'Lab tests and prices' },
   'lab.text': {

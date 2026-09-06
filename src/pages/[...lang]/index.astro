@@ -1,6 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
 import BookingWidget from '../../components/BookingWidget.astro';
+import ClinicSchema from '../../components/ClinicSchema.astro';
 import DeptIcon from '../../components/DeptIcon.astro';
 import { departments, deptName, deptText } from '../../data/departments';
 import { ageChip } from '../../lib/age';
@@ -30,6 +31,7 @@ const featuredAnalyses = featured
 ---
 
 <Base lang={lang} title={h('meta.title', lang)} description={h('meta.description', lang)}>
+  <ClinicSchema lang={lang} slot="head" />
   <header class="hero wrap" id="navbat">
     <div class="hero-grid">
       <div>
@@ -235,6 +237,49 @@ const featuredAnalyses = featured
     </div>
   </section>
 
+  <section class="wrap" id="klinika">
+    <div class="sec-head rv">
+      <div class="eyebrow">{h('gallery.eyebrow', lang)}</div>
+      <h2>{h('gallery.title', lang)}</h2>
+      <p>{h('gallery.text', lang)}</p>
+    </div>
+    <div class="gallery">
+      <figure class="shot big rv">
+        <img
+          src="/images/klinika-bino.webp"
+          alt={h('gallery.building', lang)}
+          width="1200"
+          height="900"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption>{h('gallery.building', lang)}</figcaption>
+      </figure>
+      <figure class="shot rv">
+        <img
+          src="/images/klinika-xona.webp"
+          alt={h('gallery.room', lang)}
+          width="1200"
+          height="901"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption>{h('gallery.room', lang)}</figcaption>
+      </figure>
+      <figure class="shot rv">
+        <img
+          src="/images/klinika-laboratoriya.webp"
+          alt={h('gallery.lab', lang)}
+          width="1200"
+          height="558"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption>{h('gallery.lab', lang)}</figcaption>
+      </figure>
+    </div>
+  </section>
+
   <section class="wrap" id="tahlillar-preview">
     <div class="sec-head rv">
       <div class="eyebrow">{h('lab.eyebrow', lang)}</div>
@@ -343,6 +388,60 @@ const featuredAnalyses = featured
 </script>
 
 <style>
+
+  /* Klinika suratlari: katta bino chapda, ikki kichigi o'ngda ustma-ust. */
+  .gallery {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    grid-template-rows: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .shot {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+  }
+
+  .shot.big {
+    grid-row: span 2;
+  }
+
+  .shot img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .shot figcaption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 24px 16px 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(to top, rgb(0 0 0 / 0.62), transparent);
+  }
+
+  @media (max-width: 760px) {
+    .gallery {
+      grid-template-columns: 1fr;
+      grid-template-rows: none;
+    }
+
+    .shot.big {
+      grid-row: auto;
+    }
+
+    .shot img {
+      aspect-ratio: 4 / 3;
+    }
+  }
   section {
     padding: var(--section-pad) 0;
   }

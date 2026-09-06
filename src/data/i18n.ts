@@ -43,6 +43,18 @@ export const messages = {
   'nav.contact': { uz: 'Kontakt', ru: 'Контакты', en: 'Contact' },
   'nav.cabinet': { uz: 'Kabinet', ru: 'Кабинет', en: 'Cabinet' },
   'nav.book': { uz: 'Navbat olish', ru: 'Записаться', en: 'Book' },
+  'footer.privacy': { uz: 'Maxfiylik siyosati', ru: 'Политика конфиденциальности', en: 'Privacy policy' },
+
+  // --- 404 ---
+  'notfound.title': { uz: 'Sahifa topilmadi — Dimed', ru: 'Страница не найдена — Dimed', en: 'Page not found — Dimed' },
+  'notfound.heading': { uz: 'Bunday sahifa yoʻq', ru: 'Такой страницы нет', en: 'This page does not exist' },
+  'notfound.text': {
+    uz: 'Havola eskirgan yoki manzil xato yozilgan boʻlishi mumkin. Quyidagilardan birini tanlang — yoki qoʻngʻiroq qiling, biz yordam beramiz.',
+    ru: 'Ссылка могла устареть или в адресе опечатка. Выберите один из вариантов ниже — или позвоните нам, мы поможем.',
+    en: 'The link may be out of date, or the address mistyped. Pick one of the options below — or call us and we will help.',
+  },
+  'notfound.home': { uz: 'Bosh sahifa', ru: 'На главную', en: 'Home page' },
+  'notfound.cabinet': { uz: 'Shaxsiy kabinet', ru: 'Личный кабинет', en: 'My cabinet' },
 
   // --- kirish sahifasi (/kirish) ---
   'signin.page.title': { uz: 'Kirish — Dimed klinikasi', ru: 'Вход — клиника Dimed', en: 'Sign in — Dimed clinic' },

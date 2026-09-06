@@ -303,6 +303,46 @@ await test('/en/tahlillar tahlil nomlarini inglizchada beradi', async () => {
   await ctx.close();
 });
 
+
+await test('404 sahifasi yoʻl koʻrsatadi va tilga moslashadi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1000, height: 800 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/404?lang=ru`, { waitUntil: 'networkidle' });
+
+  const body = await page.textContent('.card');
+  assert.match(body, /Такой страницы нет/, `404 ruscha bo‘lishi kerak, keldi: ${body.slice(0, 80)}`);
+  assert.ok(!body.includes('notfound.'), 'kalit nomi ko‘rinib qolmasligi kerak');
+
+  // Uchta chiqish yo'li: bosh sahifa, tahlillar, kabinet.
+  const links = await page.$$eval('.acts a', (as) => as.map((a) => new URL(a.href).pathname));
+  assert.deepEqual(links, ['/', '/tahlillar', '/kabinet']);
+  await ctx.close();
+});
+
+await test('bosh sahifada klinika razmetkasi va suratlar bor', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
+
+  const raw = await page.textContent('script[type="application/ld+json"]');
+  const schema = JSON.parse(raw);
+  assert.equal(schema['@type'], 'MedicalClinic');
+  assert.ok(schema.employee.length > 0, 'shifokorlar razmetkaga kirishi kerak');
+  assert.equal(schema.address.addressLocality, 'Chinoz');
+  assert.ok(schema.openingHoursSpecification[0].opens, 'ish vaqti ko‘rsatilishi kerak');
+
+  // Suratlar: har birida alt matni bo'lsin (skrinrider uchun ham, SEO uchun ham).
+  const alts = await page.$$eval('#klinika img', (imgs) => imgs.map((i) => i.alt));
+  assert.equal(alts.length, 3, 'uchta surat');
+  assert.ok(
+    alts.every((a) => a.length > 5),
+    `har bir suratda alt bo‘lishi kerak, keldi: ${JSON.stringify(alts)}`,
+  );
+  await ctx.close();
+});
+
 await browser.close();
 stop();
 
