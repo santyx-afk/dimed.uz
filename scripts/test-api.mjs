@@ -74,6 +74,7 @@ const adminPrices = await load('admin-prices.ts');
 const notifyResults = await load('notify-results.ts');
 const askRatings = await load('ask-ratings.ts');
 const adminRatings = await load('admin-ratings.ts');
+const adminAppointments = await load('admin-appointments.ts');
 const { createShareToken } = await import(pathToFileURL(join(fnDir, 'lib', 'share.ts')).href);
 
 const { toTashkent, toInstant, addDays } = await import(
@@ -2257,6 +2258,137 @@ await test('PAYMENT_ENABLED o\'chiq bo\'lsa bron yana kassada to\'lash rejimida'
   const data = await res.json();
   assert.equal(data.mode, 'at_clinic');
   assert.equal(data.redirectUrl, undefined, 'to\'lov havolasi bo\'lmasligi kerak');
+});
+
+// ================= Admin: navbatlar va hisobot =================
+console.log('\nAdmin — navbatlar va hisobot:');
+
+const ADM_TODAY = toTashkent(new Date()).dateKey;
+const ADM_DATE = addDays(ADM_TODAY, 40);
+const ADM_PAST = addDays(ADM_TODAY, -5);
+
+// Kesim ikki shifokorda ko'rinsin — ro'yxatga ikkinchisi ham qo'shiladi.
+seed('test_doctors', 'rahimov', {
+  doctor_id: 'rahimov', name: 'Rahimov Umid', job: 'Nevrolog', dept_id: 'nevrologiya',
+  slot_minutes: 30, shifts: [{ start: '09:00', end: '15:00' }],
+  workdays: [0, 1, 2, 3, 4, 5, 6], price: 90000, active: true,
+});
+
+const seedAdmAppt = (doctor, date, time, extra = {}) =>
+  seed('test_appointments', `${doctor}#${date}|${time}`, {
+    doctor_day: `${doctor}#${date}`, time, doctor_id: doctor, date,
+    phone: '+998901234567', telegram_id: '777', patient_id: '555A',
+    patient_name: 'Azizova Dilnoza', starts_at: toInstant(date, time).toISOString(),
+    status: 'booked', price: 70000, created_at: new Date().toISOString(), ...extra,
+  });
+
+await test('admin-appointments sessiyasiz 401, oddiy bemorga 403', async () => {
+  assert.equal((await call(adminAppointments, 'https://dimed.uz/api/admin-appointments')).status, 401);
+  const res = await call(adminAppointments, 'https://dimed.uz/api/admin-appointments', {
+    headers: { cookie: sessionCookie },
+  });
+  assert.equal(res.status, 403);
+});
+
+await test('bir kunda barcha shifokorlar navbati va hisobi ko\'rinadi', async () => {
+  seedAdmAppt('ashurov', ADM_DATE, '09:00');
+  seedAdmAppt('ashurov', ADM_DATE, '10:00', { status: 'done' });
+  seedAdmAppt('rahimov', ADM_DATE, '11:00', { status: 'no_show', price: 90000, patient_name: 'Karimov Sardor' });
+  seedAdmAppt('rahimov', ADM_DATE, '12:00', { status: 'cancelled' });
+  // Muddati o'tgan hold — navbat emas, hisobga kirmaydi.
+  seedAdmAppt('ashurov', ADM_DATE, '13:00', { status: 'hold', hold_until: 1 });
+
+  const res = await call(adminAppointments, `https://dimed.uz/api/admin-appointments?date=${ADM_DATE}`, {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.date, ADM_DATE);
+  assert.equal(data.appointments.length, 5, 'hammasi ro\'yxatda (holdi ham) keladi');
+  assert.equal(data.appointments[0].time, '09:00', 'vaqt bo\'yicha tartiblangan');
+  assert.equal(data.stats.total, 4, 'muddati o\'tgan hold hisobga kirmaydi');
+  assert.equal(data.stats.bolibOtdi, 1);
+  assert.equal(data.stats.kelmadi, 1);
+  assert.equal(data.stats.bekor, 1);
+  assert.equal(data.stats.tushum, 70000, 'tushum — faqat qabul bo\'lganlar');
+
+  const withName = data.appointments.find((a) => a.time === '11:00');
+  assert.equal(withName.doctorName, 'Rahimov Umid', 'shifokor ismi qo\'shiladi');
+  assert.equal(withName.phone, '+998901234567', 'ega to\'liq raqamni ko\'radi');
+  assert.equal(withName.patientName, 'Karimov Sardor');
+});
+
+await test('davr hisoboti shifokorlar kesimini beradi', async () => {
+  seedAdmAppt('ashurov', ADM_PAST, '09:00', { status: 'done' });
+  const res = await call(
+    adminAppointments,
+    `https://dimed.uz/api/admin-appointments?from=${ADM_PAST}&to=${ADM_DATE}`,
+    { headers: { cookie: adminCookie } },
+  );
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.from, ADM_PAST);
+  assert.ok(data.stats.total >= 5, `davrda hamma kun qamrab olinadi, keldi: ${data.stats.total}`);
+  assert.ok(data.stats.tushum >= 140000, `ikki qabulning summasi, keldi: ${data.stats.tushum}`);
+
+  const ashurov = data.byDoctor.find((d) => d.doctorId === 'ashurov');
+  assert.ok(ashurov, 'ashurov kesimda bo\'lishi kerak');
+  assert.ok(ashurov.bolibOtdi >= 2);
+  assert.ok(data.byDoctor.every((d) => d.total > 0), 'navbati yo\'q shifokor ro\'yxatga tushmaydi');
+});
+
+await test('juda uzoq davr rad etiladi', async () => {
+  const res = await call(
+    adminAppointments,
+    `https://dimed.uz/api/admin-appointments?from=${addDays(ADM_TODAY, -200)}&to=${ADM_TODAY}`,
+    { headers: { cookie: adminCookie } },
+  );
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /92 kun/);
+});
+
+await test('admin navbatni bekor qiladi va bemorga xabar ketadi', async () => {
+  telegramCalls.length = 0;
+  const res = await call(adminAppointments, 'https://dimed.uz/api/admin-appointments', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ doctorId: 'ashurov', date: ADM_DATE, time: '09:00', reason: 'Shifokor kasal' }),
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.ok, true);
+  assert.equal(data.notified, true);
+
+  const row = tableOf('test_appointments').get(`ashurov#${ADM_DATE}|09:00`);
+  assert.equal(row.status, 'cancelled_by_clinic');
+  assert.equal(row.off_reason, 'Shifokor kasal');
+
+  const xabar = telegramCalls.find((c) => c.body.chat_id === '777');
+  assert.ok(xabar, 'bemorga xabar ketishi kerak');
+  assert.ok(xabar.body.text.includes('Shifokor kasal'), 'sabab xabarda bo\'ladi');
+
+  // Slot yana bo'shaydi.
+  const day = await (await call(adminAppointments, `https://dimed.uz/api/admin-appointments?date=${ADM_DATE}`, {
+    headers: { cookie: adminCookie },
+  })).json();
+  assert.equal(day.stats.bekor, 2, 'bekor qilinganlar soni oshadi');
+});
+
+await test('yopilgan navbatni qayta bekor qilib bo\'lmaydi', async () => {
+  const res = await call(adminAppointments, 'https://dimed.uz/api/admin-appointments', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ doctorId: 'ashurov', date: ADM_DATE, time: '09:00' }),
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /yopilgan/);
+
+  const yoq = await call(adminAppointments, 'https://dimed.uz/api/admin-appointments', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ doctorId: 'ashurov', date: ADM_DATE, time: '23:30' }),
+  });
+  assert.equal(yoq.status, 404);
 });
 
 stopFakeDynamo();

@@ -1,0 +1,663 @@
+---
+import Cabinet from '../../../layouts/Cabinet.astro';
+import SignInCard from '../../../components/SignInCard.astro';
+import { t } from '../../../data/i18n';
+
+/*
+  Admin — Navbatlar. Ega butun klinikani bir joyda ko'radi: kim, qaysi
+  shifokorga, qachon yozilgan; kim keldi, kim kelmadi. Telefon raqami
+  to'liq ko'rinadi — bemorga qo'ng'iroq qilish uchun (shifokor kabinetida
+  esa u yashirilgan bo'lib qoladi).
+
+  Ikkinchi kartada — davr hisoboti: navbatlar soni, tushum va
+  shifokorlar kesimi.
+*/
+---
+
+<Cabinet
+  title="Navbatlar — Admin"
+  description="Klinikadagi barcha navbatlar, holatlari va davr hisoboti."
+  eyebrow="Administrator"
+  heading="Navbatlar"
+  area="admin"
+  active="navbatlar"
+>
+  <span class="sub" id="subtitle" slot="sub"></span>
+
+  <div id="loading" class="state">Yuklanmoqda…</div>
+
+  <SignInCard what={t('signin.what.admin')} next="/kabinet/admin/navbatlar" id="denied" hidden />
+
+  <div id="content" hidden>
+    <div class="card glass">
+      <div class="card-head">
+        <h2>Bir kun</h2>
+        <div class="filters">
+          <button class="mini" type="button" id="prevDay" aria-label="Oldingi kun">‹</button>
+          <input type="date" id="day" aria-label="Sana" />
+          <button class="mini" type="button" id="nextDay" aria-label="Keyingi kun">›</button>
+          <button class="mini" type="button" id="todayBtn">Bugun</button>
+        </div>
+      </div>
+
+      <div class="chips" id="dayStats"></div>
+
+      <div class="filters list-filters">
+        <select id="docFilter" aria-label="Shifokor bo‘yicha saralash">
+          <option value="">Barcha shifokorlar</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="showClosed" /> Bekor qilinganlarni ham ko‘rsatish</label>
+      </div>
+
+      <p class="empty" id="empty" hidden>Bu kunda navbat yo‘q.</p>
+      <div class="rows" id="rows"></div>
+    </div>
+
+    <div class="card glass">
+      <div class="card-head">
+        <h2>Hisobot</h2>
+        <div class="filters">
+          <button class="mini" type="button" data-range="7">7 kun</button>
+          <button class="mini" type="button" data-range="30">30 kun</button>
+          <button class="mini" type="button" data-range="90">90 kun</button>
+          <input type="date" id="from" aria-label="Boshlanish sanasi" />
+          <span class="dash">—</span>
+          <input type="date" id="to" aria-label="Tugash sanasi" />
+        </div>
+      </div>
+
+      <div class="chips" id="rangeStats"></div>
+      <p class="hint" id="rangeNote"></p>
+      <div class="rows" id="byDoctor"></div>
+    </div>
+  </div>
+</Cabinet>
+
+<script>
+  import { t } from '../../../data/i18n';
+  import { getLang } from '../../../lib/lang';
+  import { showSignIn } from '../../../lib/signin';
+
+  type Row = {
+    doctorId: string;
+    doctorName: string;
+    date: string;
+    time: string;
+    status: string;
+    patientName: string;
+    phone: string;
+    price: number;
+    active: boolean;
+    createdAt: string;
+  };
+  type Stats = {
+    total: number;
+    kutilmoqda: number;
+    bolibOtdi: number;
+    kelmadi: number;
+    bekor: number;
+    tushum: number;
+    kutilayotganPul: number;
+  };
+  type DayData = { date: string; today: string; appointments: Row[]; stats: Stats };
+  type RangeData = {
+    from: string;
+    to: string;
+    stats: Stats;
+    byDoctor: (Stats & { doctorId: string; doctorName: string })[];
+  };
+
+  const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) =>
+    s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+  const sum = (n: number) => `${n.toLocaleString('ru-RU').replace(/ /g, ' ')} so‘m`;
+  const fmtDate = (key: string) => {
+    const [y, m, d] = key.split('-');
+    return y && m && d ? `${d}.${m}.${y}` : key;
+  };
+
+  /** Holat nomi va rangi — shifokor kabineti bilan bir xil tilda. */
+  const STATUS: Record<string, { text: string; cls: string }> = {
+    hold: { text: 'to‘lov kutilmoqda', cls: 'warn' },
+    paid: { text: 'to‘langan', cls: 'ok' },
+    booked: { text: 'kassada to‘lanadi', cls: 'ok' },
+    done: { text: 'qabul bo‘ldi', cls: 'done' },
+    no_show: { text: 'kelmadi', cls: 'bad' },
+    moved: { text: 'ko‘chirildi', cls: 'off' },
+    cancelled: { text: 'bemor bekor qildi', cls: 'off' },
+    cancelled_by_clinic: { text: 'klinika bekor qildi', cls: 'off' },
+  };
+  /** Yopilgan navbat — ro'yxatda standart holda yashiriladi. */
+  const CLOSED = new Set(['moved', 'cancelled', 'cancelled_by_clinic']);
+  /** Faqat shularni bekor qilib bo'ladi. */
+  const CANCELLABLE = new Set(['hold', 'paid', 'booked']);
+
+  const iso = (d: Date) => {
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+  const shift = (key: string, days: number) => {
+    const [y, m, d] = key.split('-').map(Number);
+    const at = new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1));
+    at.setUTCDate(at.getUTCDate() + days);
+    return at.toISOString().slice(0, 10);
+  };
+
+  let day: DayData | null = null;
+
+  /** 401/403 — kirish kartasi; boshqasi — xato matni. Ikki so'rov uchun bitta joyda. */
+  async function ask(url: string): Promise<Response | null> {
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (res.status === 401 || res.status === 403) {
+      const body = res.status === 403 ? ((await res.json()) as { telegramId?: string }) : {};
+      showSignIn(
+        res.status,
+        [
+          t('denied.admin', getLang()),
+          body.telegramId
+            ? `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+        'denied',
+      );
+      return null;
+    }
+    if (!res.ok) throw new Error(String(res.status));
+    return res;
+  }
+
+  async function loadDay(date?: string) {
+    let res: Response | null;
+    try {
+      res = await ask(`/api/admin-appointments${date ? `?date=${date}` : ''}`);
+    } catch {
+      el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
+      return;
+    }
+    if (!res) return;
+
+    day = (await res.json()) as DayData;
+    el('loading').hidden = true;
+    el('content').hidden = false;
+    el<HTMLInputElement>('day').value = day.date;
+
+    const names = [...new Map(day.appointments.map((a) => [a.doctorId, a.doctorName])).entries()];
+    const filter = el<HTMLSelectElement>('docFilter');
+    const kept = filter.value;
+    filter.innerHTML =
+      '<option value="">Barcha shifokorlar</option>' +
+      names
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .map(([id, name]) => `<option value="${esc(id)}">${esc(name)}</option>`)
+        .join('');
+    filter.value = names.some(([id]) => id === kept) ? kept : '';
+
+    renderDay();
+  }
+
+  function chip(label: string, value: string, cls = '') {
+    return `<span class="chip ${cls}"><b>${esc(value)}</b><small>${esc(label)}</small></span>`;
+  }
+
+  function statChips(s: Stats, withMoney: boolean) {
+    return [
+      chip('navbat', String(s.total)),
+      chip('kutilmoqda', String(s.kutilmoqda), 'ok'),
+      chip('qabul bo‘ldi', String(s.bolibOtdi), 'done'),
+      chip('kelmadi', String(s.kelmadi), 'bad'),
+      chip('bekor', String(s.bekor), 'off'),
+      withMoney ? chip('tushum (qabul bo‘lganlar)', sum(s.tushum), 'money') : '',
+    ]
+      .filter(Boolean)
+      .join('');
+  }
+
+  function renderDay() {
+    if (!day) return;
+    const s = day.stats;
+    el('subtitle').textContent =
+      `${fmtDate(day.date)} · ${s.total} ta navbat` +
+      (s.kelmadi ? ` · ${s.kelmadi} kelmadi` : '');
+    el('dayStats').innerHTML = statChips(s, true);
+
+    const docId = el<HTMLSelectElement>('docFilter').value;
+    const withClosed = el<HTMLInputElement>('showClosed').checked;
+    const list = day.appointments.filter(
+      (a) =>
+        (!docId || a.doctorId === docId) &&
+        (withClosed || !CLOSED.has(a.status)) &&
+        // Muddati o'tgan hold — bu navbat emas, to'lov tashlab ketilgan.
+        !(a.status === 'hold' && !a.active),
+    );
+
+    el('empty').hidden = list.length > 0;
+    el('rows').innerHTML = list
+      .map((a) => {
+        const st = STATUS[a.status] ?? { text: a.status, cls: 'off' };
+        const tel = a.phone.replace(/[^\d+]/g, '');
+        return `<div class="row appt${CLOSED.has(a.status) ? ' off' : ''}">
+          <div class="when-time">${esc(a.time)}</div>
+          <div class="row-main">
+            <b>${esc(a.patientName || 'Ism ko‘rsatilmagan')}</b>
+            <small>${esc(a.doctorName)}${a.price ? ` · ${esc(sum(a.price))}` : ''}</small>
+          </div>
+          ${a.phone ? `<a class="tel" href="tel:${esc(tel)}">${esc(a.phone)}</a>` : '<span class="tel none">raqam yo‘q</span>'}
+          <span class="tag ${st.cls}">${esc(st.text)}</span>
+          ${
+            CANCELLABLE.has(a.status)
+              ? `<button class="mini danger" type="button" data-cancel="${esc(a.doctorId)}|${esc(a.time)}">Bekor qilish</button>`
+              : '<span class="mini-space"></span>'
+          }
+          <span class="row-msg"></span>
+        </div>`;
+      })
+      .join('');
+
+    el('rows')
+      .querySelectorAll<HTMLButtonElement>('[data-cancel]')
+      .forEach((btn) => btn.addEventListener('click', () => cancelOne(btn)));
+  }
+
+  async function cancelOne(btn: HTMLButtonElement) {
+    if (!day) return;
+    const [doctorId, time] = (btn.dataset.cancel ?? '').split('|');
+    const row = btn.closest<HTMLElement>('.row')!;
+    const msg = row.querySelector<HTMLElement>('.row-msg')!;
+    const who = row.querySelector('b')?.textContent ?? 'bemor';
+    if (!confirm(`${who} ning ${time} dagi navbati bekor qilinsinmi? Bemorga botda xabar boradi.`)) return;
+
+    const reason = prompt('Sabab (bemorga shu matn boradi):', 'Klinika bekor qildi');
+    if (reason === null) return;
+
+    btn.disabled = true;
+    msg.textContent = '…';
+    msg.className = 'row-msg';
+    try {
+      const res = await fetch('/api/admin-appointments', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ doctorId, date: day.date, time, reason: reason.trim() }),
+      });
+      const data = (await res.json()) as { error?: string; notified?: boolean };
+      if (!res.ok) {
+        msg.textContent = data.error ?? 'Xato';
+        msg.className = 'row-msg error';
+        return;
+      }
+      await loadDay(day.date);
+      await loadRange();
+    } catch {
+      msg.textContent = 'Internetga ulanishda muammo';
+      msg.className = 'row-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function loadRange() {
+    const from = el<HTMLInputElement>('from').value;
+    const to = el<HTMLInputElement>('to').value;
+    if (!from || !to) return;
+
+    el('rangeNote').textContent = 'Hisoblanmoqda…';
+    let res: Response | null;
+    try {
+      res = await ask(`/api/admin-appointments?from=${from}&to=${to}`);
+    } catch {
+      el('rangeNote').textContent = 'Hisobotni yuklab bo‘lmadi.';
+      return;
+    }
+    if (!res) return;
+
+    const data = (await res.json()) as RangeData;
+    el('rangeStats').innerHTML = statChips(data.stats, true);
+    el('rangeNote').textContent =
+      `${fmtDate(data.from)} — ${fmtDate(data.to)}` +
+      (data.stats.kutilayotganPul
+        ? ` · oldinda turgan bronlar: ${sum(data.stats.kutilayotganPul)}`
+        : '');
+
+    el('byDoctor').innerHTML = data.byDoctor.length
+      ? data.byDoctor
+          .map(
+            (d) => `<div class="row doc">
+              <div class="row-main">
+                <b>${esc(d.doctorName)}</b>
+                <small>${d.total} ta navbat · ${d.bolibOtdi} qabul · ${d.kelmadi} kelmadi · ${d.bekor} bekor</small>
+              </div>
+              <span class="money">${esc(sum(d.tushum))}</span>
+            </div>`,
+          )
+          .join('')
+      : '<p class="empty">Bu davrda navbat yo‘q.</p>';
+  }
+
+  el('day').addEventListener('change', () => void loadDay(el<HTMLInputElement>('day').value));
+  el('prevDay').addEventListener('click', () => void loadDay(shift(el<HTMLInputElement>('day').value, -1)));
+  el('nextDay').addEventListener('click', () => void loadDay(shift(el<HTMLInputElement>('day').value, 1)));
+  el('todayBtn').addEventListener('click', () => void loadDay());
+  el('docFilter').addEventListener('change', renderDay);
+  el('showClosed').addEventListener('change', renderDay);
+  el('from').addEventListener('change', () => void loadRange());
+  el('to').addEventListener('change', () => void loadRange());
+
+  document.querySelectorAll<HTMLButtonElement>('[data-range]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const days = Number(btn.dataset.range ?? 30);
+      const end = iso(new Date());
+      el<HTMLInputElement>('from').value = shift(end, -(days - 1));
+      el<HTMLInputElement>('to').value = end;
+      void loadRange();
+    }),
+  );
+
+  // Boshlanishida: bugungi kun va oxirgi 30 kunlik hisobot.
+  const start = iso(new Date());
+  el<HTMLInputElement>('from').value = shift(start, -29);
+  el<HTMLInputElement>('to').value = start;
+  void loadDay().then(() => {
+    if (!el('content').hidden) void loadRange();
+  });
+</script>
+
+<style>
+  .sub {
+    display: block;
+    color: var(--rose);
+    font-weight: 650;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  .state {
+    text-align: center;
+    padding: 48px 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: var(--card-pad);
+    margin-bottom: 16px;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .card h2 {
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    font-family: var(--font-sans);
+  }
+
+  .hint {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 8px 0 16px;
+  }
+
+  .filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .list-filters {
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .filters select,
+  .filters input[type='date'] {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 13.5px;
+  }
+
+  .dash {
+    color: var(--muted);
+  }
+
+  .chk {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .chk input {
+    accent-color: var(--leaf);
+    width: 16px;
+    height: 16px;
+  }
+
+  .empty {
+    color: var(--muted);
+    font-size: 14px;
+    padding: 8px 0;
+  }
+
+  .mini {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .mini:hover {
+    border-color: var(--leaf);
+  }
+
+  /* Kartochkalar JS bilan chiziladi — :global (Astro qamrovi JS tugunlariga yetmaydi). */
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .chips :global(.chip) {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 16px;
+    min-width: 96px;
+  }
+
+  .chips :global(.chip b) {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .chips :global(.chip small) {
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+
+  .chips :global(.chip.ok b) {
+    color: var(--leaf);
+  }
+
+  .chips :global(.chip.done b) {
+    color: var(--ink);
+  }
+
+  .chips :global(.chip.bad b) {
+    color: var(--rose);
+  }
+
+  .chips :global(.chip.money) {
+    min-width: 160px;
+  }
+
+  .chips :global(.chip.money b) {
+    font-size: 16px;
+    color: var(--leaf);
+  }
+
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .rows :global(.row) {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    flex-wrap: wrap;
+  }
+
+  .rows :global(.row.off) {
+    opacity: 0.55;
+  }
+
+  .rows :global(.when-time) {
+    font-weight: 700;
+    font-size: 15px;
+    min-width: 48px;
+  }
+
+  .rows :global(.row-main) {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .rows :global(.row-main b) {
+    font-size: 14.5px;
+  }
+
+  .rows :global(.row-main small) {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .rows :global(.tel) {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--leaf);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .rows :global(.tel.none) {
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .rows :global(.tag) {
+    font-size: 11.5px;
+    font-weight: 650;
+    border-radius: 999px;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  .rows :global(.tag.ok) {
+    color: var(--leaf);
+    border-color: color-mix(in srgb, var(--leaf) 40%, transparent);
+  }
+
+  .rows :global(.tag.warn) {
+    color: #a06800;
+    border-color: #e8c37a;
+  }
+
+  .rows :global(.tag.bad) {
+    color: var(--rose);
+    border-color: color-mix(in srgb, var(--rose) 40%, transparent);
+  }
+
+  .rows :global(.money) {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--leaf);
+  }
+
+  /* Tugma JS bilan chiziladi — asosiy ko'rinish ham :global bo'lishi kerak. */
+  .rows :global(.mini) {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .rows :global(.mini.danger) {
+    color: var(--rose);
+    border-color: color-mix(in srgb, var(--rose) 35%, transparent);
+  }
+
+  .rows :global(.mini.danger:hover) {
+    border-color: var(--rose);
+  }
+
+  .rows :global(.mini:disabled) {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .rows :global(.row-msg) {
+    font-size: 12.5px;
+    color: var(--muted);
+    flex-basis: 100%;
+  }
+
+  .rows :global(.row-msg.error) {
+    color: var(--rose);
+  }
+
+  @media (max-width: 600px) {
+    .card {
+      padding: 16px;
+    }
+
+    .rows :global(.row) {
+      padding: 16px;
+      gap: 8px;
+    }
+
+    .rows :global(.tel) {
+      flex-basis: 100%;
+    }
+  }
+</style>
