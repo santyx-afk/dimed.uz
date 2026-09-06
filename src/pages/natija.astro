@@ -105,6 +105,7 @@ import { site } from '../data/site';
   import { t, type Lang } from '../data/i18n';
   import { getLang, bindLangSwitch } from '../lib/lang';
   import { formatBirthDate, ageOf } from '../lib/birthdate';
+  import { resultTitle } from '../lib/result-title';
 
   type Status = 'normal' | 'high' | 'low' | null;
   type Item = {
@@ -122,6 +123,7 @@ import { site } from '../data/site';
   type Result = {
     id: string;
     title: string;
+    titleKey?: string;
     date: string;
     patientName: string | null;
     patientBirthDate: string | null;
@@ -199,7 +201,8 @@ import { site } from '../data/site';
     el('repFoot').textContent = `${tr('result.footer')} · ${new Date().getFullYear()}`;
     el('btnPdfText').textContent = tr('result.download');
     el('btnShareText').textContent = tr('result.share');
-    document.title = `${r.title} — Dimed`;
+    const heading = resultTitle(r, lang);
+    document.title = `${heading} — Dimed`;
 
     // bemor
     el('valPatient').textContent = r.patientName ?? '—';
@@ -226,7 +229,7 @@ import { site } from '../data/site';
         : tr('result.banner.unknown');
 
     // jadval
-    el('secTitle').textContent = r.title;
+    el('secTitle').textContent = heading;
     el('rows').innerHTML = r.items
       .map((item) => {
         const desc = item.description ? (item.description[lang] ?? item.description.uz) : '';
@@ -311,18 +314,46 @@ import { site } from '../data/site';
       .replace(/[^\p{L}\p{N}]+/gu, '_')
       .replace(/^_+|_+$/g, '') || 'bemor';
 
-  let pdfLib: Promise<unknown> | null = null;
-  const loadHtml2pdf = (): Promise<unknown> => {
-    if (pdfLib) return pdfLib;
-    pdfLib = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      s.onload = () => resolve((window as unknown as { html2pdf: unknown }).html2pdf);
-      s.onerror = () => reject(new Error('html2pdf yuklanmadi'));
-      document.head.appendChild(s);
-    });
+  /*
+    Kutubxona sahifa bilan birga yuklanmaydi: "PDF yuklash" bosilganda
+    alohida bo'lak (chunk) sifatida keladi. Manba — o'z domenimiz, ya'ni
+    `script-src 'self'` bilan ishlaydi. Ilgari u cdnjs'dan olinardi va
+    CSP uni jimgina bloklardi: tugma har safar brauzerning chop etish
+    oynasiga tushib ketardi.
+  */
+  type Html2Pdf = typeof import('html2pdf.js').default;
+
+  let pdfLib: Promise<Html2Pdf> | null = null;
+  const loadHtml2pdf = (): Promise<Html2Pdf> => {
+    pdfLib ??= import('html2pdf.js').then((m) => m.default);
     return pdfLib;
   };
+
+  /**
+   * Sahifani tepaga **darhol** chiqaradi va chiqqanini kutadi.
+   *
+   * `html { scroll-behavior: smooth }` bo'lgani uchun oddiy
+   * `scrollTo(0, 0)` animatsiya qiladi: html2canvas esa animatsiya
+   * tugamasdan surat oladi va qolgan masofa PDF tepasida bo'sh joy
+   * bo'lib qoladi (Safari'da bu ayniqsa sezilardi). Shu safar uchun
+   * silliq surilish o'chiriladi.
+   */
+  function scrollToTop(): Promise<void> {
+    return new Promise((resolve) => {
+      if (window.scrollY === 0) {
+        resolve();
+        return;
+      }
+      const root = document.documentElement;
+      const previous = root.style.scrollBehavior;
+      root.style.scrollBehavior = 'auto';
+      window.scrollTo(0, 0);
+      requestAnimationFrame(() => {
+        root.style.scrollBehavior = previous;
+        resolve();
+      });
+    });
+  }
 
   el('btnPdf').addEventListener('click', async () => {
     if (!result) return;
@@ -332,16 +363,35 @@ import { site } from '../data/site';
 
     btn.disabled = true;
     report.classList.add('pdf-mode');
+
+    /*
+      html2canvas sahifani ekran koordinatalarida oladi: bemor
+      ko'rsatkichlarni ko'rish uchun pastga tushib tugmani bossa,
+      surilgan masofa PDF tepasida bo'sh joy bo'lib qolardi (shikoyatda
+      "deyarli ikki bet"). Shuning uchun avval tepaga chiqamiz va
+      sanoq nuqtasini html2canvas'ga aniq ko'rsatamiz.
+    */
+    const scrollY = window.scrollY;
+    await scrollToTop();
+
     try {
-      const html2pdf = (await loadHtml2pdf()) as (...args: unknown[]) => {
-        set: (o: unknown) => { from: (e: HTMLElement) => { save: () => Promise<void> } };
-      };
+      const html2pdf = await loadHtml2pdf();
       await html2pdf()
         .set({
           margin: [8, 8, 10, 8],
           filename,
           image: { type: 'jpeg', quality: 0.96 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            /* Tepaga chiqqan bo'lsak nol; chiqmay qolsa ham surilish
+               shu yerda qoplanadi — Safari uchun tavsiya etilgan yo'l. */
+            scrollX: 0,
+            scrollY: -window.scrollY,
+            windowWidth: document.documentElement.offsetWidth,
+            windowHeight: document.documentElement.offsetHeight,
+          },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
           pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.patient-table', '.banner'] },
         })
@@ -352,6 +402,7 @@ import { site } from '../data/site';
       window.print();
     } finally {
       report.classList.remove('pdf-mode');
+      window.scrollTo(0, scrollY);
       btn.disabled = false;
     }
   });
@@ -927,6 +978,13 @@ import { site } from '../data/site';
 
     .page {
       padding: 0;
+      /* Ekranda sahifa bo'sh ko'rinmasin uchun qo'yilgan balandlik
+         chop etishda ortiqcha bo'sh varaq bo'lib qolardi. */
+      min-height: 0;
+    }
+
+    .state {
+      display: none !important;
     }
 
     .report {
