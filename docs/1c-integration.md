@@ -208,6 +208,29 @@ kelsa ISO ga o'giriladi — lekin `DF=yyyy-MM-ddTHH:mm:ss` ishonchliroq.
 > saytga ko'rinmaydi. Konstanta o'zgargach eski yozuvlarni yangi
 > jadvalga qayta yuborish kifoya.
 
+## "Doktorga Qabul" — bemor keldimi (2026-09-07)
+
+Uchinchi jadval qo'shildi. Registrator bemorni qabul qilganda 1C'da
+**"Doktorga Qabul"** (`Document.DoctorsAdmission`) hujjatini
+**o'tkazadi** — kengaytma uni quyidagi jadvalga yozadi, sayt esa
+navbatni «bemor keldi» deb belgilaydi.
+
+| Sozlama | Qiymat |
+| --- | --- |
+| Jadval nomi (`DynamoVisitsTable` konstantasi) | **`dimed_visits`** |
+| Region | **`us-east-1`** |
+| Partition key | `phone` (String) — `+998XXXXXXXXX` |
+| Sort key | `sort_key` (String) — hujjat UUID |
+| Indeks | `date-index` (`date` + `sort_key`) |
+
+Muhim maydon — **`Posted`** (BOOL): `true` bo'lsa bemor kelgan.
+Kun oxirigacha hujjat o'tkazilmasa sayt navbatni «kelmadi» deb
+belgilaydi. Maydonlarning to'liq ro'yxati va bog'lash tartibi —
+`docs/1c-sync.md`, 6.3.
+
+Teskari yo'nalish (saytdagi navbat → 1C da "Doktorga Qabul" hujjati)
+ham ishlaydi: `docs/1c-sync.md`, 6.2.
+
 ## Sinxronizatsiya yo'nalishi — hali ochiq
 
 Yuqoridagi maydon ro'yxati va `code-index` sayt tomonida tayyor. Ma'lumot
@@ -367,6 +390,11 @@ Keyinroq kerak bo'lsa — sizning **C variantingiz** (kengaytmada alohida
 `dm_WebBooking` hujjati) eng to'g'ri yo'l. `Document.Sales` ga saytdan
 yozmaymiz: kassa va o'zaro hisob-kitobga tegish xavfli.
 
+> **Yangilanish (2026-09-05).** Navbatlarni 1C ga o'tkazish bo'yicha
+> alohida qo'llanma tayyor — `docs/1c-sync.md`: navbat yozuvi maydonlari,
+> `date-index` bo'yicha o'qish, `dm_WebBooking` bilan bog'lash, chastota
+> va tekshiruv ro'yxati.
+
 ### Kengaytma (24–25)
 
 **24.** Alohida sozlamalar formasi **kerak emas** — konstantalar yetadi.
@@ -388,3 +416,25 @@ qilmaydi):
   ko'rsatiladi (`PrintName` ni to'ldirsangiz yaxshi bo'ladi);
 - `Posted` / `DeletionMark` hisobga olinadi;
 - natijada bemor ismi ko'rinadi.
+
+---
+
+# 2026-09-05: natija sahifasi uchun qo'shimcha maydonlar
+
+Saytda tahlil natijasining alohida sahifasi paydo bo'ldi (`/natija`):
+bemor jadvali, me'yoriy oraliq, holat (me'yor / yuqori / past) va
+shkala. Buning uchun 1C hujjatida hozir yuborilmayotgan uchta narsa
+kerak — bo'lmasa sahifa baribir ochiladi, faqat shu ustunlar bo'sh
+qoladi:
+
+| Nima | Tavsiya etilgan maydon | Qayerda | Format |
+| --- | --- | --- | --- |
+| Tahlil (panel) nomi | `AnalysisName` | hujjat | matn, masalan `Umumiy qon tahlili` |
+| Yuborgan shifokor | `Doctor` | hujjat | matn |
+| Me'yor chegaralari | `ReferenceMin`, `ReferenceMax` | analit | son (`NDS=.; NG=0`) yoki matn `Reference` (`"3.9 - 5.6"`, `"< 5.2"`) |
+| Me'yordan chetlanish (ixtiyoriy) | `Flag` | analit | `H` / `L` / `N` — bo'lmasa sayt o'zi taqqoslaydi |
+| Ko'rsatkich izohi (ixtiyoriy) | `Description` | analit | matn |
+
+Sayt bir nechta ehtimoliy nomni qabul qiladi (to'liq ro'yxat —
+`docs/1c-sync.md`, 4.3); qaysi nomni yuborishingizni aytsangiz,
+ro'yxat bittaga qisqartiriladi.

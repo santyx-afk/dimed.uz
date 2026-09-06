@@ -3,7 +3,9 @@ import { db, TABLES } from './db.ts';
 import { toMinutes, type Shift } from './slots.ts';
 import { isTime, type DateKey } from './time.ts';
 
-export const ALLOWED_SLOT_MINUTES = [10, 15, 20, 30];
+export const ALLOWED_SLOT_MINUTES = [10, 15, 20, 30, 60];
+/** Yangi shifokor va kabinet tanlovining standart qiymati (B3): bir soatlik qabul. */
+export const DEFAULT_SLOT_MINUTES = 60;
 const MAX_SHIFTS_PER_DAY = 4;
 
 export type ShiftsCheck = { ok: true; shifts: Shift[] } | { ok: false; message: string };

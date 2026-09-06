@@ -1,8 +1,11 @@
 ---
-import Base from '../../layouts/Base.astro';
-import { departments } from '../../data/departments';
+import Cabinet from '../../../layouts/Cabinet.astro';
+import SignInCard from '../../../components/SignInCard.astro';
+import { t } from '../../../data/i18n';
+import { departments } from '../../../data/departments';
+import { AGE_GROUPS, ageLabel } from '../../../lib/age';
 
-const slotOptions = [10, 15, 20, 30];
+const slotOptions = [10, 15, 20, 30, 60];
 const weekdays = [
   { n: 1, label: 'Du' },
   { n: 2, label: 'Se' },
@@ -14,35 +17,24 @@ const weekdays = [
 ];
 ---
 
-<Base
+<Cabinet
   title="Admin — Dimed klinikasi"
-  description="Shifokorlarni boshqarish: qo‘shish, tahrirlash, o‘chirish."
+  description="Shifokorlarni boshqarish: qo‘shish, tahrirlash, yashirish."
+  eyebrow="Administrator"
+  heading="Shifokorlarni boshqarish"
+  area="admin"
+  active="shifokorlar"
 >
-  <section class="wrap page">
-    <div class="head">
-      <div>
-        <div class="eyebrow">Administrator</div>
-        <h1>Shifokorlarni boshqarish</h1>
-        <span class="sub" id="subtitle"></span>
-      </div>
-      <div class="head-actions">
-        <button class="btn btn-sm" id="addBtn" hidden>+ Yangi shifokor</button>
-        <button class="btn btn-ghost btn-sm" id="logout" hidden>Chiqish</button>
-      </div>
-    </div>
+  <span class="sub" id="subtitle" slot="sub"></span>
+  <button class="btn btn-sm" id="addBtn" slot="actions" hidden>+ Yangi shifokor</button>
 
-    <div id="loading" class="state">Yuklanmoqda…</div>
+  <div id="loading" class="state">Yuklanmoqda…</div>
 
-    <div id="denied" class="state" hidden>
-      <p id="deniedText">Bu bo‘lim faqat administrator uchun.</p>
-      <p id="idHint" class="id-hint" hidden></p>
-      <a class="btn" href="/kirish">Kirish</a>
-    </div>
+  <SignInCard what={t('signin.what.admin')} next="/kabinet/admin" id="denied" hidden />
 
-    <div id="content" hidden>
-      <div id="list" class="doc-rows"></div>
-    </div>
-  </section>
+  <div id="content" hidden>
+    <div id="list" class="doc-rows"></div>
+  </div>
 
   <!-- Tahrirlash / qo'shish oynasi -->
   <div id="modal" class="modal" hidden>
@@ -78,6 +70,14 @@ const weekdays = [
           <div class="seg" id="f-slot">
             {slotOptions.map((m) => <button type="button" data-min={m}>{m} daq</button>)}
           </div>
+        </div>
+
+        <div class="fld">
+          <span>Bemor yoshi</span>
+          <div class="seg" id="f-age">
+            {AGE_GROUPS.map((g) => <button type="button" data-age={g}>{ageLabel(g)}</button>)}
+          </div>
+          <small class="fld-note">Pediatr faqat bolalarni, kattalar shifokori faqat kattalarni qabul qilsin.</small>
         </div>
 
         <div class="fld">
@@ -123,9 +123,13 @@ const weekdays = [
       </div>
     </div>
   </div>
-</Base>
+</Cabinet>
 
 <script>
+  import { t } from '../../../data/i18n';
+  import { getLang } from '../../../lib/lang';
+  import { showSignIn } from '../../../lib/signin';
+
   type Shift = { start: string; end: string };
   type Doctor = {
     id: string;
@@ -141,6 +145,7 @@ const weekdays = [
     hours: string;
     phone: string;
     active: boolean;
+    ageGroup: 'all' | 'adult' | 'child';
     telegramId: string;
     linked: boolean;
   };
@@ -156,9 +161,16 @@ const weekdays = [
   };
   const fmtPrice = (n: number) => n.toLocaleString('ru-RU').replace(/,/g, ' ');
 
+  const AGE_TEXT: Record<Doctor['ageGroup'], string> = {
+    all: '',
+    adult: '16+ yosh',
+    child: '16 yoshgacha',
+  };
+
   let doctors: Doctor[] = [];
   let shifts: Shift[] = [];
-  let slotMinutes = 15;
+  let slotMinutes = 60;
+  let ageGroup: Doctor['ageGroup'] = 'all';
 
   // ---------- yuklash ----------
   async function load() {
@@ -166,17 +178,19 @@ const weekdays = [
     try {
       const res = await fetch('/api/admin-doctors', { credentials: 'same-origin' });
       if (res.status === 401 || res.status === 403) {
-        el('loading').hidden = true;
-        el('denied').hidden = false;
-        if (res.status === 403) {
-          const body = (await res.json()) as { telegramId?: string };
-          el('deniedText').textContent = 'Bu hisobda administrator huquqi yo‘q.';
-          if (body.telegramId) {
-            const hint = el('idHint');
-            hint.hidden = false;
-            hint.textContent = `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`;
-          }
-        }
+        const body = res.status === 403 ? ((await res.json()) as { telegramId?: string }) : {};
+        showSignIn(
+          res.status,
+          [
+            t('denied.admin', getLang()),
+            body.telegramId
+              ? `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+          'denied',
+        );
         return;
       }
       if (!res.ok) throw new Error(String(res.status));
@@ -190,7 +204,6 @@ const weekdays = [
     el('loading').hidden = true;
     el('content').hidden = false;
     el('addBtn').hidden = false;
-    el('logout').hidden = false;
     const shown = doctors.filter((d) => d.active).length;
     el('subtitle').textContent =
       `${shown} ta shifokor saytda koʻrinadi` +
@@ -245,7 +258,9 @@ const weekdays = [
     return `<div class="doc-row${d.active ? '' : ' off'}">
       <div class="doc-main">
         <span class="nm">${esc(d.name)}</span>
-        <span class="meta">${esc(d.job)} · ${fmtPrice(d.price)} so‘m · ${d.slotMinutes} daqiqa</span>
+        <span class="meta">${esc(d.job)} · ${fmtPrice(d.price)} so‘m · ${d.slotMinutes} daqiqa${
+          AGE_TEXT[d.ageGroup] ? ` · ${AGE_TEXT[d.ageGroup]}` : ''
+        }</span>
       </div>
       <div class="doc-tags">
         ${
@@ -293,8 +308,11 @@ const weekdays = [
     el<HTMLInputElement>('f-tg').value = d?.telegramId ?? '';
     el<HTMLInputElement>('f-active').checked = d ? d.active : true;
 
-    slotMinutes = d?.slotMinutes ?? 15;
+    slotMinutes = d?.slotMinutes ?? 60;
     renderSlotSeg();
+
+    ageGroup = d?.ageGroup ?? 'all';
+    renderAgeSeg();
 
     const days = d?.workdays ?? [1, 2, 3, 4, 5, 6];
     el('f-days')
@@ -319,6 +337,19 @@ const weekdays = [
         btn.onclick = () => {
           slotMinutes = Number(btn.dataset.min);
           renderSlotSeg();
+        };
+      });
+  }
+
+  /** Yosh cheklovi tanlovi — slot davomiyligi bilan bir xil segment. */
+  function renderAgeSeg() {
+    el('f-age')
+      .querySelectorAll<HTMLButtonElement>('button')
+      .forEach((btn) => {
+        btn.classList.toggle('on', btn.dataset.age === ageGroup);
+        btn.onclick = () => {
+          ageGroup = btn.dataset.age as Doctor['ageGroup'];
+          renderAgeSeg();
         };
       });
   }
@@ -381,6 +412,7 @@ const weekdays = [
       deptId: el<HTMLSelectElement>('f-dept').value,
       price: Number(el<HTMLInputElement>('f-price').value),
       slotMinutes,
+      ageGroup,
       workdays,
       shifts,
       experience: el<HTMLInputElement>('f-exp').value.trim(),
@@ -449,39 +481,10 @@ const weekdays = [
   el('modal').addEventListener('click', (e) => {
     if (e.target === el('modal')) closeForm();
   });
-  el('logout').addEventListener('click', async () => {
-    await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
-    window.location.href = '/';
-  });
-
   load();
 </script>
 
 <style>
-  .page {
-    padding: 48px 0 64px;
-    min-height: 60vh;
-  }
-
-  .head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 28px;
-  }
-
-  .head-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  h1 {
-    font-size: clamp(24px, 3.2vw, 34px);
-    font-weight: 750;
-  }
-
   .sub {
     display: block;
     color: var(--rose);
@@ -492,7 +495,7 @@ const weekdays = [
 
   .state {
     text-align: center;
-    padding: 40px 0;
+    padding: 48px 0;
     color: var(--muted);
     font-size: 15px;
   }
@@ -501,41 +504,37 @@ const weekdays = [
     margin-top: 16px;
   }
 
-  .id-hint {
-    color: var(--ink);
-    background: var(--chip-bg);
-    border: 1px solid var(--card-brd);
-    border-radius: 10px;
-    padding: 12px 14px;
-    margin: 14px auto 0;
-    max-width: 460px;
-    font-size: 13px;
-    font-weight: 600;
-  }
 
   /* ---- ro'yxat ---- */
+  /*
+    Ro'yxat JS bilan (innerHTML) chiziladi. Astro uslublari faqat
+    shablonda turgan elementlarga qamrov (scope) belgisi qo'yadi —
+    JS qo'shgan tugunlarda u belgi bo'lmaydi va uslub qo'llanmaydi.
+    Shu sababli quyidagilar :global() bilan yozilgan; aks holda
+    butun ro'yxat bezaksiz matnga aylanadi.
+  */
   .doc-rows {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
 
-  .doc-row {
+  .doc-rows :global(.doc-row) {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 14px 18px;
+    gap: 16px;
+    padding: 16px;
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
     border-radius: 14px;
     flex-wrap: wrap;
   }
 
-  .doc-row.off {
+  .doc-rows :global(.doc-row.off) {
     opacity: 0.55;
   }
 
-  .doc-main {
+  .doc-rows :global(.doc-main) {
     flex: 1;
     min-width: 200px;
     display: flex;
@@ -543,74 +542,74 @@ const weekdays = [
     gap: 2px;
   }
 
-  .doc-main .nm {
+  .doc-rows :global(.doc-main .nm) {
     font-weight: 700;
     font-size: 15px;
   }
 
-  .doc-main .meta {
+  .doc-rows :global(.doc-main .meta) {
     font-size: 12.5px;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
 
-  .doc-tags {
+  .doc-rows :global(.doc-tags) {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
   }
 
-  .tag {
+  .doc-rows :global(.tag) {
     font-size: 11px;
     font-weight: 700;
     border-radius: 999px;
-    padding: 3px 10px;
+    padding: 4px 8px;
   }
 
-  .tag.ok {
+  .doc-rows :global(.tag.ok) {
     color: var(--ok);
     background: var(--ok-bg);
   }
 
-  .tag.warn {
+  .doc-rows :global(.tag.warn) {
     color: var(--warn);
     background: var(--warn-bg);
   }
 
-  .tag.off {
+  .doc-rows :global(.tag.off) {
     color: var(--muted);
     background: var(--busy);
   }
 
-  .doc-btns {
+  .doc-rows :global(.doc-btns) {
     display: flex;
-    gap: 6px;
+    gap: 8px;
   }
 
-  .mini {
+  .doc-rows :global(.mini) {
     border: 1px solid var(--card-brd);
     background: var(--card-bg);
     color: var(--ink);
     border-radius: 9px;
-    padding: 7px 12px;
+    padding: 8px 16px;
     font-size: 12.5px;
     font-weight: 650;
   }
 
-  .mini:hover {
+  .doc-rows :global(.mini:hover) {
     border-color: var(--leaf);
   }
 
-  .mini.danger {
+  .doc-rows :global(.mini.danger) {
     color: var(--rose);
   }
 
-  .mini.danger:hover {
+  .doc-rows :global(.mini.danger:hover) {
     border-color: var(--rose);
     background: var(--rose-soft);
   }
 
-  .mini.okbtn {
+  .doc-rows :global(.mini.okbtn) {
     color: var(--leaf);
   }
 
@@ -629,7 +628,7 @@ const weekdays = [
 
   .modal-card {
     border-radius: 18px;
-    padding: 22px;
+    padding: 24px;
     width: 100%;
     max-width: 560px;
   }
@@ -663,13 +662,13 @@ const weekdays = [
   .form {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
   }
 
   .two {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 16px;
   }
 
   @media (max-width: 520px) {
@@ -681,7 +680,7 @@ const weekdays = [
   .fld {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
   }
 
   .fld > span {
@@ -696,7 +695,7 @@ const weekdays = [
     background: var(--chip-bg);
     color: var(--ink);
     border-radius: 10px;
-    padding: 9px 12px;
+    padding: 8px 16px;
     font: inherit;
     font-size: 14px;
   }
@@ -713,7 +712,7 @@ const weekdays = [
 
   .seg {
     display: flex;
-    gap: 6px;
+    gap: 8px;
   }
 
   .seg button {
@@ -721,7 +720,7 @@ const weekdays = [
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
     border-radius: 10px;
-    padding: 9px 4px;
+    padding: 8px 4px;
     font-size: 13px;
     font-weight: 650;
     font-variant-numeric: tabular-nums;
@@ -733,22 +732,27 @@ const weekdays = [
     color: #fff;
   }
 
+  .fld-note {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
   .days {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
   }
 
   .day {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     font-size: 12.5px;
     font-weight: 600;
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
     border-radius: 9px;
-    padding: 7px 11px;
+    padding: 8px;
     cursor: pointer;
   }
 
@@ -782,7 +786,7 @@ const weekdays = [
     background: var(--chip-bg);
     color: var(--ink);
     border-radius: 10px;
-    padding: 8px 11px;
+    padding: 8px;
     font: inherit;
     font-size: 14px;
     font-variant-numeric: tabular-nums;
@@ -798,7 +802,7 @@ const weekdays = [
     background: none;
     color: var(--muted);
     font-size: 14px;
-    padding: 6px 8px;
+    padding: 8px;
     border-radius: 8px;
   }
 
@@ -811,7 +815,7 @@ const weekdays = [
     border: 1.5px dashed var(--line);
     background: none;
     border-radius: 10px;
-    padding: 8px 14px;
+    padding: 8px 16px;
     font-size: 12.5px;
     font-weight: 650;
     color: var(--muted);
@@ -841,44 +845,44 @@ const weekdays = [
   .modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 8px;
   }
 
   /* Bo'limlar bo'yicha guruhlash — klinika tuzilishi ko'rinib tursin */
-  .dept-group {
-    margin-bottom: 22px;
+  .doc-rows :global(.dept-group) {
+    margin-bottom: 24px;
   }
 
-  .dept-head {
+  .doc-rows :global(.dept-head) {
     display: flex;
     align-items: baseline;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
     margin: 0 0 8px;
-    padding-bottom: 6px;
+    padding-bottom: 8px;
     border-bottom: 1px solid var(--line);
   }
 
-  .dept-head h2 {
+  .doc-rows :global(.dept-head h2) {
     margin: 0;
     font-size: 15px;
     font-weight: 700;
   }
 
-  .dept-note {
+  .doc-rows :global(.dept-note) {
     font-size: 12.5px;
     color: var(--muted);
   }
 
-  .dept-note.warn {
+  .doc-rows :global(.dept-note.warn) {
     color: #b4690e;
     font-weight: 600;
   }
 
   .chk small {
     display: block;
-    margin-top: 3px;
-    margin-left: 25px;
+    margin-top: 4px;
+    margin-left: calc(17px + var(--sp-2));
     font-size: 12px;
     color: var(--muted);
     font-weight: 400;

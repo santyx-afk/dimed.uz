@@ -8,7 +8,7 @@
  * o'zining odatdagi zanjiriga tayanadi (CloudShell, IAM rol,
  * ~/.aws/credentials).
  */
-export const REGION = process.env.DIMED_AWS_REGION ?? 'eu-central-1';
+export const REGION = process.env.DIMED_AWS_REGION ?? 'us-east-1';
 export const PREFIX = process.env.DIMED_TABLE_PREFIX ?? 'dimed';
 
 const accessKeyId = process.env.DIMED_AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;

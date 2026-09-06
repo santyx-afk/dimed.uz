@@ -1,26 +1,39 @@
 ---
 import { departments } from '../data/departments';
-import { doctors } from '../data/doctors';
+import { activeDoctors as doctors } from '../data/doctors';
 import DeptIcon from './DeptIcon.astro';
+import { t, type Lang } from '../data/i18n';
+
+interface Props {
+  /** Ommaviy sahifada — o'sha sahifaning tili; berilmasa o'zbekcha. */
+  lang?: Lang;
+}
+const { lang = 'uz' } = Astro.props;
 
 /*
   Navbat vidjeti. Bo'sh slotlar `GET /api/slots` dan keladi — band
   vaqtlar DynamoDB dagi navbatlarga qarab chiqarib tashlanadi.
   Kun tugmalari esa hozircha statik `doctors.ts` dagi `workdays` dan
   quriladi (qarang: docs/HANDOFF.md, «Muhim qarorlar», 6-band).
+
+  Boshlang'ich ma'lumot (bo'limlar, shifokorlar) JSON sifatida
+  sahifaga qo'yiladi va skript uni o'qiydi — shunda skript odatdagi
+  modul bo'lib, `src/lib` dagi yordamchilarni import qila oladi.
 */
+const widgetData = JSON.stringify({ departments, doctors });
 ---
 
 <div class="widget glass" id="navbat-widget" aria-live="polite">
   <div class="widget-head">
-    <div class="widget-title">Onlayn navbat</div>
-    <div class="live-dot"><i></i> jonli slotlar</div>
+    <div class="widget-title">{t('booking.widget.title', lang)}</div>
+    <div class="live-dot"><i></i> {t('booking.widget.live', lang)}</div>
   </div>
   <div class="steps" id="wSteps">
-    <button class="step-pill on" data-step="1"><span class="n">1</span><span class="lbl">Boʻlim</span></button>
-    <button class="step-pill" data-step="2" disabled><span class="n">2</span><span class="lbl">Shifokor</span></button>
-    <button class="step-pill" data-step="3" disabled><span class="n">3</span><span class="lbl">Vaqt</span></button>
-    <button class="step-pill" data-step="4" disabled><span class="n">4</span><span class="lbl">Toʻlov</span></button>
+    <button class="step-pill on" data-step="1"><span class="n">1</span><span class="lbl">{t('booking.step.dept', lang)}</span></button>
+    <button class="step-pill" data-step="2" disabled><span class="n">2</span><span class="lbl">{t('booking.step.doctor', lang)}</span></button>
+    <button class="step-pill" data-step="3" disabled><span class="n">3</span><span class="lbl">{t('booking.step.time', lang)}</span></button>
+    <button class="step-pill" data-step="4" disabled><span class="n">4</span><span class="lbl">{t('booking.step.patient', lang)}</span></button>
+    <button class="step-pill" data-step="5" disabled><span class="n">5</span><span class="lbl">{t('booking.step.confirm', lang)}</span></button>
   </div>
   <div id="wBody"></div>
 
@@ -34,18 +47,65 @@ import DeptIcon from './DeptIcon.astro';
       ))
     }
   </template>
+  <script is:inline type="application/json" id="widgetData" set:html={widgetData} />
 </div>
-<script is:inline define:vars={{ departments, doctors }}>
-  const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
-  const MONTHS = [
-    'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
-    'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
-  ];
-  const fmtPrice = (n) => n.toLocaleString('ru-RU').replace(/,/g, ' ') + ' soʻm';
+
+<script>
+  // @ts-nocheck — vidjet tarixan oddiy JS; modulga o'tkazildi (importlar uchun).
+  import { t } from '../data/i18n';
+  import { getLang } from '../lib/lang';
+  import { birthDateSelectsHtml, readBirthDate, formatBirthDate } from '../lib/birthdate';
+  import { ageOnDate, fitsAgeGroup, ageRejected, ageChip, toAgeGroup } from '../lib/age';
+  import { site } from '../data/site';
+  import { parsePhone, formatPhone } from '../lib/phone';
+
+  const { departments, doctors } = JSON.parse(document.getElementById('widgetData').textContent);
+  const lang = getLang();
+  const tr = (key, vars) => t(key, lang, vars);
+
+  /*
+    Sana tugmalari uchun hafta kunlari va oylar. Serverdan emas,
+    brauzerdan: sahifa uch tilda alohida yig'ilsa ham vidjet tilni
+    `getLang()` dan oladi (`?lang=`, manzil prefiksi yoki kabinetdagi
+    tanlov) — shuning uchun uchtasi ham shu yerda turadi.
+  */
+  const WEEKDAYS = {
+    uz: ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'],
+    ru: ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'],
+    en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  };
+  const MONTH_NAMES = {
+    uz: ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+         'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'],
+    ru: ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+         'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'],
+    en: ['January', 'February', 'March', 'April', 'May', 'June',
+         'July', 'August', 'September', 'October', 'November', 'December'],
+  };
+  const WD = WEEKDAYS[lang] ?? WEEKDAYS.uz;
+  const MONTHS = MONTH_NAMES[lang] ?? MONTH_NAMES.uz;
+
+  /*
+    Bo'lim nomi va shifokor lavozimi tarjimasi ma'lumotning o'zida
+    keladi (`name_ru`, `job_en`, …) — tarjimasi yozilmagan yangi yozuv
+    o'zbekchasicha ko'rinadi, bo'sh emas.
+  */
+  const deptName = (d) => (lang === 'uz' ? d.name : (d[`name_${lang}`] || d.name));
+  const jobText = (d) => (lang === 'uz' ? d.job : (d[`job_${lang}`] || d.job));
+
+  const fmtPrice = (n) => `${n.toLocaleString('ru-RU').replace(/,/g, ' ')} ${tr('lab.sum')}`;
+  const BOT_URL = site.telegramBot;
+  /** Tanlangan shifokorning yosh cheklovi; belgilanmagan bo'lsa cheklovsiz. */
+  const docAgeGroup = () => toAgeGroup(state.doc?.ageGroup);
+  // Sana hali tanlanmagan bo'lsa bugunga qarab hisoblanadi — cheklov
+  // hech qachon "yoshi noma'lum" deb hammani rad etib qo'ymasin.
+  const ageOn = (birthDate, dateKey) => ageOnDate(birthDate, dateKey || dstr(new Date()));
   const pad = (n) => String(n).padStart(2, '0');
   // Server YYYY-MM-DD kutadi.
   const dstr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const dlabel = (d) => `${WD[d.getDay()]}, ${d.getDate()}-${MONTHS[d.getMonth()]}`;
+  const esc = (s) =>
+    String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
 
   // <template> ichidagi tugunlar DocumentFragment'da yashaydi —
   // ularni faqat template.content orqali olish mumkin.
@@ -86,8 +146,22 @@ import DeptIcon from './DeptIcon.astro';
     return out;
   };
 
+  /*
+    Maxfiylik siyosatiga rozilik (B4). Bir marta berilgani brauzerda
+    eslab qolinadi — checkbox oldindan belgilangan turadi, lekin har
+    bronda ko'rinadi va serverga ham yuboriladi.
+  */
+  const PRIVACY_KEY = 'dimed_privacy_ok';
+  const readPrivacy = () => {
+    try {
+      return localStorage.getItem(PRIVACY_KEY) === '1';
+    } catch {
+      return false;
+    }
+  };
+
   const state = { step: 1, deptId: null, doc: null, date: null, dateLabel: null, time: null, booked: null,
-    patientId: null, patientName: null };
+    patientId: null, patientName: null, patientBirthDate: null, privacyAccepted: readPrivacy() };
 
   /*
     Telefonga bog'langan bemorlar. Bir raqamdan butun oila foydalanadi
@@ -97,12 +171,18 @@ import DeptIcon from './DeptIcon.astro';
     umuman ko'rsatilmaydi — u baribir kirish sahifasiga tushadi.
   */
   let patients = null;
+  /** Oxirgi urinish nega bo'lmadi: 'auth' — kirmagan, 'network' — ulanmadi. */
+  let patientsError = null;
 
   async function loadPatients() {
     if (patients) return patients;
+    patientsError = null;
     try {
       const res = await fetch('/api/patients', { credentials: 'same-origin' });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        patientsError = res.status === 401 ? 'auth' : 'network';
+        return null;
+      }
       const data = await res.json();
       patients = data;
       if (!state.patientId) {
@@ -111,10 +191,12 @@ import DeptIcon from './DeptIcon.astro';
         if (pick) {
           state.patientId = pick.id;
           state.patientName = pick.name;
+          state.patientBirthDate = pick.birthDate;
         }
       }
       return data;
     } catch {
+      patientsError = 'network';
       return null;
     }
   }
@@ -148,7 +230,7 @@ import DeptIcon from './DeptIcon.astro';
 
   function slotsHtml(slots) {
     if (!slots.length) {
-      return '<p class="slot-empty">Bu kunga slot yoʻq — boshqa sanani tanlang.</p>';
+      return `<p class="slot-empty">${esc(tr('booking.slot.none'))}</p>`;
     }
     return slots
       .map(
@@ -161,12 +243,12 @@ import DeptIcon from './DeptIcon.astro';
   function render() {
     if (state.step === 1) {
       wBody.innerHTML =
-        '<div class="pane-label">Boʻlimni tanlang</div><div class="dept-grid">' +
+        `<div class="pane-label">${esc(tr('booking.pickDept'))}</div><div class="dept-grid">` +
         departments
           .map(
             (d) => `<button class="dept-btn" data-id="${d.id}">
               <span class="ic">${iconHtml[d.id] ?? ''}</span>
-              <span>${d.name}<small>${docs.filter((x) => x.deptId === d.id).length} shifokor</small></span>
+              <span>${esc(deptName(d))}<small>${docs.filter((x) => x.deptId === d.id).length} ${esc(tr('booking.doctorCount'))}</small></span>
             </button>`,
           )
           .join('') +
@@ -181,17 +263,23 @@ import DeptIcon from './DeptIcon.astro';
     } else if (state.step === 2) {
       const list = docs.filter((d) => d.deptId === state.deptId);
       wBody.innerHTML =
-        '<div class="pane-label">Shifokorni tanlang</div><div class="doc-list">' +
+        `<div class="pane-label">${esc(tr('booking.pickDoctor'))}</div><div class="doc-list">` +
         list
           .map(
             (d) => `<button class="doc-btn" data-id="${d.id}">
               <img src="${d.photo}" alt="" width="42" height="42" loading="lazy">
-              <span><span class="nm">${d.name}</span><br><span class="jb">${d.job}</span></span>
-              <span class="slot-tag">${d.slotMinutes} daq</span>
+              <span><span class="nm">${esc(d.name)}</span><br><span class="jb">${esc(jobText(d))}</span></span>
+              <span class="tags">${
+                ageChip(toAgeGroup(d.ageGroup), lang)
+                  ? `<span class="age-tag">${esc(ageChip(toAgeGroup(d.ageGroup), lang))}</span>`
+                  : ''
+              }${
+                d.ratingCount ? `<span class="rate-tag" title="${d.ratingCount} ta baho">★ ${d.ratingAvg}</span>` : ''
+              }<span class="slot-tag">${d.slotMinutes} ${esc(tr('booking.minutes.short'))}</span></span>
             </button>`,
           )
           .join('') +
-        '</div><button class="back-link">← boʻlimlarga qaytish</button>';
+        `</div><button class="back-link">${esc(tr('booking.back.depts'))}</button>`;
       wBody.querySelectorAll('.doc-btn').forEach((b) =>
         b.addEventListener('click', () => {
           state.doc = docById(b.dataset.id);
@@ -204,6 +292,8 @@ import DeptIcon from './DeptIcon.astro';
     } else if (state.step === 3) {
       renderDatesAndSlots();
     } else if (state.step === 4) {
+      renderPatient();
+    } else if (state.step === 5) {
       renderCheckout();
     }
   }
@@ -216,7 +306,7 @@ import DeptIcon from './DeptIcon.astro';
     if (!state.date && workdays.length) state.date = dstr(workdays[0].date);
 
     wBody.innerHTML =
-      `<div class="pane-label">${doc.name} · sana va vaqt</div><div class="date-row">` +
+      `<div class="pane-label">${esc(doc.name)} · ${esc(tr('booking.pickWhen'))}</div><div class="date-row">` +
       days
         .map(
           (x) => `<button class="date-pill${dstr(x.date) === state.date ? ' on' : ''}"
@@ -225,8 +315,8 @@ import DeptIcon from './DeptIcon.astro';
         )
         .join('') +
       `</div><div class="slot-grid" id="slotGrid"></div>
-       <div class="slot-legend"><span class="free"><i></i>boʻsh</span><span class="busy"><i></i>band</span></div>
-       <button class="back-link">← shifokorni almashtirish</button>`;
+       <div class="slot-legend"><span class="free"><i></i>${esc(tr('booking.slot.free'))}</span><span class="busy"><i></i>${esc(tr('booking.slot.busy'))}</span></div>
+       <button class="back-link">${esc(tr('booking.back.doctor'))}</button>`;
 
     const grid = wBody.querySelector('#slotGrid');
 
@@ -238,12 +328,12 @@ import DeptIcon from './DeptIcon.astro';
     };
 
     const paint = async (dateKey, { autoAdvance = false } = {}) => {
-      grid.innerHTML = '<p class="slot-empty">Yuklanmoqda…</p>';
+      grid.innerHTML = `<p class="slot-empty">${esc(tr('common.loading'))}</p>`;
       let data;
       try {
         data = await fetchSlots(doc.id, dateKey);
       } catch {
-        grid.innerHTML = '<p class="slot-empty">Slotlarni yuklab boʻlmadi. Qayta urinib koʻring.</p>';
+        grid.innerHTML = `<p class="slot-empty">${esc(tr('booking.slot.failed'))}</p>`;
         return;
       }
 
@@ -296,28 +386,356 @@ import DeptIcon from './DeptIcon.astro';
     );
 
     if (state.date) paint(state.date, { autoAdvance: true });
-    else grid.innerHTML = '<p class="slot-empty">Bu shifokorning yaqin kunlarda qabuli yoʻq.</p>';
+    else grid.innerHTML = `<p class="slot-empty">${esc(tr('booking.slot.noDays'))}</p>`;
+  }
+
+  /**
+   * Bemor ro'yxatidagi bitta qator: ism + tug'ilgan sana (yoki yo'qligi).
+   * Shifokorning yosh chekloviga tushmagan bemor darhol xiralashadi —
+   * bosib ko'rgandan keyin emas, ro'yxatning o'zidayoq ko'rinadi.
+   */
+  const patientItem = (p) => {
+    const fits = !p.birthDate || fitsAgeGroup(docAgeGroup(), ageOn(p.birthDate, state.date));
+    const note = p.birthDate
+      ? esc(formatBirthDate(p.birthDate, lang))
+      : esc(tr('booking.birthDate.missingFor'));
+    return `<button class="who-item${p.id === state.patientId ? ' on' : ''}${fits ? '' : ' unfit'}" data-pick="${esc(p.id)}">
+      <span class="who-nm">${esc(p.name)}</span>
+      <small class="who-bd${p.birthDate ? '' : ' none'}">${note}${
+        fits ? '' : ` · ${esc(ageChip(docAgeGroup(), lang))} emas`
+      }</small>
+    </button>`;
+  };
+
+  /*
+    4-qadam — bemor ma'lumotlari. Bir telefondan butun oila foydalanadi
+    (ota-ona bolasini o'z raqami bilan yozdiradi), shuning uchun bemor
+    alohida qadamda tanlanadi: ro'yxatdan yoki yangi odam qo'shib.
+    Tug'ilgan sana majburiy (B1): yo'q bo'lsa shu yerda so'raladi va
+    bemor yozuviga saqlanadi.
+  */
+  /*
+    4-qadam — bemor ma'lumotlari. Bir telefondan butun oila foydalanadi
+    (ota-ona bolasini o'z raqami bilan yozdiradi), shuning uchun bemor
+    alohida qadamda tanlanadi: ro'yxatdan yoki yangi odam qo'shib.
+
+    Bu qadamdan bemor tanlanmasdan o'tib bo'lmaydi — 5-qadam
+    ("Tasdiqlash") faqat `proceed()` orqali ochiladi. Kirmagan
+    foydalanuvchi shu yerning o'zida Telegram orqali kiradi: avval
+    sahifadan haydab yuborilardi va tanlov butunlay o'tkazib
+    yuborilardi.
+  */
+  async function renderPatient() {
+    const data = await loadPatients();
+    // Kirmagan bo'lsa — shu qadamning o'zida kirish; ulanish uzilgan
+    // bo'lsa kirish oynasini ko'rsatish chalg'itadi, qayta urinish beramiz.
+    if (!data) return patientsError === 'network' ? renderPatientsFailed() : renderLogin();
+
+    wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.whoFor'))}</div>
+      <div class="who-list" id="whoList"><p class="slot-empty">${esc(tr('common.loading'))}</p></div>
+      <button class="btn btn-ghost w-full" id="whoNew" type="button">+ Boshqa odam</button>
+      <div class="who-form" id="whoForm" hidden>
+        <input id="w-last" type="text" placeholder="${esc(tr('booking.field.lastName'))}" autocomplete="family-name" />
+        <input id="w-first" type="text" placeholder="${esc(tr('booking.field.firstName'))}" autocomplete="given-name" />
+        <input id="w-mid" type="text" placeholder="${esc(tr('booking.field.patronymic'))}" />
+        <div class="fld-label">${esc(tr('booking.birthDate'))} *</div>
+        ${birthDateSelectsHtml('new', lang)}
+        <button class="btn w-full" id="whoSave" type="button">Saqlash va davom etish</button>
+      </div>
+      <div class="who-form" id="whoBirth" hidden>
+        <div class="fld-label" id="whoBirthLabel"></div>
+        ${birthDateSelectsHtml('fix', lang)}
+        <button class="btn w-full" id="whoBirthSave" type="button">Saqlash va davom etish</button>
+      </div>
+      <label class="consent">
+        <input type="checkbox" id="privacyOk"${state.privacyAccepted ? ' checked' : ''} />
+        <span>${tr('booking.privacy.text', {
+          link: `<a href="/maxfiylik" target="_blank" rel="noopener">${esc(tr('booking.privacy.linkText'))}</a>`,
+        })}</span>
+      </label>
+      <p class="book-msg" id="whoMsg" role="status" aria-live="polite"></p>
+      <button class="back-link">${esc(tr('booking.back.time'))}</button>`;
+
+    wBody.querySelector('.back-link').addEventListener('click', () => {
+      state.time = null;
+      setStep(3);
+    });
+
+    const msg = wBody.querySelector('#whoMsg');
+    const form = wBody.querySelector('#whoForm');
+    const birthForm = wBody.querySelector('#whoBirth');
+    const newBtn = wBody.querySelector('#whoNew');
+    const setMsg = (text, kind = '') => {
+      msg.textContent = text;
+      msg.className = `book-msg${kind ? ` ${kind}` : ''}`;
+    };
+
+    const openForm = () => {
+      form.hidden = false;
+      birthForm.hidden = true;
+      newBtn.hidden = true;
+      wBody.querySelector('#w-last').focus();
+    };
+
+    const privacyBox = wBody.querySelector('#privacyOk');
+    privacyBox.addEventListener('change', () => {
+      state.privacyAccepted = privacyBox.checked;
+      try {
+        localStorage.setItem(PRIVACY_KEY, privacyBox.checked ? '1' : '0');
+      } catch {
+        /* xotira yopiq bo'lsa ham joriy bronda ishlaydi */
+      }
+      if (privacyBox.checked) setMsg('');
+    });
+
+    /** Rozilik bo'lmasa davom etilmaydi (B4). */
+    const privacyOk = () => {
+      if (state.privacyAccepted) return true;
+      setMsg(tr('booking.privacy.required'), 'error');
+      privacyBox.focus();
+      return false;
+    };
+
+    /*
+      Shifokorning yosh cheklovi: pediatr kattani, kattalar shifokori
+      bolani qabul qilmaydi. Server ham shuni tekshiradi — bu yerdagisi
+      bemor 5-qadamga bekorga o'tib, xatoni oxirida ko'rmasligi uchun.
+    */
+    const fitsDoctor = (patient) =>
+      fitsAgeGroup(docAgeGroup(), patient.birthDate ? ageOn(patient.birthDate, state.date) : null);
+
+    const proceed = (patient) => {
+      if (!privacyOk()) return;
+      if (!fitsDoctor(patient)) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
+      state.patientId = patient.id;
+      state.patientName = patient.name;
+      state.patientBirthDate = patient.birthDate;
+      // Tanlov eslab qolinadi — keyingi safar oldindan belgilangan turadi.
+      fetch('/api/patients', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'select', id: patient.id }),
+      }).catch(() => {});
+      setStep(5);
+    };
+
+    /*
+      Bemorda tug'ilgan sana bo'lmasa (eski yozuv yoki 1C'da bo'sh) —
+      davom etishdan oldin shu yerda so'raladi.
+    */
+    let fixing = null;
+    const choose = (patient) => {
+      if (patient.birthDate) return proceed(patient);
+      fixing = patient;
+      form.hidden = true;
+      newBtn.hidden = false;
+      birthForm.hidden = false;
+      wBody.querySelector('#whoBirthLabel').textContent = `${patient.name} — ${tr('booking.birthDate')} *`;
+      setMsg(tr('booking.birthDate.missingFor'));
+      wBody.querySelectorAll('.who-item').forEach((b) => b.classList.toggle('on', b.dataset.pick === patient.id));
+      birthForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    if (!data.patients.length) {
+      wBody.querySelector('#whoList').innerHTML =
+        '<p class="slot-empty">Klinikada yozuvingiz topilmadi — ism-familiyangizni kiriting.</p>';
+      newBtn.hidden = true;
+      form.hidden = false;
+    } else {
+      wBody.querySelector('#whoList').innerHTML = data.patients.map(patientItem).join('');
+      wBody.querySelectorAll('[data-pick]').forEach((b) =>
+        b.addEventListener('click', () => {
+          const found = data.patients.find((p) => p.id === b.dataset.pick);
+          if (found) choose(found);
+        }),
+      );
+    }
+
+    newBtn.addEventListener('click', openForm);
+
+    const post = (body) =>
+      fetch('/api/patients', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    wBody.querySelector('#whoSave').addEventListener('click', async () => {
+      const lastName = wBody.querySelector('#w-last').value.trim();
+      const firstName = wBody.querySelector('#w-first').value.trim();
+      const patronymic = wBody.querySelector('#w-mid').value.trim();
+      const birthDate = readBirthDate(form, 'new');
+
+      if (!lastName || !firstName) return setMsg(tr('booking.field.nameRequired'), 'error');
+      if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
+      if (!privacyOk()) return;
+      // Yoshi to'g'ri kelmasa — bemorni bekorga qo'shib o'tirmaymiz.
+      if (!fitsDoctor({ birthDate })) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
+
+      setMsg('Saqlanmoqda…');
+      try {
+        const res = await post({ action: 'add', firstName, lastName, patronymic, birthDate });
+        const body = await res.json();
+        if (!res.ok) return setMsg(body.error ?? tr('booking.saveFailed'), 'error');
+        patients.patients.push(body.patient);
+        proceed(body.patient);
+      } catch {
+        setMsg(tr('common.error.network'), 'error');
+      }
+    });
+
+    wBody.querySelector('#whoBirthSave').addEventListener('click', async () => {
+      if (!fixing) return;
+      const birthDate = readBirthDate(birthForm, 'fix');
+      if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
+      if (!privacyOk()) return;
+      if (!fitsDoctor({ birthDate })) return setMsg(ageRejected(docAgeGroup(), lang), 'error');
+
+      setMsg('Saqlanmoqda…');
+      try {
+        const res = await post({ action: 'birthDate', id: fixing.id, birthDate });
+        const body = await res.json();
+        if (!res.ok) return setMsg(body.error ?? 'Saqlab boʻlmadi.', 'error');
+        // Ro'yxatdagi yozuv ham yangilanadi — orqaga qaytilsa sana turadi.
+        const at = patients.patients.findIndex((p) => p.id === fixing.id);
+        if (at !== -1) patients.patients[at] = body.patient;
+        proceed(body.patient);
+      } catch {
+        setMsg(tr('common.error.network'), 'error');
+      }
+    });
+  }
+
+  /** Bemor ro'yxatini olib bo'lmadi (kirish emas, ulanish muammosi). */
+  function renderPatientsFailed() {
+    wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.whoFor'))}</div>
+      <p class="book-msg error">${esc(tr('common.error.network'))}</p>
+      <button class="btn w-full" id="whoRetry" type="button">${esc(tr('common.retry'))}</button>
+      <button class="back-link">${esc(tr('booking.back.time'))}</button>`;
+    wBody.querySelector('#whoRetry').addEventListener('click', () => renderPatient());
+    wBody.querySelector('.back-link').addEventListener('click', () => {
+      state.time = null;
+      setStep(3);
+    });
+  }
+
+  /*
+    Kirmagan foydalanuvchi uchun 4-qadamning o'zida kirish: botdan
+    kod olinadi va shu yerda kiritiladi. Muvaffaqiyatli kirgach
+    tanlangan bo'lim/shifokor/vaqt saqlanib qoladi va bemor ro'yxati
+    o'sha zahoti shu qadamda ochiladi.
+  */
+  function renderLogin() {
+    wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.login.title'))}</div>
+      <p class="login-lede">${esc(tr('booking.login.lede'))}</p>
+      <div class="login-steps">
+        <span>${esc(tr('booking.login.botStep'))}</span>
+        <a class="btn btn-sm tg" href="${BOT_URL}" target="_blank" rel="noopener">${esc(tr('booking.login.botBtn'))}</a>
+      </div>
+      <label class="fld-label" for="wPhone">${esc(tr('booking.login.phone'))}</label>
+      <input class="login-inp" id="wPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+998 90 123 45 67" />
+      <label class="fld-label" for="wCode">${esc(tr('booking.login.code'))}</label>
+      <input class="login-inp code" id="wCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" />
+      <p class="book-msg" id="loginMsg" role="status" aria-live="polite"></p>
+      <button class="btn w-full" id="wLogin" type="button">${esc(tr('booking.login.button'))}</button>
+      <button class="back-link">${esc(tr('booking.back.time'))}</button>`;
+
+    wBody.querySelector('.back-link').addEventListener('click', () => {
+      state.time = null;
+      setStep(3);
+    });
+
+    const msg = wBody.querySelector('#loginMsg');
+    const phone = wBody.querySelector('#wPhone');
+    const code = wBody.querySelector('#wCode');
+    const btn = wBody.querySelector('#wLogin');
+    const setMsg = (text, kind = '') => {
+      msg.textContent = text;
+      msg.className = `book-msg${kind ? ` ${kind}` : ''}`;
+    };
+
+    code.addEventListener('input', () => {
+      code.value = code.value.replace(/\D/g, '').slice(0, 6);
+    });
+    phone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') code.focus();
+    });
+    code.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') btn.click();
+    });
+
+    phone.addEventListener('blur', () => {
+      const ok = parsePhone(phone.value);
+      if (ok.ok) phone.value = formatPhone(ok.value);
+    });
+
+    btn.addEventListener('click', async () => {
+      const checked = parsePhone(phone.value);
+      if (!checked.ok) {
+        setMsg(checked.error, 'error');
+        return phone.focus();
+      }
+      if (code.value.length !== 6) {
+        setMsg(tr('booking.login.codeRequired'), 'error');
+        return code.focus();
+      }
+
+      btn.disabled = true;
+      setMsg(tr('booking.login.working'));
+      try {
+        const res = await fetch('/api/auth-verify', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ phone: checked.value, code: code.value }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          setMsg(body.error ?? tr('booking.login.failed'), 'error');
+          code.value = '';
+          code.focus();
+          return;
+        }
+        // Header'dagi "kim kirgan" keshi (C1) eskirmasin.
+        try {
+          sessionStorage.removeItem('dimed_session');
+        } catch {
+          /* xotira yopiq bo'lsa ham bron davom etadi */
+        }
+        patients = null;
+        await renderPatient();
+      } catch {
+        setMsg(tr('common.error.network'), 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
   }
 
   function renderCheckout() {
     const d = state.doc;
 
+    // Narx faqat raqam (so'msiz) — "… X soʻm toʻlaysiz" matniga qo'yish uchun.
+    const priceNumber = d.price.toLocaleString('ru-RU').replace(/,/g, ' ');
+
     if (state.booked) {
       const b = state.booked;
       wBody.innerHTML = `<div class="success">
         <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></div>
-        <h4>Navbatingiz band qilindi!</h4>
-        <p>${b.mode === 'at_clinic' ? 'Toʻlov qabulxonada amalga oshiriladi.' : 'Toʻlov qabul qilindi.'}</p>
+        <h4>${esc(tr('booking.success.title'))}</h4>
+        <p>${esc(b.mode === 'at_clinic' ? tr('booking.confirm.payAtDesk', { price: priceNumber }) : tr('booking.paid'))}</p>
         <div class="sum-card" style="margin-top:14px;text-align:left">
-          ${state.patientName ? `<div class="sum-row"><span class="k">Bemor</span><span class="v">${state.patientName}</span></div>` : ''}
-          <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
-          <div class="sum-row"><span class="k">Sana · vaqt</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
-          <div class="sum-row total"><span class="k">Narx</span><span class="v">${fmtPrice(d.price)}</span></div>
+          ${state.patientName ? `<div class="sum-row"><span class="k">${esc(tr('booking.summary.patient'))}</span><span class="v">${esc(state.patientName)}</span></div>` : ''}
+          <div class="sum-row"><span class="k">${esc(tr('booking.summary.doctor'))}</span><span class="v">${esc(d.name)}</span></div>
+          <div class="sum-row"><span class="k">${esc(tr('booking.summary.when'))}</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
+          <div class="sum-row total"><span class="k">${esc(tr('booking.confirm.price'))}</span><span class="v">${fmtPrice(d.price)}</span></div>
         </div>
-        <p class="pay-note">Tasdiq Telegram botga yuborildi. Qabulga 1 soat qolganda eslatma keladi.</p>
+        <p class="pay-note">${esc(tr('booking.success.telegram'))}</p>
         <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap">
-          <a class="btn sm" href="/kabinet">Kabinetda koʻrish</a>
-          <button class="btn btn-ghost btn-sm" id="resetBtn">Yana navbat olish</button>
+          <a class="btn sm" href="/kabinet">${esc(tr('booking.success.cabinet'))}</a>
+          <button class="btn btn-ghost btn-sm" id="resetBtn">${esc(tr('booking.success.again'))}</button>
         </div>
       </div>`;
       wBody.querySelector('#resetBtn').addEventListener('click', () => {
@@ -327,140 +745,48 @@ import DeptIcon from './DeptIcon.astro';
       return;
     }
 
-    wBody.innerHTML = `<div class="pane-label">Bron maʼlumotlari</div>
-      <div class="sum-card">
-        <div class="sum-row" id="whoRow" hidden><span class="k">Bemor</span>
-          <span class="v"><b id="whoName"></b>
-            <button class="who-change" id="whoChange" type="button">oʻzgartirish</button></span></div>
-        <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
-        <div class="sum-row"><span class="k">Yoʻnalish</span><span class="v">${d.job}</span></div>
-        <div class="sum-row"><span class="k">Sana</span><span class="v">${state.dateLabel}</span></div>
-        <div class="sum-row"><span class="k">Vaqt</span><span class="v">${state.time} · ${d.slotMinutes} daqiqa</span></div>
-        <div class="sum-row total"><span class="k">Qabul narxi</span><span class="v">${fmtPrice(d.price)}</span></div>
+    /*
+      Tasdiqlash qadami (B2): onlayn to'lov yo'q — narx katta ko'rsatiladi,
+      "qabulxona kassasiga to'laysiz" matni va Tasdiqlash tugmasi. Server
+      PAYMENT_ENABLED bilan onlayn rejimga o'tsa, javobdagi redirectUrl
+      quyida avvalgidek ishlaydi.
+    */
+    wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.confirm.title'))}</div>
+      <div class="price-box">
+        <div class="price-lab">${esc(tr('booking.confirm.price'))}</div>
+        <div class="price-big">${fmtPrice(d.price)}</div>
+        <div class="price-note">${esc(tr('booking.confirm.payAtDesk', { price: priceNumber }))}</div>
       </div>
-      <div class="who-pick" id="whoPick" hidden>
-        <div class="pane-label">Navbat kim uchun?</div>
-        <div class="who-list" id="whoList"></div>
-        <button class="btn btn-ghost btn-sm w-full" id="whoNew" type="button">+ Boshqa odam</button>
-        <div class="who-form" id="whoForm" hidden>
-          <input id="w-last" type="text" placeholder="Familiya *" autocomplete="family-name" />
-          <input id="w-first" type="text" placeholder="Ism *" autocomplete="given-name" />
-          <input id="w-mid" type="text" placeholder="Sharif (ixtiyoriy)" />
-          <button class="btn btn-sm w-full" id="whoSave" type="button">Saqlash</button>
-        </div>
-        <p class="book-msg" id="whoMsg" role="status" aria-live="polite"></p>
+      <div class="sum-card">
+        <div class="sum-row" id="whoRow" hidden><span class="k">${esc(tr('booking.summary.patient'))}</span>
+          <span class="v"><b id="whoName"></b>
+            <button class="who-change" id="whoChange" type="button">${esc(tr('booking.change'))}</button></span></div>
+        <div class="sum-row"><span class="k">${esc(tr('booking.summary.doctor'))}</span><span class="v">${esc(d.name)}</span></div>
+        <div class="sum-row"><span class="k">${esc(tr('booking.summary.field'))}</span><span class="v">${esc(jobText(d))}</span></div>
+        <div class="sum-row"><span class="k">${esc(tr('booking.summary.date'))}</span><span class="v">${state.dateLabel}</span></div>
+        <div class="sum-row"><span class="k">${esc(tr('booking.summary.time'))}</span><span class="v">${state.time} · ${d.slotMinutes} ${esc(tr('booking.minutes'))}</span></div>
       </div>
       <p class="book-msg" id="bookMsg" role="status" aria-live="polite"></p>
-      <button class="btn w-full" id="wBook">Navbatni band qilish</button>
-      <p class="pay-note">Band qilish uchun Telegram orqali kirgan boʻlishingiz kerak. Bekor qilish yoʻq — qabuldan 1 soat oldingacha vaqtni koʻchirish mumkin.</p>
-      <button class="back-link">← vaqtni oʻzgartirish</button>`;
+      <button class="btn w-full" id="wBook">${esc(tr('booking.confirm.button'))}</button>
+      <p class="pay-note">${esc(tr('booking.confirm.note'))}</p>
+      <button class="back-link">${esc(tr('booking.back'))}</button>`;
 
-    wBody.querySelector('.back-link').addEventListener('click', () => {
-      state.time = null;
-      setStep(3);
-    });
+    wBody.querySelector('.back-link').addEventListener('click', () => setStep(4));
 
     const msg = wBody.querySelector('#bookMsg');
     const btn = wBody.querySelector('#wBook');
 
-    // ---------- "Navbat kim uchun?" ----------
+    // 4-qadamda tanlangan bemor shu yerda ko'rinadi.
     const whoRow = wBody.querySelector('#whoRow');
-    const whoPick = wBody.querySelector('#whoPick');
-    const whoMsg = wBody.querySelector('#whoMsg');
-
-    const showWho = () => {
+    if (state.patientName) {
       whoRow.hidden = false;
-      wBody.querySelector('#whoName').textContent = state.patientName ?? 'tanlanmagan';
-      wBody.querySelector('#whoChange').textContent = state.patientName ? 'oʻzgartirish' : 'tanlash';
-    };
-
-    const paintWhoList = () => {
-      wBody.querySelector('#whoList').innerHTML = (patients?.patients ?? [])
-        .map(
-          (p) => `<button class="who-item${p.id === state.patientId ? ' on' : ''}" data-pick="${p.id}">
-            ${p.name}</button>`,
-        )
-        .join('');
-      wBody.querySelectorAll('[data-pick]').forEach((b) =>
-        b.addEventListener('click', () => choose(b.dataset.pick)),
-      );
-    };
-
-    const choose = async (id) => {
-      const found = (patients?.patients ?? []).find((p) => p.id === id);
-      if (!found) return;
-      state.patientId = found.id;
-      state.patientName = found.name;
-      whoPick.hidden = true;
-      showWho();
-      // Tanlov eslab qolinadi — keyingi safar qayta so'ralmaydi.
-      fetch('/api/patients', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'select', id: found.id }),
-      }).catch(() => {});
-    };
-
-    loadPatients().then((data) => {
-      if (!data) return;
-      showWho();
-      paintWhoList();
-      // Hech kim tanlanmagan bo'lsa — panel darhol ochiladi.
-      if (!state.patientId) whoPick.hidden = false;
-    });
-
-    wBody.querySelector('#whoChange').addEventListener('click', () => {
-      whoPick.hidden = !whoPick.hidden;
-      if (!whoPick.hidden) paintWhoList();
-    });
-
-    wBody.querySelector('#whoNew').addEventListener('click', () => {
-      wBody.querySelector('#whoForm').hidden = false;
-      wBody.querySelector('#whoNew').hidden = true;
-      wBody.querySelector('#w-last').focus();
-    });
-
-    wBody.querySelector('#whoSave').addEventListener('click', async () => {
-      const lastName = wBody.querySelector('#w-last').value.trim();
-      const firstName = wBody.querySelector('#w-first').value.trim();
-      const patronymic = wBody.querySelector('#w-mid').value.trim();
-
-      if (!lastName || !firstName) {
-        whoMsg.textContent = 'Familiya va ism majburiy.';
-        whoMsg.className = 'book-msg error';
-        return;
-      }
-
-      whoMsg.textContent = 'Saqlanmoqda…';
-      whoMsg.className = 'book-msg';
-      try {
-        const res = await fetch('/api/patients', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'add', firstName, lastName, patronymic }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          whoMsg.textContent = data.error ?? 'Saqlab boʻlmadi.';
-          whoMsg.className = 'book-msg error';
-          return;
-        }
-        patients.patients.push(data.patient);
-        whoMsg.textContent = '';
-        wBody.querySelector('#whoForm').hidden = true;
-        wBody.querySelector('#whoNew').hidden = false;
-        await choose(data.patient.id);
-      } catch {
-        whoMsg.textContent = 'Internetga ulanishda muammo.';
-        whoMsg.className = 'book-msg error';
-      }
-    });
+      wBody.querySelector('#whoName').textContent = state.patientName;
+      wBody.querySelector('#whoChange').addEventListener('click', () => setStep(4));
+    }
 
     btn.addEventListener('click', async () => {
       btn.disabled = true;
-      msg.textContent = 'Band qilinmoqda…';
+      msg.textContent = tr('booking.confirm.working');
       msg.className = 'book-msg';
 
       try {
@@ -473,18 +799,21 @@ import DeptIcon from './DeptIcon.astro';
             date: state.date,
             time: state.time,
             ...(state.patientId ? { patientId: state.patientId } : {}),
+            privacyAccepted: state.privacyAccepted,
           }),
         });
         const data = await res.json();
 
         if (res.status === 401) {
-          // Kirmagan bo'lsa — kirish sahifasiga, keyin shu yerga qaytadi.
-          window.location.href = `/kirish?next=${encodeURIComponent(location.pathname + '#navbat-widget')}`;
+          // Sessiya tugagan — 4-qadamda kirish oynasi ochiladi, tanlovlar saqlanadi.
+          patients = null;
+          state.patientId = null;
+          setStep(4);
           return;
         }
 
         if (res.status === 409) {
-          msg.textContent = data.error ?? 'Bu vaqt band qilindi.';
+          msg.textContent = data.error ?? tr('booking.taken');
           msg.className = 'book-msg error';
           btn.disabled = false;
           setTimeout(() => {
@@ -495,7 +824,7 @@ import DeptIcon from './DeptIcon.astro';
         }
 
         if (!res.ok) {
-          msg.textContent = data.error ?? 'Bron qilib boʻlmadi.';
+          msg.textContent = data.error ?? tr('booking.failed');
           msg.className = 'book-msg error';
           btn.disabled = false;
           return;
@@ -509,7 +838,7 @@ import DeptIcon from './DeptIcon.astro';
         state.booked = data;
         render();
       } catch {
-        msg.textContent = 'Internetga ulanishda muammo. Qayta urinib koʻring.';
+        msg.textContent = tr('common.error.network');
         msg.className = 'book-msg error';
         btn.disabled = false;
       }
@@ -543,9 +872,35 @@ import DeptIcon from './DeptIcon.astro';
           uchun), lekin "faolsiz" bo'lgani uchun bemorga ko'rinmasligi
           kerak — kartasi olib tashlanadi.
         */
-        const live = new Set(docs.map((d) => d.id));
+        const liveIds = new Set(docs.map((d) => d.id));
         document.querySelectorAll('[data-doc-card]').forEach((card) => {
-          card.hidden = !live.has(card.dataset.docCard);
+          card.hidden = !liveIds.has(card.dataset.docCard);
+        });
+
+        // Yosh cheklovi (admin panelda o'zgarsa) kartada ham yangilanadi.
+        docs.forEach((d) => {
+          const chip = document.querySelector(`[data-doc-card="${d.id}"] [data-doc-age]`);
+          if (!chip) return;
+          const text = ageChip(toAgeGroup(d.ageGroup), lang);
+          chip.hidden = !text;
+          chip.textContent = text;
+        });
+
+        // Yosh cheklovi (admin panelda o'zgarsa) kartada ham yangilanadi.
+        docs.forEach((d) => {
+          const chip = document.querySelector(`[data-doc-card="${d.id}"] [data-doc-age]`);
+          if (!chip) return;
+          const text = ageChip(toAgeGroup(d.ageGroup), lang);
+          chip.hidden = !text;
+          chip.textContent = text;
+        });
+
+        // Bemor baholari (G2): o'rtacha va soni shifokor kartasida.
+        docs.forEach((d) => {
+          const chip = document.querySelector(`[data-doc-card="${d.id}"] [data-doc-rating]`);
+          if (!chip) return;
+          chip.hidden = !d.ratingCount;
+          if (d.ratingCount) chip.textContent = tr('doctor.rating', { avg: d.ratingAvg, n: d.ratingCount });
         });
 
         // Shifokori qolmagan bo'lim: son o'rniga izoh, tugma o'chiq.
@@ -559,7 +914,7 @@ import DeptIcon from './DeptIcon.astro';
           const go = card.querySelector('.go');
           if (go) {
             go.disabled = n === 0;
-            go.title = n === 0 ? 'Bu boʻlimda hozircha shifokor yoʻq' : '';
+            go.title = n === 0 ? tr('booking.dept.empty') : '';
           }
         });
       }
@@ -569,9 +924,8 @@ import DeptIcon from './DeptIcon.astro';
   })();
 
   /*
-    Bo'lim/shifokor kartalaridagi "Navbat olish" tugmalari. Bu skript
-    (define:vars tufayli) inline bo'lgani uchun kartalar DOM'ga tushishidan
-    oldin ishlaydi — shuning uchun delegatsiya ishlatiladi.
+    Bo'lim/shifokor kartalaridagi "Navbat olish" tugmalari. Kartalar
+    sahifada ko'p va qayta chizilishi mumkin — delegatsiya ishlatiladi.
   */
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-book-dept]');
@@ -597,7 +951,7 @@ import DeptIcon from './DeptIcon.astro';
 <style>
   .widget {
     border-radius: 22px;
-    padding: 22px;
+    padding: var(--card-pad);
     position: relative;
   }
 
@@ -621,7 +975,7 @@ import DeptIcon from './DeptIcon.astro';
   .live-dot {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     font-size: 12px;
     font-weight: 600;
     color: var(--leaf);
@@ -648,7 +1002,7 @@ import DeptIcon from './DeptIcon.astro';
 
   .steps {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: 16px;
   }
 
@@ -657,14 +1011,14 @@ import DeptIcon from './DeptIcon.astro';
     border: none;
     background: var(--busy);
     border-radius: 10px;
-    padding: 7px 4px;
+    padding: 8px 4px;
     font-size: 11.5px;
     font-weight: 650;
     color: var(--muted);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
     transition:
       background 0.2s,
       color 0.2s;
@@ -720,7 +1074,7 @@ import DeptIcon from './DeptIcon.astro';
     text-transform: uppercase;
     letter-spacing: 0.09em;
     color: var(--muted);
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
 
   .widget :global(.dept-grid) {
@@ -732,12 +1086,12 @@ import DeptIcon from './DeptIcon.astro';
   .widget :global(.dept-btn) {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     text-align: left;
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 13px;
-    padding: 11px 13px;
+    padding: 8px 16px;
     font-size: 13.5px;
     font-weight: 600;
     transition:
@@ -789,12 +1143,12 @@ import DeptIcon from './DeptIcon.astro';
   .widget :global(.doc-btn) {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
     text-align: left;
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 13px;
-    padding: 9px 12px;
+    padding: 8px 16px;
     transition: border-color 0.15s;
   }
 
@@ -821,23 +1175,50 @@ import DeptIcon from './DeptIcon.astro';
     color: var(--muted);
   }
 
-  .widget :global(.doc-btn .slot-tag) {
+  .widget :global(.doc-btn .tags) {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .widget :global(.doc-btn .age-tag) {
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--rose);
+    background: var(--rose-soft);
+    border-radius: 999px;
+    padding: 4px 8px;
+    white-space: nowrap;
+  }
+
+  .widget :global(.doc-btn .rate-tag) {
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--warn);
+    background: var(--warn-bg);
+    border-radius: 999px;
+    padding: 4px 8px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.doc-btn .slot-tag) {
     font-size: 11px;
     font-weight: 650;
     color: var(--leaf);
     background: var(--leaf-soft);
     border-radius: 999px;
-    padding: 4px 9px;
+    padding: 4px 8px;
     white-space: nowrap;
   }
 
   .widget :global(.date-row) {
     display: flex;
-    gap: 7px;
+    gap: 8px;
     overflow-x: auto;
-    padding-bottom: 6px;
-    margin-bottom: 14px;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
   }
 
   .widget :global(.date-pill) {
@@ -845,7 +1226,7 @@ import DeptIcon from './DeptIcon.astro';
     border: 1px solid var(--card-brd);
     background: var(--chip-bg);
     border-radius: 12px;
-    padding: 7px 6px;
+    padding: 8px;
     text-align: center;
     font-size: 11px;
     font-weight: 600;
@@ -880,7 +1261,7 @@ import DeptIcon from './DeptIcon.astro';
   .widget :global(.slot-grid) {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 7px;
+    gap: 8px;
     max-height: 210px;
     overflow-y: auto;
     padding-right: 2px;
@@ -925,7 +1306,7 @@ import DeptIcon from './DeptIcon.astro';
     gap: 16px;
     font-size: 11.5px;
     color: var(--muted);
-    margin-top: 12px;
+    margin-top: 16px;
   }
 
   .widget :global(.slot-legend i) {
@@ -933,7 +1314,7 @@ import DeptIcon from './DeptIcon.astro';
     width: 10px;
     height: 10px;
     border-radius: 3px;
-    margin-right: 5px;
+    margin-right: 4px;
     vertical-align: -1px;
   }
 
@@ -950,16 +1331,16 @@ import DeptIcon from './DeptIcon.astro';
     background: var(--chip-bg);
     border: 1px solid var(--card-brd);
     border-radius: 14px;
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
   }
 
   .widget :global(.sum-row) {
     display: flex;
     justify-content: space-between;
     font-size: 14px;
-    padding: 5px 0;
-    gap: 12px;
+    padding: 4px 0;
+    gap: 16px;
   }
 
   .widget :global(.sum-row .k) {
@@ -974,8 +1355,8 @@ import DeptIcon from './DeptIcon.astro';
 
   .widget :global(.sum-row.total) {
     border-top: 1px dashed var(--line);
-    margin-top: 6px;
-    padding-top: 11px;
+    margin-top: 8px;
+    padding-top: 8px;
   }
 
   .widget :global(.sum-row.total .v) {
@@ -989,16 +1370,50 @@ import DeptIcon from './DeptIcon.astro';
     width: 100%;
   }
 
+  /* Tasdiqlash qadami: narx katta, to'lov kassada (B2) */
+  .widget :global(.price-box) {
+    text-align: center;
+    padding: 16px;
+    margin-bottom: 16px;
+    border-radius: 14px;
+    background: var(--rose-soft);
+  }
+
+  .widget :global(.price-lab) {
+    font-size: 11.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+  }
+
+  .widget :global(.price-big) {
+    font-family: var(--font-display);
+    font-size: 34px;
+    font-weight: 800;
+    color: var(--rose);
+    line-height: 1.15;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.price-note) {
+    margin-top: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
   .widget :global(.pay-note) {
     font-size: 12px;
     color: var(--muted);
-    margin-top: 11px;
+    margin-top: 8px;
     line-height: 1.5;
   }
 
   .widget :global(.book-msg) {
     min-height: 20px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     font-size: 13px;
     font-weight: 600;
     color: var(--muted);
@@ -1015,7 +1430,7 @@ import DeptIcon from './DeptIcon.astro';
     font-size: 12.5px;
     font-weight: 600;
     padding: 0;
-    margin-top: 14px;
+    margin-top: 16px;
     text-decoration: underline;
     text-underline-offset: 3px;
   }
@@ -1026,7 +1441,7 @@ import DeptIcon from './DeptIcon.astro';
 
   .widget :global(.success) {
     text-align: center;
-    padding: 10px 4px;
+    padding: 8px 4px;
   }
 
   .widget :global(.success .badge) {
@@ -1035,7 +1450,7 @@ import DeptIcon from './DeptIcon.astro';
     border-radius: 50%;
     background: var(--leaf);
     color: #fff;
-    margin: 0 auto 14px;
+    margin: 0 auto 16px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1050,7 +1465,7 @@ import DeptIcon from './DeptIcon.astro';
   .widget :global(.success h4) {
     font-size: 19px;
     font-weight: 750;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
 
   .widget :global(.success p) {
@@ -1059,7 +1474,7 @@ import DeptIcon from './DeptIcon.astro';
   }
 
   /* "Navbat kim uchun?" — bir telefonga bog'langan oila a'zolari */
-  .who-change {
+  .widget :global(.who-change) {
     margin-left: 8px;
     border: 0;
     background: none;
@@ -1071,22 +1486,17 @@ import DeptIcon from './DeptIcon.astro';
     cursor: pointer;
   }
 
-  .who-pick {
-    margin: 12px 0;
-    padding: 12px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--bg);
-  }
-
-  .who-list {
+  .widget :global(.who-list) {
     display: grid;
-    gap: 6px;
-    margin: 8px 0 10px;
+    gap: 8px;
+    margin: 8px 0;
   }
 
-  .who-item {
-    padding: 10px 13px;
+  .widget :global(.who-item) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 16px;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--card);
@@ -1097,27 +1507,39 @@ import DeptIcon from './DeptIcon.astro';
     cursor: pointer;
   }
 
-  .who-item:hover {
+  .widget :global(.who-item:hover) {
     border-color: var(--leaf);
   }
 
-  .who-item.on {
+  .widget :global(.who-item.on) {
     border-color: var(--leaf);
     background: color-mix(in srgb, var(--leaf) 10%, var(--card));
     font-weight: 650;
   }
 
-  .who-form {
+  .widget :global(.who-bd) {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget :global(.who-bd.none) {
+    color: var(--warn);
+  }
+
+  .widget :global(.who-form) {
     display: grid;
-    gap: 7px;
-    margin-top: 10px;
-    padding-top: 10px;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
     border-top: 1px solid var(--line);
   }
 
-  .who-form input {
+  .widget :global(.who-form input),
+  .widget :global(.birth-sel) {
     width: 100%;
-    padding: 10px 12px;
+    padding: 8px 16px;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--card);
@@ -1126,8 +1548,109 @@ import DeptIcon from './DeptIcon.astro';
     font-size: 14px;
   }
 
-  .who-form input:focus-visible {
+  .widget :global(.who-form input:focus-visible),
+  .widget :global(.birth-sel:focus-visible) {
     outline: none;
     border-color: var(--leaf);
+  }
+
+  .widget :global(.who-item.unfit) {
+    opacity: 0.5;
+  }
+
+  .widget :global(.who-item.unfit .who-bd) {
+    color: var(--rose);
+  }
+
+  .widget :global(.consent) {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 16px 0 4px;
+    font-size: 13px;
+    line-height: 1.45;
+    cursor: pointer;
+  }
+
+  .widget :global(.consent input) {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+    accent-color: var(--rose);
+  }
+
+  .widget :global(.consent a) {
+    color: var(--rose);
+    font-weight: 650;
+  }
+
+  .widget :global(.fld-label) {
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* 4-qadamdagi kirish (guest) */
+  .widget :global(.login-lede) {
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .widget :global(.login-steps) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 16px;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    border-radius: 16px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+
+  .widget :global(.login-steps .tg) {
+    flex: none;
+    background: var(--color-tg, #2aabee);
+    box-shadow: none;
+  }
+
+  .widget :global(.login-inp) {
+    width: 100%;
+    border: 1px solid var(--card-brd);
+    background: var(--chip-bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    margin: 4px 0 8px;
+    font: inherit;
+    font-size: 15px;
+  }
+
+  .widget :global(.login-inp:focus-visible) {
+    outline: none;
+    border-color: var(--rose);
+  }
+
+  .widget :global(.login-inp.code) {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.4em;
+    font-weight: 650;
+  }
+
+  .widget :global(.birth-row) {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr 1.2fr;
+    gap: 8px;
+  }
+
+  .widget :global(.birth-sel) {
+    padding: 8px;
   }
 </style>

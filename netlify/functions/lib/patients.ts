@@ -1,5 +1,7 @@
-import { GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLES } from './db.ts';
+import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { db, TABLES, queryAllPages } from './db.ts';
+import { logToAdmin } from './telegram.ts';
+import { phoneVariants } from './phone.ts';
 
 /**
  * 1C `individuals` jadvalidagi bemor profili. 1C o'zi yozadi:
@@ -27,11 +29,33 @@ type IndividualRecord = {
   DeletionMark?: boolean;
 };
 
-/** 25.04.1990 yoki 1990-04-25 → 1990-04-25. Boshqasi — o'zgarishsiz. */
-const normalizeBirthday = (raw: string): string => {
-  const m = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : raw;
+/** 25.04.1990 yoki 1990-04-25(T…) → 1990-04-25. Boshqasi — o'zgarishsiz. */
+export const normalizeBirthday = (raw: string): string => {
+  const dmy = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  return iso?.[1] ?? raw;
 };
+
+const MIN_BIRTH_YEAR = 1900;
+
+/**
+ * Tug'ilgan sanani tekshiradi (B1): YYYY-MM-DD, haqiqiy kun (30-fevral
+ * emas), 1900 dan bugungacha. Bemor yozuviga faqat shu ko'rinishda yoziladi.
+ */
+export function checkBirthDate(raw: unknown): { ok: true; value: string } | { ok: false; error: string } {
+  const value = typeof raw === 'string' ? normalizeBirthday(raw.trim()) : '';
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return { ok: false, error: 'Tug‘ilgan sana kerak (YYYY-MM-DD)' };
+
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  const real = date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d;
+  if (!real || y < MIN_BIRTH_YEAR || date.getTime() > Date.now()) {
+    return { ok: false, error: 'Tug‘ilgan sana noto‘g‘ri' };
+  }
+  return { ok: true, value };
+}
 
 /*
   1C bemor kodini son sifatida saqlaydi, matnga o'girganda esa guruh
@@ -99,15 +123,7 @@ export async function mergeIndividualProfile(phone: string, telegramId: string):
     raqamdan foydalanadi). Hammasi o'qiladi va Telegram egasiga mos
     kelgani tanlanadi — chegara oilaga yetarli.
   */
-  const found = await db.send(
-    new QueryCommand({
-      TableName: TABLES.individuals,
-      KeyConditionExpression: 'phone = :p',
-      ExpressionAttributeValues: { ':p': phone },
-      Limit: 25,
-    }),
-  );
-  const [first, ...rest] = ((found.Items ?? []) as IndividualRecord[]).filter(
+  const [first, ...rest] = (await readIndividuals(phone)).filter(
     (one) => one.DeletionMark !== true,
   );
   if (!first) return false;
@@ -160,6 +176,8 @@ export type PatientOption = {
   id: string;
   name: string;
   source: '1c' | 'local';
+  /** YYYY-MM-DD; bron uchun majburiy (B1). Yo'q bo'lsa avval so'raladi. */
+  birthDate: string | null;
 };
 
 /** Saytda qo'lda qo'shilgan oila a'zosi (dimed_users ichida saqlanadi). */
@@ -168,6 +186,7 @@ type LocalPatient = {
   first_name: string;
   last_name: string;
   patronymic?: string;
+  birth_date?: string;
 };
 
 type UserRecord = {
@@ -175,6 +194,11 @@ type UserRecord = {
   active_patient_id?: string;
   telegram_name?: string;
   name?: string;
+  /*
+    1C bemorida Birthday bo'lmasa, saytda kiritilgani shu yerda turadi
+    (1C jadvaliga sayt yozmaydi). Kalit — 1C bemor kodi.
+  */
+  birth_dates?: Record<string, string>;
 };
 
 /** "Familiya Ism Sharif" — bo'sh bo'laklarsiz. */
@@ -192,6 +216,71 @@ const readUser = async (telegramId: string): Promise<UserRecord> => {
 };
 
 /**
+ * 1C yozuvlarini oxirigacha o'qiydi.
+ *
+ * Avval `Limit: 25` turardi va sahifalash yo'q edi: bir telefon ostida
+ * 25 tadan ko'p yozuv bo'lsa (1C bitta odamga bir necha marta yozgan
+ * bo'lishi mumkin) oilaning bir qismi jimgina yo'qolardi.
+ *
+ * Xato bo'lsa ham kirish va bron to'xtamaydi — lekin endi jim emas:
+ * sabab log-botga boradi, aks holda "hamma ko'rinmayapti" ni
+ * tekshirib bo'lmaydi.
+ */
+async function readIndividuals(phone: string): Promise<IndividualRecord[]> {
+  const read = (key: string) =>
+    queryAllPages({
+      TableName: TABLES.individuals,
+      KeyConditionExpression: 'phone = :p',
+      ExpressionAttributeValues: { ':p': key },
+    }) as Promise<IndividualRecord[]>;
+
+  try {
+    const rows = await read(phone);
+    /*
+      1C kalitni satr sifatida yozadi: "+998901234567" va "998901234567"
+      ikki xil bemor bo'lib qoladi. Asosiy kalit bo'yicha topilmasa,
+      boshqa yozilishlarini ham qaraymiz — aks holda bemor o'z
+      oilasini ko'rmaydi. Topilsa qo'shimcha so'rov bo'lmaydi.
+    */
+    if (rows.length) return rows;
+
+    const others = phoneVariants(phone).filter((v) => v !== phone);
+    const extra = await Promise.all(others.map((key) => read(key).catch(() => [])));
+    const found = extra.flat();
+    if (found.length) {
+      await logToAdmin(
+        'patients/1c-telefon-formati',
+        new Error(`${phone} uchun yozuvlar boshqa formatdagi kalitda topildi — 1C "+998…" yozishi kerak`),
+      );
+    }
+    return found;
+  } catch (err) {
+    await logToAdmin('patients/1c-royxat', err);
+    return [];
+  }
+}
+
+/**
+ * Bir odam ikki marta chiqmasin: bir xil id, yoki eski "PROFILE"
+ * yozuvi kodli yozuv bilan bir xil ismda bo'lsa — biri qoladi.
+ */
+function dedupe(list: PatientOption[]): PatientOption[] {
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  const out: PatientOption[] = [];
+
+  // Kodli yozuvlar oldin: "PROFILE" faqat o'zi yolg'iz bo'lsa qoladi.
+  for (const one of [...list].sort((a, b) => Number(a.id === 'PROFILE') - Number(b.id === 'PROFILE'))) {
+    const nameKey = one.name.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seenIds.has(one.id) || (one.id === 'PROFILE' && seenNames.has(nameKey))) continue;
+    seenIds.add(one.id);
+    seenNames.add(nameKey);
+    out.push(one);
+  }
+  return out;
+}
+
+/**
  * Telefonga bog'langan bemorlar ro'yxati.
  *
  * Ikki manba qo'shiladi: 1C katalogidagi (klinikada ro'yxatdan o'tgan)
@@ -202,24 +291,25 @@ export async function listPatients(
   phone: string,
   telegramId: string,
 ): Promise<{ patients: PatientOption[]; activeId: string | null }> {
-  const [found, user] = await Promise.all([
-    db.send(
-      new QueryCommand({
-        TableName: TABLES.individuals,
-        KeyConditionExpression: 'phone = :p',
-        ExpressionAttributeValues: { ':p': phone },
-        Limit: 25,
-      }),
-    ).catch(() => ({ Items: [] })),
-    readUser(telegramId),
-  ]);
+  const [rows, user] = await Promise.all([readIndividuals(phone), readUser(telegramId)]);
 
-  const fromOneC = ((found.Items ?? []) as IndividualRecord[])
+  const overrides = user.birth_dates ?? {};
+
+  const fromOneC = rows
     .filter((one) => one.DeletionMark !== true)
     .map((one) => {
-      const raw = one.sort_key !== 'PROFILE' ? one.sort_key : one.Code;
+      /*
+        Yozuv kaliti — 1C bemor kodi. Eski yozuvlarda u "PROFILE" bo'lib,
+        kod alohida maydonda turadi. Ikkalasi ham bo'lmasa yozuvni
+        tashlab yubormaymiz: sort_key o'zi ham telefon ichida yagona,
+        ya'ni identifikator sifatida yetadi — aks holda bunday oila
+        a'zosi ro'yxatdan butunlay yo'qolardi.
+      */
+      const code = one.sort_key !== 'PROFILE' ? one.sort_key : one.Code;
+      const id = normalizeCode(code || one.sort_key || '');
+      const fromOneCBirthday = one.Birthday ? checkBirthDate(one.Birthday) : null;
       return {
-        id: raw ? normalizeCode(raw) : '',
+        id,
         name:
           one.FullName?.trim() ||
           fullNameOf({
@@ -228,6 +318,8 @@ export async function listPatients(
             patronymic: one.Patronymic,
           }),
         source: '1c' as const,
+        // 1C bergan sana ustun; bo'lmasa saytda kiritilgani.
+        birthDate: fromOneCBirthday?.ok ? fromOneCBirthday.value : (overrides[id] ?? null),
       };
     })
     .filter((one) => one.id && one.name);
@@ -236,9 +328,10 @@ export async function listPatients(
     id: p.id,
     name: fullNameOf(p),
     source: 'local' as const,
+    birthDate: p.birth_date ?? null,
   }));
 
-  const patients = [...fromOneC, ...local];
+  const patients = dedupe([...fromOneC, ...local]);
   const activeId =
     user.active_patient_id && patients.some((p) => p.id === user.active_patient_id)
       ? user.active_patient_id
@@ -270,13 +363,17 @@ const cleanName = (raw: unknown): string =>
  */
 export async function addLocalPatient(
   telegramId: string,
-  input: { firstName: unknown; lastName: unknown; patronymic?: unknown },
+  input: { firstName: unknown; lastName: unknown; patronymic?: unknown; birthDate?: unknown },
 ): Promise<PatientOption | { error: string }> {
   const first_name = cleanName(input.firstName);
   const last_name = cleanName(input.lastName);
   const patronymic = cleanName(input.patronymic);
 
   if (!first_name || !last_name) return { error: 'Ism va familiya kerak' };
+
+  // Tug'ilgan sana majburiy (B1): shifokor va laboratoriya uchun kerak.
+  const birth = checkBirthDate(input.birthDate);
+  if (!birth.ok) return { error: birth.error };
 
   const user = await readUser(telegramId);
   if ((user.patients ?? []).length >= 20) {
@@ -288,6 +385,7 @@ export async function addLocalPatient(
     first_name,
     last_name,
     ...(patronymic ? { patronymic } : {}),
+    birth_date: birth.value,
   };
 
   /*
@@ -306,7 +404,52 @@ export async function addLocalPatient(
     }),
   );
 
-  return { id: patient.id, name: fullNameOf(patient), source: 'local' };
+  return { id: patient.id, name: fullNameOf(patient), source: 'local', birthDate: birth.value };
+}
+
+/**
+ * Mavjud bemorga tug'ilgan sana kiritadi (B1).
+ *
+ * Saytda qo'shilgan bemorda — ro'yxatdagi yozuvning o'zi yangilanadi;
+ * 1C bemorida — `birth_dates` xaritasiga yoziladi (1C jadvaliga sayt
+ * yozmaydi; 1C keyin Birthday yuborsa, u ustun bo'ladi). Bemor
+ * topilmasa — null.
+ */
+export async function setPatientBirthDate(
+  phone: string,
+  telegramId: string,
+  id: string,
+  birthDate: string,
+): Promise<PatientOption | null> {
+  const { patients } = await listPatients(phone, telegramId);
+  const patient = patients.find((p) => p.id === id);
+  if (!patient) return null;
+
+  const user = await readUser(telegramId);
+
+  if (patient.source === 'local') {
+    const list = (user.patients ?? []).map((p) => (p.id === id ? { ...p, birth_date: birthDate } : p));
+    await db.send(
+      new UpdateCommand({
+        TableName: TABLES.users,
+        Key: { telegram_id: telegramId },
+        UpdateExpression: 'SET #p = :list',
+        ExpressionAttributeNames: { '#p': 'patients' },
+        ExpressionAttributeValues: { ':list': list },
+      }),
+    );
+  } else {
+    await db.send(
+      new UpdateCommand({
+        TableName: TABLES.users,
+        Key: { telegram_id: telegramId },
+        UpdateExpression: 'SET birth_dates = :map',
+        ExpressionAttributeValues: { ':map': { ...(user.birth_dates ?? {}), [id]: birthDate } },
+      }),
+    );
+  }
+
+  return { ...patient, birthDate };
 }
 
 /** Tanlangan bemorni eslab qoladi (kabinet va bron shu bo'yicha ishlaydi). */

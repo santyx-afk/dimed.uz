@@ -26,7 +26,7 @@ const test = (name, fn) => {
 
 console.log('Jadval ta\'riflari:');
 
-test('9 ta jadval', () => assert.equal(tables.length, 9));
+test('13 ta jadval', () => assert.equal(tables.length, 13));
 
 test('har bir jadvalda nom, maydon va kalit bor', () => {
   for (const t of tables) {
@@ -91,6 +91,24 @@ test('kodda ishlatiladigan indekslar mavjud', () => {
   assert.ok(indexNames('doctors').includes('telegram-index'));
   assert.ok(indexNames('appointments').includes('patient-index'));
   assert.ok(indexNames('appointments').includes('date-index'), 'cron eslatmalari shunga tayanadi');
+  assert.ok(indexNames('visits').includes('date-index'), 'davomat cron\'i shunga tayanadi');
+});
+
+test('bemor ma\'lumoti bor jadvallarda zaxira nusxa yoqiladi', () => {
+  const kutilgan = [
+    'users', 'individuals', 'doctors', 'schedules', 'appointments',
+    'analysis_results', 'payments', 'lab_results', 'prices', 'ratings', 'visits',
+  ];
+  const bor = tables.filter((t) => t.backup).map((t) => t.name);
+  assert.deepEqual(bor.sort(), [...kutilgan].sort(), 'zaxirali jadvallar ro\'yxati');
+
+  // Vaqtinchalik jadvallar zaxirasiz: ular TTL bilan o'zi o'chadi.
+  const vaqtinchalik = tables.filter((t) => !t.backup).map((t) => t.name);
+  assert.deepEqual(vaqtinchalik.sort(), ['otp_codes', 'rate_limits']);
+  assert.ok(
+    vaqtinchalik.every((n) => tables.find((t) => t.name === n).ttlAttribute),
+    'zaxirasiz jadvalda TTL bo\'lishi kerak',
+  );
 });
 
 test('otp_codes da TTL yoqiladi', () => {
@@ -117,6 +135,18 @@ test('cloudshell-setup.sh da hamma shifokor bor', () => {
   const matn = readFileSync(OUTPUT, 'utf8');
   for (const d of doctors) {
     assert.ok(matn.includes(`shifokor "${d.id}"`), `${d.id} skriptda yo'q`);
+  }
+});
+
+test('faolsiz shifokor skriptda active=false bilan yoziladi', () => {
+  // E3: ishdan bo'shagan shifokor bazadan o'chirilmaydi, lekin qayta
+  // seed qilinganda ham saytda paydo bo'lib qolmasligi kerak.
+  const matn = readFileSync(OUTPUT, 'utf8');
+  const faolsiz = doctors.filter((d) => d.active === false);
+  assert.ok(faolsiz.length >= 1, 'kamida bitta faolsiz shifokor kutilgan (murtazayeva)');
+  for (const d of faolsiz) {
+    const qator = matn.split('\n').find((l) => l.startsWith(`shifokor "${d.id}"`));
+    assert.ok(qator?.includes('{"BOOL":false}'), `${d.id} skriptda active=false bo'lishi kerak`);
   }
 });
 

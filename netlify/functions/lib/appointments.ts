@@ -9,8 +9,10 @@ export type AppointmentStatus =
   | 'paid'
   /** klinikada to'lash — bron darhol kuchga kiradi */
   | 'booked'
-  /** qabul bo'lib o'tdi */
+  /** qabul bo'lib o'tdi (shifokor belgiladi yoki vaqti o'tdi) */
   | 'done'
+  /** bemor kelmadi (shifokor belgiladi) */
+  | 'no_show'
   /** bemor boshqa vaqtga ko'chirdi */
   | 'moved'
   | 'cancelled'
@@ -39,8 +41,25 @@ export type Appointment = {
   /** navbat kim uchun olingani (bir telefon — bir oila) */
   patient_id?: string;
   patient_name?: string;
+  /** YYYY-MM-DD — bron paytidagi bemor yozuvidan (B1) */
+  patient_birth_date?: string;
+  /** maxfiylik siyosatiga rozilik berilgan lahza (B4) */
+  privacy_accepted_at?: string;
   /** eslatma yuborilgan lahza — takror yuborilmasligi uchun */
   reminded_at?: string;
+  /** done / no_show deb belgilangan lahza (E2) */
+  marked_at?: string;
+  /** kim belgiladi: shifokor (bo'sh) yoki 1C avtomat (`'1c'`) */
+  marked_by?: string;
+  /** 1C "Doktorga Qabul" hujjati UUID — bemor kelgani shundan ma'lum */
+  visit_ref?: string;
+  /** hujjat o'tkazilgan lahza (1C sanasi ISO ga o'girilgan) */
+  arrived_at?: string;
+  /** bemordan baho so'ralgan lahza (G2) — bir marta so'raladi */
+  rating_asked_at?: string;
+  /** bemor qo'ygan baho 1–5 va lahzasi (G2) */
+  rating?: number;
+  rated_at?: string;
   created_at: string;
 };
 
@@ -80,6 +99,22 @@ export function takenTimes(appointments: Appointment[], now: Date): string[] {
 /** Bron kuchdami: to'langan yoki klinikada to'lanadigan. */
 export const isConfirmed = (appointment: { status: string }): boolean =>
   CONFIRMED.has(appointment.status);
+
+/**
+ * Bemorning kelgusidagi kuchdagi bronlari (patient-index).
+ *
+ * Slotlarni band qilib tashlashga qarshi: bitta telefon cheksiz
+ * navbat olib, klinikaning kunini to'sib qo'yishi mumkin edi.
+ */
+export async function upcomingForPhone(phone: string, now: Date): Promise<Appointment[]> {
+  const found = await queryAllPages({
+    TableName: TABLES.appointments,
+    IndexName: 'patient-index',
+    KeyConditionExpression: 'phone = :p AND starts_at > :now',
+    ExpressionAttributeValues: { ':p': phone, ':now': now.toISOString() },
+  });
+  return (found as Appointment[]).filter(isConfirmed);
+}
 
 /**
  * Butun klinika bo'yicha shu kundagi yozuvlar (date-index).

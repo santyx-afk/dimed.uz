@@ -29,7 +29,11 @@ const marshal = (v) => {
 
 /**
  * `doctors` jadvaliga yoziladigan maydonlar: baza nomi -> doctors.ts
- * dagi manba nomi. `active` har doim true, shuning uchun manbasi yo'q.
+ * dagi manba nomi. `active` alohida hisoblanadi: doctors.ts da
+ * `active: false` bo'lmasa true (faolsiz shifokor seed'da yoqilmaydi).
+ * Uchinchi qiymat `true` bo'lsa maydon `if_not_exists` bilan yoziladi:
+ * adminda belgilangani (yosh cheklovi) qayta ishga tushirishda
+ * o'chib ketmasin.
  *
  * Hammasi `#f0` kabi taxallus bilan yoziladi: DynamoDB'ning band
  * so'zlari ro'yxati uzun (name, hour, status, ...) va u kengayib
@@ -47,6 +51,7 @@ const FIELDS = [
   ['photo', 'photo'],
   ['experience', 'experience'],
   ['hours', 'hours'],
+  ['age_group', 'ageGroup', true],
 ];
 
 /** Skript matnini qaytaradi — sof funksiya, test shuni chaqiradi. */
@@ -61,16 +66,24 @@ export function buildScript(tableDefs, doctors) {
     };
     const json = JSON.stringify(body, null, 2).replaceAll('__PREFIX__', '${PREFIX}');
     const ttl = t.ttlAttribute ? `\nttl "${t.name}" "${t.ttlAttribute}"` : '';
-    return `jadval "${t.name}" "$(cat <<JSON\n${json}\nJSON\n)"${ttl}`;
+    const pitr = t.backup ? `\npitr "${t.name}"` : '';
+    return `jadval "${t.name}" "$(cat <<JSON\n${json}\nJSON\n)"${ttl}${pitr}`;
   });
 
   const names = Object.fromEntries(FIELDS.map(([attr], i) => [`#f${i}`, attr]));
   names['#upd'] = 'updated_at';
-  const setClause = FIELDS.map((_, i) => `#f${i} = :v${i}`).join(', ') + ', #upd = :upd';
+  const setClause =
+    FIELDS.map(([, , keep], i) => (keep ? `#f${i} = if_not_exists(#f${i}, :v${i})` : `#f${i} = :v${i}`)).join(', ') +
+    ', #upd = :upd';
 
   const doctorBlocks = doctors.map((d) => {
     const values = Object.fromEntries(
-      FIELDS.map(([attr, src], i) => [`:v${i}`, marshal(attr === 'active' ? true : d[src] ?? '')]),
+      FIELDS.map(([attr, src], i) => [
+        `:v${i}`,
+        marshal(
+          attr === 'active' ? d.active !== false : attr === 'age_group' ? d[src] ?? 'all' : d[src] ?? '',
+        ),
+      ]),
     );
     // $NOW qobiqda hisoblanadi, shuning uchun bitta tirnoqdan chiqamiz.
     values[':upd'] = { S: '__NOW__' };
@@ -153,6 +166,26 @@ ttl() {
   ddb update-time-to-live --table-name "$toliq" \\
     --time-to-live-specification "Enabled=true,AttributeName=$maydon" >/dev/null
   echo "     TTL yoqildi: $maydon"
+}
+
+pitr() {
+  local toliq="\${PREFIX}_$1"
+
+  # Zaxira nusxa ham faqat ACTIVE jadvalda yoqiladi.
+  ddb wait table-exists --table-name "$toliq"
+
+  local hozir
+  hozir=$(ddb describe-continuous-backups --table-name "$toliq" \\
+    --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus' \\
+    --output text 2>/dev/null || echo DISABLED)
+  if [ "$hozir" = "ENABLED" ]; then
+    echo "     zaxira nusxa allaqachon yoqilgan"
+    return
+  fi
+
+  ddb update-continuous-backups --table-name "$toliq" \\
+    --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true >/dev/null
+  echo "     zaxira nusxa yoqildi (35 kun)"
 }
 
 ${tableBlocks.join('\n\n')}

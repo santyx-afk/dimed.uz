@@ -16,7 +16,7 @@ kiritilmagan.** Kalitlar kiritilgach — bir kun ichida ishga tushadi.
 | --- | --- |
 | Sayt kodi (3 haftalik reja) | ✅ tugagan, `master` da |
 | Avtomatik tekshiruv (CI) | ✅ har o'zgarishda ishlaydi |
-| Testlar | ✅ 149 ta (88 mantiq + 61 API) o'tadi |
+| Testlar | ✅ 215 ta (113 mantiq + 102 API) o'tadi |
 | Internetda ishlashi | ❌ kalitlar yo'q |
 | Onlayn to'lov (Payme) | 🟡 kod tayyor — kassa kalitlari kutilmoqda |
 
@@ -31,16 +31,18 @@ kiritilmagan.** Kalitlar kiritilgach — bir kun ichida ishga tushadi.
 | Onlayn navbat | Bo'lim → shifokor → sana → vaqt → tasdiq |
 | Telegram orqali kirish | SMS yo'q, parol yo'q. Botga `/start`, kontakt ulashadi, 6 xonali kod oladi (5 daqiqa amal qiladi, bir martalik) |
 | Shaxsiy kabinet | Navbatlari, tahlil natijalari, holati |
-| Vaqtni ko'chirish | Boshqa vaqtga o'tkazadi. Bekor qilish yo'q — kelishuvga muvofiq |
+| Ko'chirish va bekor qilish | Bemor kabinetdan navbatni boshqa vaqtga o'tkazadi yoki bekor qiladi (qabulga 1 soatdan ko'p qolganda) |
 | Eslatma | Qabuldan ~1 soat oldin botga xabar |
-| Tahlil natijalari | 1C dan avtomatik keladi; PDF ni sayt brauzerda yasab beradi |
+| Tahlil natijalari | 1C dan avtomatik keladi; yangi natija tushganda botda havola; natija sahifasi, PDF va ulashish — brauzerda |
+| Baho | Qabuldan keyin botda 1–5 yulduz va izoh; o'rtacha baho shifokor kartasida |
 
 ### Shifokor uchun
 
 | Imkoniyat | Tafsilot |
 | --- | --- |
 | Shaxsiy kabinet | Bugungi va keyingi navbatlari |
-| Jadvalni boshqarish | Smenalar (masalan 08:30–12:30 va 13:30–16:00), tanaffuslar, slot davomiyligi (10/15/20/30 daq) |
+| Jadvalni boshqarish | Smenalar (masalan 08:30–12:30 va 13:30–16:00), tanaffuslar, dam olish kunlari, slot davomiyligi (10/15/20/30/60 daq, standart 60) |
+| «Qabul qilindi / Kelmadi» | Qabuldan keyin bir tugma; «qabul qilindi» bo'lsa bemorga botda 1–5 yulduzli baho so'rovi boradi |
 | Kunlik xulosa | Har kuni ertalab 07:00 da botga «bugungi navbatlaringiz» |
 | «Ishga chiqa olmayman» | Bitta tugma: kun yopiladi, o'sha kundagi barcha bemorlarga uzr xabari boradi, slotlar bo'shaydi |
 
@@ -54,7 +56,7 @@ kiritilmagan.** Kalitlar kiritilgach — bir kun ichida ishga tushadi.
 ### Texnik tomondan
 
 - Eski Jekyll sayt → yangi Astro sayt (tezroq, kontent `legacy/` da saqlangan)
-- 15 ta server funksiyasi, 7 ta baza jadvali
+- 25 ta server funksiyasi (4 tasi jadval bo'yicha ishlaydigan cron), 11 ta baza jadvali
 - Rasmlar 4 barobar siqilgan (423KB → 103KB), shriftlar o'z serverimizda
 - SEO: `robots.txt`, `sitemap.xml`
 
@@ -86,7 +88,8 @@ Bu yerda baza (navbatlar, bemorlar, tahlil natijalari) saqlanadi.
 S3 kerak emas — tahlil PDF'ini sayt brauzerning o'zida yasab beradi.
 
 1. https://aws.amazon.com da akkaunt oching
-2. **Region tanlang va shuni hamma joyda ishlating** — tavsiya: `eu-central-1`
+2. **Region tanlang va shuni hamma joyda ishlating** — klinikada `us-east-1`
+   (jadvallar shu yerda, 1C kengaytmasi ham shu regionga yozadi)
    (Frankfurt). Keyin o'zgartirish qiyin
 3. IAM → foydalanuvchi yarating → quyidagi policy'ni biriktiring
 4. Shu foydalanuvchi uchun **Access Key** va **Secret Key** yarating
@@ -143,7 +146,7 @@ o'zgartirsangiz bu yerni ham o'zgartiring.
 
 ### Qadam 4 — Bazani yaratish · ~10 daqiqa · **siz** (AWS CloudShell)
 
-**Jadvallarni qo'lda yaratmang.** 7 ta jadval, 4 ta indeks va 1 ta TTL
+**Jadvallarni qo'lda yaratmang.** 11 ta jadval, 5 ta indeks va 1 ta TTL
 sozlamasi kerak. Qo'lda kiritishda bitta harf xato bo'lsa sayt xato
 bermaydi — shunchaki jim ishlamay qo'yadi. Skript hammasini to'g'ri
 yaratadi va mavjudini o'tkazib yuboradi (qayta ishga tushirish xavfsiz).
@@ -168,7 +171,7 @@ allaqachon bor. Git, Node.js, npm — kerak emas.
 bash cloudshell-setup.sh
 ```
 
-Skript uchta ishni ketma-ket bajaradi: 7 ta jadvalni yaratadi, ular
+Skript uchta ishni ketma-ket bajaradi: 11 ta jadvalni yaratadi, ular
 tayyor bo'lishini kutadi, keyin 9 ta shifokorni yozadi. Boshida qaysi
 region va qaysi AWS hisobi ishlatilayotgani chiqadi — shuni bir
 tekshiring.
@@ -180,11 +183,14 @@ git clone https://github.com/santyx-afk/dimed.uz.git
 cd dimed.uz
 npm i @aws-sdk/client-dynamodb @aws-sdk/lib-dynamodb
 
-# 7 ta jadval va indekslar
-DIMED_AWS_REGION=eu-central-1 node scripts/create-tables.mjs
+# 11 ta jadval va indekslar
+DIMED_AWS_REGION=us-east-1 node scripts/create-tables.mjs
 
 # shifokorlarni bazaga yozish
-DIMED_AWS_REGION=eu-central-1 node --experimental-strip-types scripts/seed-doctors.mjs
+DIMED_AWS_REGION=us-east-1 node --experimental-strip-types scripts/seed-doctors.mjs
+
+# tahlil narxlarini bazaga yozish (bir marta; keyin admin panel → Narxlar)
+DIMED_AWS_REGION=us-east-1 node scripts/seed-prices.mjs
 ```
 
 Ikkala yo'l ham bir xil natija beradi — `cloudshell-setup.sh` aynan
@@ -214,6 +220,8 @@ barcha maydon turi **String**, barcha indeks proyeksiyasi **ALL**:
 | `dimed_appointments` | `doctor_day` | `time` | `patient-index`: `phone` + `starts_at`<br>`date-index`: `date` + `starts_at` | — |
 | `dimed_payments` | `payment_id` | — | — | — |
 | `dimed_lab_results` | `phone` | `sort_key` | — | — |
+| `dimed_prices` | `item_id` | — | — | — |
+| `dimed_ratings` | `doctor_id` | `created_at` | — | — |
 
 `date-index` siz eslatmalar va shifokorning kunlik xulosasi ishlamaydi.
 `dimed_otp_codes` dagi TTL — eskirgan kirish kodlarini bazaning o'zi
@@ -312,7 +320,7 @@ Bular javob kutadi, shuning uchun yuqoridagi qadamlarga parallel yuritiladi.
 
 **Payme haqida aniqlik:** integratsiya kodi **yozib bo'lingan va
 testlangan** (`docs/payme-integration.md`). Kassa ochilgach kalitlar
-Netlify'ga qo'yiladi, `PAYME_ENABLED=1` qilinadi va **bron mantig'i
+Netlify'ga qo'yiladi, `PAYMENT_ENABLED=1` qilinadi va **bron mantig'i
 umuman o'zgarmaydi**. Kassa ochilmaguncha sayt «klinikada to'lash»
 rejimida to'liq ishlaydi.
 
@@ -329,7 +337,7 @@ Netlify → Site settings → Environment variables.
 | `TELEGRAM_LOG_BOT_TOKEN` | @BotFather, log-bot | siz |
 | `TELEGRAM_LOG_CHAT_ID` | Guruh id (manfiy raqam) | siz |
 | `SESSION_SECRET` | Tasodifiy satr, ≥32 belgi | men yarataman |
-| `DIMED_AWS_REGION` | `eu-central-1` | tayyor |
+| `DIMED_AWS_REGION` | `us-east-1` | tayyor |
 | `DIMED_TABLE_PREFIX` | `dimed` | tayyor |
 | `DIMED_AWS_ACCESS_KEY_ID` | AWS IAM | siz |
 | `DIMED_AWS_SECRET_ACCESS_KEY` | AWS IAM | siz |
@@ -338,7 +346,8 @@ Netlify → Site settings → Environment variables.
 | `PAYME_MERCHANT_ID` | Payme kassa ID | kassa ochilgach |
 | `PAYME_KEY` | Payme ishchi kalit | kassa ochilgach |
 | `PAYME_TEST_KEY` | Payme sinov kaliti | kassa ochilgach |
-| `PAYME_ENABLED` | Hozircha bo'sh; kassadan keyin `1` | keyin |
+| `PAYMENT_ENABLED` | Hozircha bo'sh (kassada to'lash); kassadan keyin `1` | keyin |
+| `SITE_URL` | `https://dimed.uz` — bot xabarlaridagi havolalar uchun | tayyor |
 
 «Men yarataman» deganlari — tasodifiy parollar, ularni hech kimdan
 so'ramaysiz. Kerak bo'lsa o'zingiz ham yaratasiz: `openssl rand -base64 32`.
@@ -364,6 +373,11 @@ Manzil: **`/kabinet/admin`**. Bu yerdan terminalsiz:
 - shifokorni **o'chirish** (faolsizlantirish — saytdan yo'qoladi, tarixi
   saqlanadi, kerak bo'lsa qayta faollashtiriladi)
 - shifokorni **Telegram'ga bog'lash** (kabinetiga kirishi uchun)
+- **Narxlar** (`/kabinet/admin/narxlar`): shifokor qabuli va barcha
+  tahlil turlari narxi, tayyor bo'lish muddati, «Saytda» belgisi —
+  o'zgarish saytda darhol ko'rinadi
+- **Baholar** (`/kabinet/admin/baholar`): bemorlar qo'ygan baholar va
+  izohlar, nomaqbulini yashirish (o'rtachaga kirmaydi)
 
 Kirish — xuddi shifokorlarnikidek, **Telegram orqali** (parol yo'q).
 Faqat `ADMIN_TELEGRAM_IDS` ro'yxatidagi hisob kira oladi.
@@ -433,8 +447,9 @@ parallel yozishni to'xtatadi.
 
 1. **To'lov hozircha qabulxonada.** Slot band qilinadi, pul klinikada
    to'lanadi. Payme kassasi ochilgach onlayn to'lov yoqiladi
-2. **Bekor qilish yo'q.** Bemor faqat vaqtni ko'chira oladi. Shifokorni
-   almashtirish — bu yangi navbat. Bu kelishilgan qoida
+2. **Bekor qilish bor.** Bemor navbatni kabinetdan bekor qila oladi yoki
+   boshqa vaqtga ko'chira oladi — ikkalasi ham qabulga 1 soatdan ko'p
+   qolganda. Shifokorni almashtirish — bu yangi navbat
 3. **1 soat qoidasi.** Qabulga 1 soatdan kam qolgan bo'lsa bron ham,
    ko'chirish ham mumkin emas
 4. **Kirish faqat Telegram orqali.** Telegram'i yo'q bemor saytdan
@@ -475,9 +490,11 @@ parallel yozishni to'xtatadi.
 
 | Fayl | Kim uchun |
 | --- | --- |
+| `docs/QOLGAN-ISHLAR.md` | Klinika egasi — hozir nima qilish kerak (joriy ro'yxat) |
 | `docs/ISHGA-TUSHIRISH.md` | Klinika egasi — shu hujjat |
 | `docs/HANDOFF.md` | Sayt dasturchisi — texnik qarorlar, kod tuzilishi |
-| `docs/1c-integration.md` | 1C dasturchisi — tahlil natijalarini yuborish |
+| `docs/1c-integration.md` | 1C dasturchisi — bemor profili va tahlil natijalari |
+| `docs/1c-sync.md` | 1C dasturchisi — navbatlarni 1C bilan sinxronlash |
 | `docs/payme-integration.md` | Payme kassasini ulaydigan odam |
 | `scripts/cloudshell-setup.sh` | Siz — AWS CloudShell'ga yuklanadigan fayl |
 

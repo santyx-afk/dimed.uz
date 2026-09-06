@@ -14,11 +14,15 @@ const keySchema = {
   test_otp_codes: ['phone'],
   test_individuals: ['phone', 'sort_key'],
   test_analysis_results: ['phone', 'sort_key'],
+  test_visits: ['phone', 'sort_key'],
   test_doctors: ['doctor_id'],
   test_schedules: ['doctor_id', 'date'],
   test_appointments: ['doctor_day', 'time'],
   test_payments: ['payment_id'],
   test_lab_results: ['phone', 'sort_key'],
+  test_prices: ['item_id'],
+  test_ratings: ['doctor_id', 'created_at'],
+  test_rate_limits: ['bucket'],
 };
 for (const t of Object.keys(keySchema)) tables.set(t, new Map());
 
@@ -104,6 +108,18 @@ function splitTop(text) {
   return parts.map((p) => p.trim()).filter(Boolean);
 }
 
+/** Qavs tashqarisidagi birinchi + yoki - belgisining o'rni. */
+function topLevelOperator(text) {
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '(') depth++;
+    else if (c === ')') depth--;
+    else if (depth === 0 && (c === '+' || c === '-')) return { at: i, sign: c };
+  }
+  return null;
+}
+
 /**
  * SET o'ng tomonidagi ifoda: qiymat, maydon yoki funksiya.
  * DynamoDB'da ishlatadiganlarimiz — list_append va if_not_exists.
@@ -111,6 +127,14 @@ function splitTop(text) {
 function evalValue(expr, item, names, values) {
   const t = expr.trim();
   if (t.startsWith(':')) return values[t];
+
+  // Yig'indilar: `if_not_exists(rating_sum, :z) + :n` — qavs tashqarisidagi + / -.
+  const op = topLevelOperator(t);
+  if (op) {
+    const a = Number(evalValue(t.slice(0, op.at), item, names, values) ?? 0);
+    const b = Number(evalValue(t.slice(op.at + 1), item, names, values) ?? 0);
+    return op.sign === '+' ? a + b : a - b;
+  }
 
   let m = t.match(/^list_append\((.+)\)$/s);
   if (m) {
@@ -206,7 +230,11 @@ const server = createServer((req, res) => {
       if (!evalCondition(payload.ConditionExpression, existing, names, values)) {
         return fail('ConditionalCheckFailedException');
       }
-      store.set(id, applyUpdate(existing ?? key, payload.UpdateExpression, names, values));
+      const updated = applyUpdate(existing ?? key, payload.UpdateExpression, names, values);
+      store.set(id, updated);
+      if (payload.ReturnValues === 'ALL_NEW') {
+        return send({ Attributes: Object.fromEntries(Object.entries(updated).map(([k, v]) => [k, marshal(v)])) });
+      }
       return send({});
     }
 
@@ -223,6 +251,33 @@ const server = createServer((req, res) => {
       const field = m[1].startsWith('#') ? names[m[1]] : m[1];
       const wanted = values[m[2]];
       let items = [...store.values()].filter((i) => i[field] === wanted);
+
+      /*
+        Sort kalit bo'yicha shart: `AND sk > :v`, `BETWEEN`, `begins_with`.
+        Haqiqiy DynamoDB uni bajaradi — soxtasi e'tiborsiz qoldirsa,
+        ortiqcha yozuv qaytarib, kodni noto'g'ri "ishlayapti" ko'rsatardi.
+      */
+      const rest = cond.slice(cond.indexOf(m[0]) + m[0].length);
+      const nameOf = (tok) => (tok.startsWith('#') ? names[tok] : tok);
+      const cmpMatch = rest.match(/AND\s+([#\w]+)\s*(<=|>=|<|>)\s*(:\w+)/);
+      if (cmpMatch) {
+        const key = nameOf(cmpMatch[1]);
+        const bound = values[cmpMatch[3]];
+        const cmp = { '<': (a) => a < bound, '<=': (a) => a <= bound, '>': (a) => a > bound, '>=': (a) => a >= bound };
+        items = items.filter((i) => i[key] !== undefined && cmp[cmpMatch[2]](i[key]));
+      }
+      const betweenMatch = rest.match(/AND\s+([#\w]+)\s+BETWEEN\s+(:\w+)\s+AND\s+(:\w+)/i);
+      if (betweenMatch) {
+        const key = nameOf(betweenMatch[1]);
+        const [lo, hi] = [values[betweenMatch[2]], values[betweenMatch[3]]];
+        items = items.filter((i) => i[key] !== undefined && i[key] >= lo && i[key] <= hi);
+      }
+      const prefixMatch = rest.match(/AND\s+begins_with\(\s*([#\w]+)\s*,\s*(:\w+)\s*\)/i);
+      if (prefixMatch) {
+        const key = nameOf(prefixMatch[1]);
+        const prefix = String(values[prefixMatch[2]]);
+        items = items.filter((i) => String(i[key] ?? '').startsWith(prefix));
+      }
 
       // Haqiqiy DynamoDB natijani sort kalit bo'yicha beradi —
       // sahifalash shu tartibga tayanadi.

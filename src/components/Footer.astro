@@ -1,14 +1,36 @@
 ---
 import Logo from './Logo.astro';
 import { site } from '../data/site';
+import type { Lang } from '../data/i18n';
+import { h } from '../data/home';
 
+interface Props {
+  /** Ommaviy sahifada — o'sha sahifaning tili; kabinetda berilmaydi. */
+  lang?: Lang;
+}
+const { lang } = Astro.props;
+const L: Lang = lang ?? 'uz';
 const year = new Date().getFullYear();
+
+/*
+  Maxfiylik sahifasi bitta manzilda turadi va uch tilni o'zi
+  almashtiradi (tab tugmalari bilan), shuning uchun unga til prefiksi
+  bilan emas — `?lang=` bilan boramiz.
+*/
+const privacyHref = L === 'uz' ? '/maxfiylik' : `/maxfiylik?lang=${L}`;
 ---
 
-<footer class="wrap">
+<footer class="wrap" id="siteFooter" data-foot-lang={lang ?? ''}>
   <div class="foot-in">
     <Logo height={22} />
-    <p>© {year} Dimed klinikasi · {site.address}</p>
+    <p>
+      © {year} Dimed klinikasi ·
+      <a class="foot-link" href={site.mapsUrl} target="_blank" rel="noopener">
+        {h('contact.address.value', L)}
+      </a>
+      <span class="sep" aria-hidden="true">·</span>
+      <a class="foot-link" href={privacyHref} data-t="footer.privacy">{h('footer.privacy', L)}</a>
+    </p>
     <div class="foot-soc">
       <a href={site.telegramBot} target="_blank" rel="noopener" aria-label="Telegram">
         <svg viewBox="0 0 24 24" aria-hidden="true"
@@ -35,18 +57,30 @@ const year = new Date().getFullYear();
   </div>
 </footer>
 
+<script>
+  /*
+    Ommaviy sahifada matn serverda o'sha tilda yozilgan. Kabinet, kirish
+    va 404 sahifalarida esa til faqat brauzerda ma'lum — sarlavhadagi
+    kabi, shu yerda ham almashtiriladi.
+  */
+  import { getLang, applyPageLang } from '../lib/lang';
+
+  const footer = document.getElementById('siteFooter');
+  if (footer && !footer.dataset.footLang) applyPageLang(getLang(), footer);
+</script>
+
 <style>
   footer {
-    padding: 34px 0 46px;
+    padding: var(--sp-5) 0 var(--sp-6);
     border-top: 1px solid var(--line);
-    margin-top: 30px;
+    margin-top: var(--sp-5);
   }
 
   .foot-in {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 18px;
+    gap: 16px;
     flex-wrap: wrap;
   }
 
@@ -55,9 +89,23 @@ const year = new Date().getFullYear();
     color: var(--muted);
   }
 
+  .sep {
+    margin: 0 8px;
+  }
+
+  .foot-link {
+    color: var(--muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .foot-link:hover {
+    color: var(--rose);
+  }
+
   .foot-soc {
     display: flex;
-    gap: 10px;
+    gap: 8px;
   }
 
   .foot-soc a {

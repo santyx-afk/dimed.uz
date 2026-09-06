@@ -34,7 +34,8 @@ for (const d of doctors) {
       // qayta seed qilishda o'chib ketmasligi kerak.
       UpdateExpression: `SET #n = :name, job = :job, dept_id = :dept, shifts = :shifts,
         slot_minutes = :slot, workdays = :workdays, price = :price, active = :active,
-        photo = :photo, experience = :exp, hours = :hours, updated_at = :updated`,
+        photo = :photo, experience = :exp, hours = :hours,
+        age_group = if_not_exists(age_group, :ageGroup), updated_at = :updated`,
       ExpressionAttributeNames: { '#n': 'name' },
       ExpressionAttributeValues: {
         ':name': d.name,
@@ -44,10 +45,13 @@ for (const d of doctors) {
         ':slot': d.slotMinutes,
         ':workdays': d.workdays,
         ':price': d.price,
-        ':active': true,
+        // Faolsiz shifokor (doctors.ts da active:false) qayta seed'da ham yoqilib ketmaydi.
+        ':active': d.active !== false,
         ':photo': d.photo,
         ':exp': d.experience ?? '',
         ':hours': d.hours,
+        // Adminda belgilangan yosh cheklovi qayta seed'da o'chib ketmaydi.
+        ':ageGroup': d.ageGroup ?? 'all',
         ':updated': new Date().toISOString(),
       },
     }),

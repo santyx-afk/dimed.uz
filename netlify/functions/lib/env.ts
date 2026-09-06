@@ -7,7 +7,10 @@ export function required(name: string): string {
 
 export const optional = (name: string, fallback = ''): string => process.env[name] ?? fallback;
 
-export const AWS_REGION = optional('DIMED_AWS_REGION', 'eu-central-1');
+// Klinikaning jadvallari us-east-1 da (1C kengaytmasi ham shu regionga
+// yozadi). Standart qiymat shu bilan bir xil bo'lishi kerak: aks holda
+// DIMED_AWS_REGION unutilsa jadvallar "topilmaydi" va sabab ko'rinmaydi.
+export const AWS_REGION = optional('DIMED_AWS_REGION', 'us-east-1');
 export const TABLE_PREFIX = optional('DIMED_TABLE_PREFIX', 'dimed');
 
 /**

@@ -1,0 +1,536 @@
+---
+import Base from '../layouts/Base.astro';
+import { site } from '../data/site';
+import { LANGS, LANG_NAMES } from '../data/i18n';
+
+/*
+  Maxfiylik siyosati — uch tilda (H2). Matnlar bitta sahifada, `data-lang`
+  bloklarda: uz standart ko'rinadi (SEO uchun ham), ru/en tugma bilan
+  almashtiriladi (`?lang=ru` yoki eslab qolingan tanlov).
+*/
+const updated = '2026-09-05';
+---
+
+<Base
+  title="Maxfiylik siyosati — Dimed klinikasi"
+  description="Dimed klinikasi sayti va Telegram boti qanday shaxsiy ma'lumotlarni yig'adi, nima maqsadda ishlatadi, qayerda saqlaydi va bemor qanday huquqlarga ega."
+>
+  <section class="wrap page">
+    <div class="head">
+      <div class="sec-head">
+        <div class="eyebrow">Dimed klinikasi</div>
+        <h1 data-lang="uz">Maxfiylik siyosati</h1>
+        <h1 data-lang="ru" hidden>Политика конфиденциальности</h1>
+        <h1 data-lang="en" hidden>Privacy policy</h1>
+        <p class="upd">
+          <span data-lang="uz">Oxirgi yangilanish: {updated}</span>
+          <span data-lang="ru" hidden>Обновлено: {updated}</span>
+          <span data-lang="en" hidden>Last updated: {updated}</span>
+        </p>
+      </div>
+      <div class="tabs" role="group" aria-label="Til / Язык / Language">
+        {LANGS.map((l) => (
+          <button type="button" class="tab" data-lang-pick={l} aria-pressed={l === 'uz'}>
+            {LANG_NAMES[l]}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    <!-- ================= UZ ================= -->
+    <article class="doc glass" data-lang="uz" lang="uz">
+      <p class="lede">
+        Ushbu siyosat «Dimed» koʻp ixtisosli tibbiy markazi (Chinoz shahri, Navoiy koʻchasi, 18 —
+        keyingi oʻrinlarda «Klinika») dimed.uz sayti va «Dimed klinikasi boti» (Telegram) orqali
+        shaxsiy maʼlumotlaringizni qanday yigʻishi, ishlatishi va himoya qilishini tushuntiradi.
+        Saytdan yoki botdan foydalanib, siz ushbu siyosatga rozilik bildirasiz.
+      </p>
+
+      <h2>1. Qanday maʼlumotlar yigʻiladi</h2>
+      <ul>
+        <li><b>Shaxsni aniqlovchi maʼlumotlar:</b> familiya, ism, sharif (F.I.Sh.), tugʻilgan sana, jins.</li>
+        <li><b>Aloqa maʼlumotlari:</b> telefon raqami, Telegram hisobingizning identifikatori va ismi.</li>
+        <li><b>Navbat maʼlumotlari:</b> tanlangan shifokor, boʻlim, qabul sanasi va vaqti, qabul narxi, navbat holati (band qilingan, koʻchirilgan, boʻlib oʻtgan, kelmagan).</li>
+        <li><b>Tibbiy maʼlumotlar:</b> Klinika laboratoriyasida topshirgan tahlillaringizning natijalari (koʻrsatkich nomi, qiymati, meʼyoriy oraliq, namuna olingan sana).</li>
+        <li><b>Fikr-mulohaza:</b> qabuldan keyin shifokorga qoʻygan bahoyingiz va izohingiz (ixtiyoriy).</li>
+        <li><b>Texnik maʼlumotlar:</b> kirish sessiyasi, tanlangan til va brauzerda saqlanadigan qulaylik sozlamalari. Sayt reklama trekerlari va tahliliy skriptlardan foydalanmaydi.</li>
+      </ul>
+      <p>
+        F.I.Sh., tugʻilgan sana va jins Klinikaning «1C» hisob tizimidagi bemor kartangizdan olinadi
+        yoki navbat olayotganda siz oʻzingiz kiritasiz. Telefon raqami faqat Telegram kontaktini
+        ulashganingizda olinadi.
+      </p>
+
+      <h2>2. Nima maqsadda ishlatiladi</h2>
+      <ul>
+        <li>shifokorga onlayn navbat olish, uni tasdiqlash va vaqtini koʻchirish;</li>
+        <li>shaxsiy kabinetga kirish (Telegram orqali bir martalik kod bilan);</li>
+        <li>tahlil natijalarini shaxsiy kabinetda koʻrsatish va tayyor boʻlganda xabar berish;</li>
+        <li>qabul haqida eslatma va Klinikadan zarur xabarlarni yuborish;</li>
+        <li>xizmat sifatini baholash (qabuldan keyin baho soʻrash);</li>
+        <li>qonunchilik talablarini bajarish va tibbiy hujjatlarni yuritish.</li>
+      </ul>
+      <p>Maʼlumotlaringiz reklama maqsadida ishlatilmaydi va uchinchi shaxslarga sotilmaydi.</p>
+
+      <h2>3. Qayerda va qanday saqlanadi</h2>
+      <p>
+        Maʼlumotlar Amazon Web Services (AWS) bulut platformasidagi DynamoDB maʼlumotlar bazasida
+        shifrlangan holda saqlanadi; unga faqat Klinikaning texnik kalitlari orqali kirish mumkin.
+        Sayt Netlify platformasida joylashgan. Bemor kartasi va tahlil natijalari Klinikaning «1C»
+        tizimi bilan sinxronlanadi — bu tizim Klinikaning oʻzida ishlaydi.
+      </p>
+      <p>
+        Kirish uchun parol ishlatilmaydi: bir martalik kod Telegram orqali yuboriladi va 5 daqiqadan
+        soʻng oʻz kuchini yoʻqotadi. Sayt sessiyasi brauzerda 30 kun saqlanadi; «Chiqish» tugmasi uni
+        darhol tugatadi.
+      </p>
+
+      <h2>4. Telegram bot orqali xabarlar</h2>
+      <p>«Dimed klinikasi boti» sizga quyidagi xabarlarni yuboradi:</p>
+      <ul>
+        <li>saytga kirish uchun bir martalik kod;</li>
+        <li>navbat band qilingani, koʻchirilgani yoki Klinika tomonidan bekor qilingani haqida tasdiq;</li>
+        <li>qabulga 1 soat qolganda eslatma;</li>
+        <li>tahlil natijasi tayyor boʻlgani va uni koʻrish havolasi;</li>
+        <li>qabuldan keyin shifokorni baholash soʻrovi.</li>
+      </ul>
+      <p>
+        Telegram orqali yuborilgan xabarlar Telegram kompaniyasining oʻz maxfiylik siyosatiga ham
+        boʻysunadi. Xabarlarni olishni istamasangiz, botni bloklashingiz mumkin — bunda navbat olish
+        uchun kirish ham ishlamaydi, qabulxonaga qoʻngʻiroq qilib navbat olishingiz mumkin.
+      </p>
+
+      <h2>5. Maʼlumotlarni kim koʻradi</h2>
+      <ul>
+        <li><b>Siz</b> — shaxsiy kabinetda oʻz navbatlaringiz va tahlil natijalaringizni koʻrasiz. Bir telefon raqamiga oila aʼzolari bogʻlangan boʻlsa, ularning navbatlari va natijalari ham shu kabinetda koʻrinadi.</li>
+        <li><b>Qabul qiladigan shifokor</b> — oʻz navbatidagi bemorlarning ismi, qabul vaqti va telefon raqamining niqoblangan koʻrinishini koʻradi.</li>
+        <li><b>Klinika administratsiyasi</b> — navbatlar, narxlar va baholarni boshqarish uchun.</li>
+        <li><b>Laboratoriya xodimlari</b> — tahlil natijalarini «1C» tizimiga kiritish uchun.</li>
+      </ul>
+      <p>
+        Maʼlumotlar boshqa hech kimga berilmaydi, faqat qonun talab qilgan hollarda vakolatli davlat
+        organlariga taqdim etilishi mumkin. Tahlil natijasi havolasini boshqa odam bilan «Ulashish»
+        orqali baham koʻrsangiz, oʻsha havolaga ega har kim natijani koʻra oladi — havolani faqat
+        ishonchli odamlarga yuboring.
+      </p>
+
+      <h2>6. Saqlash muddati</h2>
+      <ul>
+        <li>kirish kodlari — 5 daqiqa, soʻng avtomatik oʻchiriladi;</li>
+        <li>sayt sessiyasi — 30 kun yoki «Chiqish» bosilguncha;</li>
+        <li>navbatlar tarixi va tahlil natijalari — tibbiy hujjatlar uchun qonunda belgilangan muddat davomida, Klinikadagi bemor kartangiz bilan birga;</li>
+        <li>baholar va izohlar — Klinika ularni yashirguncha yoki siz oʻchirishni soʻraguncha.</li>
+      </ul>
+
+      <h2>7. Sizning huquqlaringiz</h2>
+      <ul>
+        <li>oʻzingiz haqingizdagi maʼlumotlarni koʻrish (shaxsiy kabinet);</li>
+        <li>notoʻgʻri maʼlumotni tuzatishni soʻrash;</li>
+        <li>maʼlumotlarni oʻchirishni yoki ishlashini toʻxtatishni soʻrash (qonun boʻyicha saqlanishi shart boʻlgan tibbiy hujjatlar bundan mustasno);</li>
+        <li>bot xabarlaridan voz kechish;</li>
+        <li>maʼlumotlaringiz qanday ishlatilayotgani haqida tushuntirish olish.</li>
+      </ul>
+      <p>
+        Soʻrov uchun quyidagi aloqa vositalaridan foydalaning. Soʻrovlar 10 ish kuni ichida koʻrib
+        chiqiladi; shaxsingizni tasdiqlash uchun qoʻshimcha maʼlumot soʻralishi mumkin.
+      </p>
+
+      <h2>8. Cookie va brauzer xotirasi</h2>
+      <p>
+        Sayt bitta texnik cookie (<code>dimed_session</code>) ishlatadi — u faqat kirganingizni
+        tasdiqlash uchun kerak va boshqa saytlarga uzatilmaydi. Brauzer xotirasida esa tanlangan til
+        kabi qulaylik sozlamalari saqlanadi. Reklama yoki kuzatuv cookie'lari yoʻq.
+      </p>
+
+      <h2>9. Siyosatdagi oʻzgarishlar</h2>
+      <p>
+        Siyosat yangilanganda uning yangi tahriri shu sahifada eʼlon qilinadi va yuqorida yangilanish
+        sanasi koʻrsatiladi. Muhim oʻzgarishlar haqida bot orqali xabar berishimiz mumkin.
+      </p>
+
+      <h2>10. Aloqa</h2>
+      <p>
+        «Dimed» koʻp ixtisosli tibbiy markazi<br />
+        {site.address} ({site.addressNote})<br />
+        Telefon: <a href={site.phoneHref}>{site.phone}</a><br />
+        Telegram: <a href={site.telegramBot} target="_blank" rel="noopener">Dimed klinikasi boti</a>
+      </p>
+    </article>
+
+    <!-- ================= RU ================= -->
+    <article class="doc glass" data-lang="ru" lang="ru" hidden>
+      <p class="lede">
+        Настоящая политика объясняет, как многопрофильный медицинский центр «Dimed» (г. Чиназ,
+        ул. Навои, 18 — далее «Клиника») собирает, использует и защищает ваши персональные данные
+        через сайт dimed.uz и Telegram-бот «Dimed klinikasi boti». Пользуясь сайтом или ботом, вы
+        соглашаетесь с этой политикой.
+      </p>
+
+      <h2>1. Какие данные собираются</h2>
+      <ul>
+        <li><b>Идентификационные данные:</b> фамилия, имя, отчество (Ф.И.О.), дата рождения, пол.</li>
+        <li><b>Контактные данные:</b> номер телефона, идентификатор и имя вашего аккаунта Telegram.</li>
+        <li><b>Данные записи:</b> выбранный врач, отделение, дата и время приёма, стоимость, статус записи (забронирована, перенесена, состоялась, неявка).</li>
+        <li><b>Медицинские данные:</b> результаты анализов, сданных в лаборатории Клиники (название показателя, значение, референсный интервал, дата забора).</li>
+        <li><b>Обратная связь:</b> оценка и комментарий врачу после приёма (по желанию).</li>
+        <li><b>Технические данные:</b> сессия входа, выбранный язык и настройки удобства в браузере. Сайт не использует рекламные трекеры и аналитические скрипты.</li>
+      </ul>
+      <p>
+        Ф.И.О., дата рождения и пол берутся из вашей карты пациента в учётной системе «1C» Клиники
+        либо вводятся вами при записи. Номер телефона получаем только когда вы делитесь контактом в
+        Telegram.
+      </p>
+
+      <h2>2. Для чего используются</h2>
+      <ul>
+        <li>онлайн-запись к врачу, её подтверждение и перенос времени;</li>
+        <li>вход в личный кабинет (одноразовый код через Telegram);</li>
+        <li>показ результатов анализов в личном кабинете и уведомление о готовности;</li>
+        <li>напоминания о приёме и необходимые сообщения от Клиники;</li>
+        <li>оценка качества обслуживания (просьба оценить приём);</li>
+        <li>выполнение требований законодательства и ведение медицинской документации.</li>
+      </ul>
+      <p>Данные не используются в рекламных целях и не продаются третьим лицам.</p>
+
+      <h2>3. Где и как хранятся</h2>
+      <p>
+        Данные хранятся в зашифрованном виде в базе данных DynamoDB на облачной платформе Amazon Web
+        Services (AWS); доступ к ней возможен только по техническим ключам Клиники. Сайт размещён на
+        платформе Netlify. Карта пациента и результаты анализов синхронизируются с системой «1C»
+        Клиники, которая работает в самой Клинике.
+      </p>
+      <p>
+        Пароли не используются: одноразовый код отправляется в Telegram и действует 5 минут. Сессия
+        на сайте хранится в браузере 30 дней; кнопка «Выйти» завершает её немедленно.
+      </p>
+
+      <h2>4. Сообщения через Telegram-бот</h2>
+      <p>Бот «Dimed klinikasi boti» отправляет вам:</p>
+      <ul>
+        <li>одноразовый код для входа на сайт;</li>
+        <li>подтверждение записи, её переноса или отмены Клиникой;</li>
+        <li>напоминание за 1 час до приёма;</li>
+        <li>уведомление о готовности анализа и ссылку на результат;</li>
+        <li>просьбу оценить врача после приёма.</li>
+      </ul>
+      <p>
+        Сообщения в Telegram также подпадают под политику конфиденциальности компании Telegram. Если
+        вы не хотите получать сообщения, заблокируйте бота — тогда вход для онлайн-записи работать не
+        будет, записаться можно по телефону регистратуры.
+      </p>
+
+      <h2>5. Кто видит данные</h2>
+      <ul>
+        <li><b>Вы</b> — в личном кабинете видите свои записи и результаты анализов. Если к одному номеру телефона привязаны члены семьи, их записи и результаты тоже отображаются в этом кабинете.</li>
+        <li><b>Принимающий врач</b> — видит имя пациентов в своей очереди, время приёма и замаскированный номер телефона.</li>
+        <li><b>Администрация Клиники</b> — для управления записями, ценами и оценками.</li>
+        <li><b>Сотрудники лаборатории</b> — для внесения результатов в систему «1C».</li>
+      </ul>
+      <p>
+        Данные никому больше не передаются, кроме случаев, предусмотренных законом, по запросу
+        уполномоченных государственных органов. Если вы поделитесь ссылкой на результат анализа через
+        «Поделиться», результат сможет открыть любой, у кого есть эта ссылка — отправляйте её только
+        доверенным людям.
+      </p>
+
+      <h2>6. Срок хранения</h2>
+      <ul>
+        <li>коды входа — 5 минут, затем удаляются автоматически;</li>
+        <li>сессия на сайте — 30 дней или до нажатия «Выйти»;</li>
+        <li>история записей и результаты анализов — в течение срока, установленного законом для медицинской документации, вместе с вашей картой пациента в Клинике;</li>
+        <li>оценки и комментарии — пока Клиника их не скроет или вы не попросите удалить.</li>
+      </ul>
+
+      <h2>7. Ваши права</h2>
+      <ul>
+        <li>просматривать данные о себе (личный кабинет);</li>
+        <li>просить исправить неверные данные;</li>
+        <li>просить удалить данные или прекратить их обработку (кроме медицинской документации, хранение которой обязательно по закону);</li>
+        <li>отказаться от сообщений бота;</li>
+        <li>получить разъяснение, как используются ваши данные.</li>
+      </ul>
+      <p>
+        Для запроса используйте контакты ниже. Запросы рассматриваются в течение 10 рабочих дней; для
+        подтверждения личности могут быть запрошены дополнительные сведения.
+      </p>
+
+      <h2>8. Cookie и память браузера</h2>
+      <p>
+        Сайт использует один технический cookie (<code>dimed_session</code>) — только для
+        подтверждения входа, он не передаётся другим сайтам. В памяти браузера хранятся настройки
+        удобства, например выбранный язык. Рекламных и отслеживающих cookie нет.
+      </p>
+
+      <h2>9. Изменения политики</h2>
+      <p>
+        При обновлении политики новая редакция публикуется на этой странице с указанием даты
+        обновления. О существенных изменениях мы можем сообщить через бот.
+      </p>
+
+      <h2>10. Контакты</h2>
+      <p>
+        Многопрофильный медицинский центр «Dimed»<br />
+        г. Чиназ, ул. Навои, 18 (рядом с торговым центром «Abdurashid»)<br />
+        Телефон: <a href={site.phoneHref}>{site.phone}</a><br />
+        Telegram: <a href={site.telegramBot} target="_blank" rel="noopener">Dimed klinikasi boti</a>
+      </p>
+    </article>
+
+    <!-- ================= EN ================= -->
+    <article class="doc glass" data-lang="en" lang="en" hidden>
+      <p class="lede">
+        This policy explains how the Dimed multi-specialty medical center (Chinoz, Navoiy street 18 —
+        the “Clinic”) collects, uses and protects your personal data through the dimed.uz website and
+        the “Dimed klinikasi boti” Telegram bot. By using the website or the bot you agree to this
+        policy.
+      </p>
+
+      <h2>1. What data we collect</h2>
+      <ul>
+        <li><b>Identity data:</b> last name, first name, patronymic, date of birth, sex.</li>
+        <li><b>Contact data:</b> phone number, your Telegram account ID and name.</li>
+        <li><b>Appointment data:</b> chosen doctor, department, visit date and time, fee, appointment status (booked, rescheduled, completed, no-show).</li>
+        <li><b>Medical data:</b> results of tests taken at the Clinic’s laboratory (indicator name, value, reference range, sample date).</li>
+        <li><b>Feedback:</b> your rating and comment for the doctor after a visit (optional).</li>
+        <li><b>Technical data:</b> sign-in session, chosen language and convenience settings stored in your browser. The website uses no advertising trackers or analytics scripts.</li>
+      </ul>
+      <p>
+        Name, date of birth and sex come from your patient record in the Clinic’s “1C” accounting
+        system or are entered by you when booking. The phone number is obtained only when you share
+        your contact in Telegram.
+      </p>
+
+      <h2>2. Why we use it</h2>
+      <ul>
+        <li>online booking with a doctor, its confirmation and rescheduling;</li>
+        <li>signing in to your personal account (one-time code via Telegram);</li>
+        <li>showing test results in your account and notifying you when they are ready;</li>
+        <li>visit reminders and necessary messages from the Clinic;</li>
+        <li>service quality assessment (asking you to rate a visit);</li>
+        <li>meeting legal requirements and keeping medical records.</li>
+      </ul>
+      <p>Your data is not used for advertising and is never sold to third parties.</p>
+
+      <h2>3. Where and how it is stored</h2>
+      <p>
+        Data is stored encrypted in a DynamoDB database on the Amazon Web Services (AWS) cloud
+        platform; it is accessible only with the Clinic’s technical keys. The website is hosted on
+        Netlify. Your patient record and test results are synchronised with the Clinic’s “1C” system,
+        which runs at the Clinic itself.
+      </p>
+      <p>
+        No passwords are used: a one-time code is sent to Telegram and expires after 5 minutes. The
+        website session is kept in your browser for 30 days; the “Sign out” button ends it
+        immediately.
+      </p>
+
+      <h2>4. Messages via the Telegram bot</h2>
+      <p>The “Dimed klinikasi boti” bot sends you:</p>
+      <ul>
+        <li>a one-time code to sign in to the website;</li>
+        <li>confirmation that an appointment was booked, rescheduled or cancelled by the Clinic;</li>
+        <li>a reminder 1 hour before the visit;</li>
+        <li>a notification that a test result is ready, with a link to view it;</li>
+        <li>a request to rate the doctor after the visit.</li>
+      </ul>
+      <p>
+        Messages sent via Telegram are also subject to Telegram’s own privacy policy. If you do not
+        want to receive messages, you may block the bot — online booking sign-in will then stop
+        working; you can still book by calling the reception.
+      </p>
+
+      <h2>5. Who can see the data</h2>
+      <ul>
+        <li><b>You</b> — in your personal account you see your appointments and test results. If family members are linked to the same phone number, their appointments and results are shown in this account too.</li>
+        <li><b>The treating doctor</b> — sees the names of patients in their queue, visit times and a masked phone number.</li>
+        <li><b>Clinic administration</b> — to manage appointments, prices and ratings.</li>
+        <li><b>Laboratory staff</b> — to enter test results into the “1C” system.</li>
+      </ul>
+      <p>
+        Data is not disclosed to anyone else, except to authorised state bodies in cases required by
+        law. If you share a test result link via “Share”, anyone with that link can open the result —
+        send it only to people you trust.
+      </p>
+
+      <h2>6. Retention period</h2>
+      <ul>
+        <li>sign-in codes — 5 minutes, then deleted automatically;</li>
+        <li>website session — 30 days or until you press “Sign out”;</li>
+        <li>appointment history and test results — for the period set by law for medical records, together with your patient record at the Clinic;</li>
+        <li>ratings and comments — until the Clinic hides them or you ask for deletion.</li>
+      </ul>
+
+      <h2>7. Your rights</h2>
+      <ul>
+        <li>view the data we hold about you (personal account);</li>
+        <li>ask us to correct inaccurate data;</li>
+        <li>ask us to delete data or stop processing it (except medical records that must be kept by law);</li>
+        <li>opt out of bot messages;</li>
+        <li>get an explanation of how your data is used.</li>
+      </ul>
+      <p>
+        Use the contacts below for requests. Requests are handled within 10 working days; we may ask
+        for additional information to verify your identity.
+      </p>
+
+      <h2>8. Cookies and browser storage</h2>
+      <p>
+        The website uses a single technical cookie (<code>dimed_session</code>) — only to confirm
+        that you are signed in; it is not shared with other websites. Browser storage keeps
+        convenience settings such as the chosen language. There are no advertising or tracking
+        cookies.
+      </p>
+
+      <h2>9. Changes to this policy</h2>
+      <p>
+        When the policy is updated, the new version is published on this page with the update date
+        shown above. We may notify you of significant changes via the bot.
+      </p>
+
+      <h2>10. Contact</h2>
+      <p>
+        Dimed multi-specialty medical center<br />
+        Chinoz, Navoiy street 18 (next to the Abdurashid shopping center)<br />
+        Phone: <a href={site.phoneHref}>{site.phone}</a><br />
+        Telegram: <a href={site.telegramBot} target="_blank" rel="noopener">Dimed klinikasi boti</a>
+      </p>
+    </article>
+  </section>
+</Base>
+
+<script>
+  import { bindLangSwitch } from '../lib/lang';
+  bindLangSwitch(document);
+</script>
+
+<style>
+  .page {
+    padding: var(--sp-6) 0 var(--section-pad);
+  }
+
+  .head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+
+  .head .sec-head {
+    margin-bottom: 0;
+  }
+
+  h1 {
+    font-size: clamp(26px, 3.2vw, 38px);
+    font-weight: 750;
+  }
+
+  .upd {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+  }
+
+  .tab {
+    border: none;
+    background: transparent;
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .tab.on {
+    background: var(--rose);
+    color: #fff;
+  }
+
+  .tab:focus-visible {
+    outline: 2px solid var(--rose);
+    outline-offset: 2px;
+  }
+
+  .doc {
+    border-radius: 24px;
+    padding: 32px;
+    max-width: 860px;
+  }
+
+  .doc[hidden] {
+    display: none;
+  }
+
+  .lede {
+    font-size: 16px;
+    color: var(--muted);
+  }
+
+  .doc h2 {
+    font-size: 19px;
+    font-weight: 700;
+    margin: 32px 0 8px;
+  }
+
+  .doc p {
+    margin: 0 0 8px;
+    font-size: 15px;
+  }
+
+  .doc ul {
+    margin: 0 0 8px;
+    padding-left: 24px;
+    font-size: 15px;
+  }
+
+  .doc li {
+    margin-bottom: 4px;
+  }
+
+  .doc li + li {
+    margin-top: 4px;
+  }
+
+  .doc a {
+    color: var(--rose);
+    font-weight: 600;
+  }
+
+  .doc code {
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 6px;
+    padding: 1px 8px;
+    font-size: 13px;
+  }
+
+  @media (max-width: 600px) {
+    .page {
+      padding: var(--sp-5) 0 var(--section-pad);
+    }
+
+    .doc {
+      padding: 24px 16px;
+      border-radius: 16px;
+    }
+
+    .tabs {
+      width: 100%;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 8px 4px;
+    }
+  }
+</style>

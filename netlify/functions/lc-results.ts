@@ -2,9 +2,12 @@ import type { Context } from '@netlify/functions';
 import { timingSafeEqual } from 'node:crypto';
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES } from './lib/db.ts';
-import { required } from './lib/env.ts';
+import { optional } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
-import { json, error, normalizePhone } from './lib/http.ts';
+import { json, error } from './lib/http.ts';
+import { parsePhone } from './lib/phone.ts';
+import { botText, isLang } from './lib/i18n.ts';
+import { siteOrigin } from './result.ts';
 
 /**
  * 1C laboratoriya tizimidan tahlil natijalarini qabul qiladi.
@@ -34,8 +37,16 @@ type Body = {
 export default async (request: Request, _context: Context): Promise<Response> => {
   if (request.method !== 'POST') return error('Faqat POST', 405);
 
+  /*
+    Eski yo'l: 1C endi bazaga to'g'ridan-to'g'ri yozadi. Kalit
+    berilmagan bo'lsa endpoint umuman yopiq — ishlatilmayotgan eshik
+    ochiq turmasin. Qaytadan kerak bo'lsa LC_API_KEY qo'yiladi.
+  */
+  const key = optional('LC_API_KEY');
+  if (!key) return error('Bu yo‘l yopiq', 404);
+
   const given = Buffer.from(request.headers.get('x-api-key') ?? '');
-  const expected = Buffer.from(required('LC_API_KEY'));
+  const expected = Buffer.from(key);
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
     return error('API kalit noto‘g‘ri', 401);
   }
@@ -50,7 +61,9 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       if (!item.value) return error(`"${item.title}": value maydoni kerak (matn natija)`);
     }
 
-    const phone = normalizePhone(body.phone);
+    const checked = parsePhone(body.phone);
+    if (!checked.ok) return error(`phone: ${checked.error}`);
+    const phone = checked.value;
     const date = body.date ?? new Date().toISOString();
 
     for (const item of body.results) {
@@ -73,7 +86,7 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       );
     }
 
-    await notifyPatient(phone, body.results.length);
+    await notifyPatient(phone, body.results, date, request);
     return json({ ok: true, saved: body.results.length });
   } catch (err) {
     await logToAdmin('lc-results', err);
@@ -81,8 +94,17 @@ export default async (request: Request, _context: Context): Promise<Response> =>
   }
 };
 
-/** Bemorga xabar. Bot xatosi natijalarni saqlashni bekor qilmaydi. */
-async function notifyPatient(phone: string, count: number): Promise<void> {
+/**
+ * Bemorga xabar — natija sahifasi havolasi bilan (G1). Bot xatosi
+ * natijalarni saqlashni bekor qilmaydi. Sayt yozgan natijalar bir
+ * sanaga "lab-<sana>" guruhi bo'lib yig'iladi — havola shunga.
+ */
+async function notifyPatient(
+  phone: string,
+  results: ResultItem[],
+  date: string,
+  request: Request,
+): Promise<void> {
   try {
     const users = await db.send(
       new QueryCommand({
@@ -94,12 +116,20 @@ async function notifyPatient(phone: string, count: number): Promise<void> {
       }),
     );
 
-    const telegramId = (users.Items?.[0] as { telegram_id?: string } | undefined)?.telegram_id;
-    if (!telegramId) return;
+    const user = users.Items?.[0] as { telegram_id?: string; lang?: string } | undefined;
+    if (!user?.telegram_id) return;
 
+    const lang = isLang(user.lang) ? user.lang : 'uz';
+    const first = results[0];
+    const title =
+      results.length === 1 && first ? first.title : `${first?.title ?? 'Tahlil'} +${results.length - 1}`;
     await sendMessage(
-      telegramId,
-      `🧪 <b>Tahlil natijangiz tayyor</b>\n\n${count} ta natija shaxsiy kabinetingizga yuklandi:\nhttps://dimed.uz/kabinet`,
+      user.telegram_id,
+      botText('result.ready', lang, {
+        title,
+        date: date.slice(0, 10),
+        link: `${siteOrigin(request)}/natija?id=${encodeURIComponent(`lab-${date}`)}`,
+      }),
     );
   } catch (err) {
     await logToAdmin('lc-results/notify', err);

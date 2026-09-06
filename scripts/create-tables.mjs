@@ -8,6 +8,7 @@ import {
   DynamoDBClient,
   CreateTableCommand,
   UpdateTimeToLiveCommand,
+  UpdateContinuousBackupsCommand,
   DescribeTableCommand,
   waitUntilTableExists,
 } from '@aws-sdk/client-dynamodb';
@@ -28,11 +29,35 @@ async function exists(name) {
   }
 }
 
+/*
+  Zaxira nusxa (PITR) — bemor ma'lumoti bor jadvallarda. Mavjud
+  jadvalda ham yoqiladi: skript birinchi marta zaxirasiz ishga
+  tushirilgan bo'lishi mumkin, va bu «o'tkazib yuborildi» ostida
+  jimgina qolib ketmasligi kerak.
+*/
+async function enableBackup(TableName) {
+  await waitUntilTableExists({ client, maxWaitTime: 120 }, { TableName });
+  try {
+    await client.send(
+      new UpdateContinuousBackupsCommand({
+        TableName,
+        PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
+      }),
+    );
+    console.log(`  zaxira nusxa yoqildi (35 kun)`);
+  } catch (err) {
+    // Allaqachon yoqilgan bo'lsa AWS xato qaytaradi — bu muammo emas.
+    if (err.name !== 'ContinuousBackupsUnavailableException') throw err;
+    console.log(`  zaxira nusxa allaqachon yoqilgan`);
+  }
+}
+
 for (const table of tables) {
   const TableName = `${prefix}_${table.name}`;
 
   if (await exists(TableName)) {
     console.log(`= ${TableName} — allaqachon bor, o'tkazib yuborildi`);
+    if (table.backup) await enableBackup(TableName);
     continue;
   }
 
@@ -57,6 +82,8 @@ for (const table of tables) {
     );
     console.log(`  TTL yoqildi: ${table.ttlAttribute}`);
   }
+
+  if (table.backup) await enableBackup(TableName);
 }
 
 console.log('\nTayyor.');

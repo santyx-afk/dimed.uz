@@ -6,8 +6,10 @@ export const json = (body: unknown, status = 200, headers: Record<string, string
 
 export const error = (message: string, status = 400): Response => json({ error: message }, status);
 
-/** Telefon raqamini +998XXXXXXXXX ko'rinishiga keltiradi. */
-export function normalizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, '');
-  return digits.startsWith('998') ? `+${digits}` : `+998${digits.slice(-9)}`;
-}
+/*
+  Telefon raqami bilan ishlash `lib/phone.ts` da — u har xil yozilishni
+  (bo'sh joy, chiziqcha, mamlakat kodi bilan yoki usiz) tushunadi va
+  noto'g'risini rad etadi. Bu yerdan qayta chiqariladi: mavjud
+  importlar o'zgarmasin.
+*/
+export { normalizePhone, parsePhone, formatPhone, phoneVariants } from './phone.ts';

@@ -21,11 +21,15 @@ export const TABLES = {
   otpCodes: tableName('otp_codes'),
   individuals: tableName('individuals'),
   analysisResults: tableName('analysis_results'),
+  visits: tableName('visits'),
   doctors: tableName('doctors'),
   schedules: tableName('schedules'),
   appointments: tableName('appointments'),
   payments: tableName('payments'),
   labResults: tableName('lab_results'),
+  prices: tableName('prices'),
+  ratings: tableName('ratings'),
+  rateLimits: tableName('rate_limits'),
 } as const;
 
 /**

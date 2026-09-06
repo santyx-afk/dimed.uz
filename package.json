@@ -10,26 +10,32 @@
     "preview": "astro preview",
     "typecheck": "astro check && tsc --noEmit -p netlify/tsconfig.json",
     "test": "npm run test:unit && npm run test:api",
-    "test:unit": "node --experimental-strip-types scripts/test-lib.mjs && node --experimental-strip-types scripts/test-slots.mjs && node --experimental-strip-types scripts/test-appointments.mjs && node --experimental-strip-types scripts/test-schedule.mjs && node scripts/test-link-doctor.mjs && node --experimental-strip-types scripts/test-tables.mjs && node scripts/test-import-patients.mjs",
+    "test:unit": "node --experimental-strip-types scripts/test-phone.mjs && node --experimental-strip-types scripts/test-lib.mjs && node --experimental-strip-types scripts/test-slots.mjs && node --experimental-strip-types scripts/test-appointments.mjs && node --experimental-strip-types scripts/test-schedule.mjs && node scripts/test-link-doctor.mjs && node scripts/test-migrate-slot-minutes.mjs && node scripts/test-seed-prices.mjs && node --experimental-strip-types scripts/test-panels.mjs && node --experimental-strip-types scripts/test-tables.mjs && node scripts/test-import-patients.mjs",
     "test:api": "node --experimental-strip-types scripts/test-api.mjs",
     "create-tables": "node scripts/create-tables.mjs",
     "seed-doctors": "node --experimental-strip-types scripts/seed-doctors.mjs",
+    "seed-prices": "node scripts/seed-prices.mjs",
     "link-doctor": "node scripts/link-doctor.mjs",
+    "migrate-slot-minutes": "node scripts/migrate-slot-minutes.mjs",
     "import-patients": "node scripts/import-patients.mjs",
     "gen-cloudshell": "node --experimental-strip-types scripts/gen-cloudshell-setup.mjs",
-    "build-analyses": "node scripts/build-analyses.mjs"
+    "build-analyses": "node scripts/build-analyses.mjs",
+    "check-patients": "node scripts/check-patients.mjs",
+    "test:e2e": "node scripts/test-e2e.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.600.0",
     "@aws-sdk/lib-dynamodb": "^3.600.0",
     "@tailwindcss/vite": "^4.0.0",
     "astro": "^5.0.0",
+    "html2pdf.js": "^0.10.3",
     "tailwindcss": "^4.0.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.0",
     "@netlify/functions": "^2.8.0",
     "@types/node": "^26.2.0",
+    "playwright": "^1.48.2",
     "typescript": "^5.5.0"
   }
 }

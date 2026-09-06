@@ -3,8 +3,14 @@ import { ScanCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { sessionFrom, isAdmin, type DoctorRecord } from './lib/auth.ts';
-import { checkShifts, isAllowedSlotMinutes, ALLOWED_SLOT_MINUTES } from './lib/schedule.ts';
+import {
+  checkShifts,
+  isAllowedSlotMinutes,
+  ALLOWED_SLOT_MINUTES,
+  DEFAULT_SLOT_MINUTES,
+} from './lib/schedule.ts';
 import { logToAdmin } from './lib/telegram.ts';
+import { AGE_GROUPS, isAgeGroup, toAgeGroup } from './lib/age.ts';
 import { json, error, normalizePhone } from './lib/http.ts';
 
 /**
@@ -61,6 +67,7 @@ async function listDoctors(): Promise<Response> {
       hours: d.hours ?? '',
       phone: d.phone ?? '',
       active: d.active !== false,
+      ageGroup: toAgeGroup(d.age_group),
       // Raqamning o'zi emas, faqat bog'langan-yo'qligi ko'rsatiladi.
       telegramId: d.telegram_id ?? '',
       linked: Boolean(d.telegram_id),
@@ -87,6 +94,7 @@ type DoctorInput = {
   phone?: string;
   telegramId?: string;
   active?: boolean;
+  ageGroup?: string;
 };
 
 const slugOk = (s: string) => /^[a-z0-9-]{2,40}$/.test(s);
@@ -111,7 +119,9 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
     return error('Narx butun musbat son bo‘lishi kerak');
   }
 
-  if (!isAllowedSlotMinutes(body.slotMinutes)) {
+  // Berilmasa — standart (60 daqiqa); berilsa ro'yxatdan biri bo'lishi shart.
+  const slotMinutes = body.slotMinutes ?? DEFAULT_SLOT_MINUTES;
+  if (!isAllowedSlotMinutes(slotMinutes)) {
     return error(`Qabul davomiyligi ${ALLOWED_SLOT_MINUTES.join(', ')} daqiqadan biri bo‘lishi kerak`);
   }
 
@@ -125,6 +135,12 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
 
   const checked = checkShifts(body.shifts);
   if (!checked.ok) return error(checked.message);
+
+  // Yosh cheklovi berilmasa — cheklovsiz (avvalgi yozuvlar shunday).
+  if (body.ageGroup !== undefined && !isAgeGroup(body.ageGroup)) {
+    return error(`Yosh cheklovi ${AGE_GROUPS.join(', ')} dan biri bo‘lishi kerak`);
+  }
+  const ageGroup = toAgeGroup(body.ageGroup);
 
   // --- yozuvni yig'amiz: telegram_id alohida (bog'lanishni ehtiyot qilamiz) ---
   const now = new Date().toISOString();
@@ -141,6 +157,7 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
     'hours = :hours',
     'phone = :phone',
     'active = :active',
+    'age_group = :ageGroup',
     'updated_at = :updated',
   ];
   const values: Record<string, unknown> = {
@@ -148,7 +165,7 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
     ':job': job,
     ':dept': deptId,
     ':price': body.price,
-    ':slot': body.slotMinutes,
+    ':slot': slotMinutes,
     ':workdays': workdays,
     ':shifts': checked.shifts,
     ':exp': String(body.experience ?? '').trim(),
@@ -156,6 +173,7 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
     ':hours': String(body.hours ?? '').trim(),
     ':phone': body.phone ? normalizePhone(String(body.phone)) : '',
     ':active': body.active !== false,
+    ':ageGroup': ageGroup,
     ':updated': now,
   };
   const removes: string[] = [];

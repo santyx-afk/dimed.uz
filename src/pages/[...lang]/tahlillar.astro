@@ -1,0 +1,195 @@
+---
+import Base from '../../layouts/Base.astro';
+import { LANGS, type Lang } from '../../data/i18n';
+import { h } from '../../data/home';
+import { analysisTitle, analysisGroup, analysisDuration } from '../../data/analyses-i18n';
+import analyses from '../../data/analyses.json';
+import { site } from '../../data/site';
+
+/* Bitta fayl — uchta sahifa: `/tahlillar`, `/ru/tahlillar`, `/en/tahlillar`. */
+export function getStaticPaths() {
+  return LANGS.map((code) => ({ params: { lang: code === 'uz' ? undefined : code }, props: { lang: code } }));
+}
+
+const { lang } = Astro.props as { lang: Lang };
+
+const groups = new Map<string, typeof analyses>();
+for (const a of analyses) {
+  const list = groups.get(a.group);
+  if (list) list.push(a);
+  else groups.set(a.group, [a]);
+}
+---
+
+<Base
+  lang={lang}
+  title={h('analyses.title', lang)}
+  description={h('analyses.description', lang)}
+>
+  <section class="wrap page">
+    <div class="head">
+      <div class="sec-head">
+        <div class="eyebrow">{h('analyses.eyebrow', lang)}</div>
+        <h2>{h('analyses.heading', lang)}</h2>
+        <p>{h('lab.text', lang)}</p>
+      </div>
+      <!-- Kirgan bemor → Tahlillarim; kirmagan → kirish, keyin Tahlillarim (C3) -->
+      <a class="btn mine" href="/kabinet/tahlillar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6v5.5l4.5 8A2 2 0 0 1 17.8 20H6.2a2 2 0 0 1-1.7-3.5L9 8.5V3z"/><path d="M8 3h8"/></svg>
+        {h('cabinet.mine', lang)}
+      </a>
+    </div>
+
+    {
+      [...groups].map(([group, items]) => (
+        <div class="group rv" data-analysis-group>
+          <h3>
+            {analysisGroup(group, lang)}
+            <span class="count" data-group-count>{items.length}</span>
+          </h3>
+          <div class="table-wrap glass">
+            <table>
+              <thead>
+                <tr>
+                  <th>{h('lab.col.name', lang)}</th>
+                  <th>{h('lab.col.ready', lang)}</th>
+                  <th>{h('lab.col.price', lang)}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((a) => (
+                  <tr data-analysis-row>
+                    <td>{analysisTitle(a.code, a.title, lang)}</td>
+                    <td class="dur">{analysisDuration(a.duration, lang)}</td>
+                    <td class="price" data-price-code={a.code}>{a.price} {h('lab.sum', lang)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))
+    }
+
+    <p class="foot-note">
+      {h('analyses.foot', lang)}
+      <a href={site.phoneHref}>{site.phone}</a>
+    </p>
+  </section>
+</Base>
+
+<script>
+  // Narxlar bazadan (admin panel) — statik jadval yuklangach yangilanadi (F2).
+  import { applyLivePrices } from '../../lib/live-prices';
+  applyLivePrices();
+</script>
+
+<style>
+  .page {
+    padding: var(--sp-6) 0 var(--section-pad);
+  }
+
+  .head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .mine svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  @media (max-width: 600px) {
+    .mine {
+      width: 100%;
+      margin-bottom: 24px;
+    }
+  }
+
+  .group {
+    margin-bottom: 32px;
+  }
+
+  .group h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .count {
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 650;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border: 1px solid var(--card-brd);
+    border-radius: 999px;
+    padding: 4px 8px;
+  }
+
+  .table-wrap {
+    border-radius: 16px;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    min-width: 520px;
+  }
+
+  th {
+    text-align: left;
+    font-size: 11.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 8px 24px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  td.price {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--rose);
+    text-align: right;
+  }
+
+  td.dur {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
+  .foot-note {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-top: 24px;
+  }
+
+  .foot-note a {
+    color: var(--rose);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+</style>

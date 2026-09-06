@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const libDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'netlify', 'functions', 'lib');
 const load = (file) => import(pathToFileURL(join(libDir, file)).href);
 
-const { checkShifts, isAllowedSlotMinutes, maskPhone } = await load('schedule.ts');
+const { checkShifts, isAllowedSlotMinutes, maskPhone, DEFAULT_SLOT_MINUTES } = await load('schedule.ts');
 const { slotTimes } = await load('slots.ts');
 
 let passed = 0;
@@ -97,14 +97,25 @@ test('tanaffus slotlarga tushmaydi', () => {
 });
 
 console.log('\nQabul davomiyligi:');
-test('ruxsat etilganlar', () => {
-  for (const m of [10, 15, 20, 30]) assert.equal(isAllowedSlotMinutes(m), true);
+test('ruxsat etilganlar (60 — standart bir soatlik qabul)', () => {
+  for (const m of [10, 15, 20, 30, 60]) assert.equal(isAllowedSlotMinutes(m), true);
 });
 
 test('boshqa qiymatlar rad etiladi', () => {
-  for (const m of [0, 7, 45, 60, -15, '15', null, undefined]) {
+  for (const m of [0, 7, 45, 90, -15, '15', null, undefined]) {
     assert.equal(isAllowedSlotMinutes(m), false, `${m} o'tib ketdi`);
   }
+});
+
+test('standart davomiylik 60 daqiqa va ruxsat etilganlar ichida', () => {
+  assert.equal(DEFAULT_SLOT_MINUTES, 60);
+  assert.equal(isAllowedSlotMinutes(DEFAULT_SLOT_MINUTES), true);
+});
+
+test('60 daqiqalik slotlar bir soat oralig\'ida chiqadi', () => {
+  // 08:30–12:30 va 13:30–16:00: 08:30, 09:30, 10:30, 11:30, 13:30, 14:30
+  const times = slotTimes([{ start: '08:30', end: '12:30' }, { start: '13:30', end: '16:00' }], 60);
+  assert.deepEqual(times, ['08:30', '09:30', '10:30', '11:30', '13:30', '14:30']);
 });
 
 console.log('\nTelefon niqobi:');
