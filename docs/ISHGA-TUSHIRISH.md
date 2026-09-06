@@ -489,6 +489,7 @@ parallel yozishni to'xtatadi.
 
 | Fayl | Kim uchun |
 | --- | --- |
+| `docs/QOLGAN-ISHLAR.md` | Klinika egasi — hozir nima qilish kerak (joriy ro'yxat) |
 | `docs/ISHGA-TUSHIRISH.md` | Klinika egasi — shu hujjat |
 | `docs/HANDOFF.md` | Sayt dasturchisi — texnik qarorlar, kod tuzilishi |
 | `docs/1c-integration.md` | 1C dasturchisi — bemor profili va tahlil natijalari |

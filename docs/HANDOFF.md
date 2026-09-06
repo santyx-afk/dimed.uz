@@ -245,6 +245,22 @@ Egasining 2026-09-05 spetsifikatsiyasi bo'yicha, har blok alohida commit:
   `ratings` jadvali, `doctors.rating_sum/rating_count`).
 - **H1–H3** — `robots.txt` (admin/kabinet/api/natija yopiq) va
   `sitemap.xml`, `/maxfiylik` (uz/ru/en), `docs/1c-sync.md`.
+
+**Ommaviy sahifalar uch tilda.** `/`, `/ru/`, `/en/` va `/tahlillar`
+juftlari bitta fayldan yig'iladi (`src/pages/[...lang]/`). Matn
+serverda yoziladi — Google JS'ni kutmaydi. Kabinet va kirish
+sahifalari esa bitta manzilda turadi va tilni brauzerda almashtiradi
+(`data-t` + `applyPageLang`), chunki ular indekslanmaydi. Manzil
+tildan ustun: `/ru/` ni ochgan odam kabinetda o'zbekchani tanlagan
+bo'lsa ham ruscha ko'radi.
+
+**Tarjima qayerda.** `src/data/i18n.ts` — brauzerga ham yuklanadigan
+matn (kabinet, vidjet, bot javoblari). `src/data/home.ts` — faqat
+build paytida kerak bo'ladigan marketing matni; alohida turadi, aks
+holda kabinet sahifalarining JS to'plamiga qo'shilib ketardi.
+`src/data/analyses-i18n.ts` — tahlil nomlari kod bo'yicha; ular
+`analyses.json` ga yozilmaydi, chunki u fayl `npm run build-analyses`
+bilan qayta hosil qilinadi.
 - Yangi matnlar uch tilda: sayt lug'ati `src/data/i18n.ts` (`t()`,
   `getLang`: `?lang=` → localStorage → `<html lang>`), bot lug'ati
   `lib/i18n.ts` (`users.lang`, Sozlamalar sahifasidan).

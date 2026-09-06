@@ -52,7 +52,7 @@ netlify/
 scripts/          create-tables, seed-doctors, seed-prices, migrate-slot-minutes,
                   link-doctor, import-patients, build-analyses, gen-cloudshell-setup,
                   fake-dynamo (testlar), test-*.mjs
-docs/             ISHGA-TUSHIRISH, HANDOFF, 1c-integration, 1c-sync, payme-integration
+docs/             QOLGAN-ISHLAR, ISHGA-TUSHIRISH, HANDOFF, 1c-integration, 1c-sync, payme-integration
 legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
 ```
 
@@ -175,6 +175,7 @@ tizimini ulaydigan dasturchiga (kassa ochilgach).
 
 | Fayl | Kim uchun |
 | --- | --- |
+| [`docs/QOLGAN-ISHLAR.md`](docs/QOLGAN-ISHLAR.md) | Klinika egasi — hozir nima qilish kerak (joriy ro'yxat) |
 | [`docs/ISHGA-TUSHIRISH.md`](docs/ISHGA-TUSHIRISH.md) | Klinika egasi — qadamma-qadam ishga tushirish |
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | Sayt dasturchisi — texnik qarorlar, kod tuzilishi, tuzoqlar |
 | [`docs/1c-integration.md`](docs/1c-integration.md) | 1C dasturchisi — bemor profili va tahlil natijalari |

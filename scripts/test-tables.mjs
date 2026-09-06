@@ -93,6 +93,23 @@ test('kodda ishlatiladigan indekslar mavjud', () => {
   assert.ok(indexNames('appointments').includes('date-index'), 'cron eslatmalari shunga tayanadi');
 });
 
+test('bemor ma\'lumoti bor jadvallarda zaxira nusxa yoqiladi', () => {
+  const kutilgan = [
+    'users', 'individuals', 'doctors', 'schedules', 'appointments',
+    'analysis_results', 'payments', 'lab_results', 'prices', 'ratings',
+  ];
+  const bor = tables.filter((t) => t.backup).map((t) => t.name);
+  assert.deepEqual(bor.sort(), [...kutilgan].sort(), 'zaxirali jadvallar ro\'yxati');
+
+  // Vaqtinchalik jadvallar zaxirasiz: ular TTL bilan o'zi o'chadi.
+  const vaqtinchalik = tables.filter((t) => !t.backup).map((t) => t.name);
+  assert.deepEqual(vaqtinchalik.sort(), ['otp_codes', 'rate_limits']);
+  assert.ok(
+    vaqtinchalik.every((n) => tables.find((t) => t.name === n).ttlAttribute),
+    'zaxirasiz jadvalda TTL bo\'lishi kerak',
+  );
+});
+
 test('otp_codes da TTL yoqiladi', () => {
   const otp = tables.find((t) => t.name === 'otp_codes');
   assert.equal(otp.ttlAttribute, 'expires_at');
