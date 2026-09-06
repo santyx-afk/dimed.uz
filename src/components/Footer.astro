@@ -1,8 +1,23 @@
 ---
 import Logo from './Logo.astro';
 import { site } from '../data/site';
+import type { Lang } from '../data/i18n';
+import { h } from '../data/home';
 
+interface Props {
+  /** Ommaviy sahifada — o'sha sahifaning tili; kabinetda berilmaydi. */
+  lang?: Lang;
+}
+const { lang } = Astro.props;
+const L: Lang = lang ?? 'uz';
 const year = new Date().getFullYear();
+
+/*
+  Maxfiylik sahifasi bitta manzilda turadi va uch tilni o'zi
+  almashtiradi (tab tugmalari bilan), shuning uchun unga til prefiksi
+  bilan emas — `?lang=` bilan boramiz.
+*/
+const privacyHref = L === 'uz' ? '/maxfiylik' : `/maxfiylik?lang=${L}`;
 ---
 
 <footer class="wrap">
@@ -10,9 +25,11 @@ const year = new Date().getFullYear();
     <Logo height={22} />
     <p>
       © {year} Dimed klinikasi ·
-      <a class="foot-link" href={site.mapsUrl} target="_blank" rel="noopener">{site.address}</a>
+      <a class="foot-link" href={site.mapsUrl} target="_blank" rel="noopener">
+        {h('contact.address.value', L)}
+      </a>
       <span class="sep" aria-hidden="true">·</span>
-      <a class="foot-link" href="/maxfiylik">Maxfiylik siyosati</a>
+      <a class="foot-link" href={privacyHref}>{h('footer.privacy', L)}</a>
     </p>
     <div class="foot-soc">
       <a href={site.telegramBot} target="_blank" rel="noopener" aria-label="Telegram">

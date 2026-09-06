@@ -1,13 +1,34 @@
 ---
 import Logo from './Logo.astro';
+import { LANGS, type Lang } from '../data/i18n';
+import { h, langHref, LANG_LABEL } from '../data/home';
 
+interface Props {
+  /** Ommaviy sahifada — o'sha sahifaning tili; kabinetda berilmaydi. */
+  lang?: Lang;
+}
+const { lang } = Astro.props;
+const L: Lang = lang ?? 'uz';
+
+/*
+  Havolalar tanlangan tilga bog'lanadi: `/ru/` da turgan odam menyudagi
+  «Анализы» ni bosganda `/ru/tahlillar` ga tushadi, o'zbekchasiga emas.
+*/
 const links = [
-  { href: '/#bolimlar', label: 'Boʻlimlar' },
-  { href: '/#shifokorlar', label: 'Shifokorlar' },
-  { href: '/#qanday', label: 'Qanday ishlaydi' },
-  { href: '/tahlillar', label: 'Tahlillar' },
-  { href: '/#kontakt', label: 'Kontakt' },
-];
+  { href: `${langHref('/', L)}#bolimlar`, key: 'nav.depts', label: h('nav.depts', L) },
+  { href: `${langHref('/', L)}#shifokorlar`, key: 'nav.doctors', label: h('nav.doctors', L) },
+  { href: `${langHref('/', L)}#qanday`, key: 'nav.how', label: h('nav.how', L) },
+  { href: langHref('/tahlillar', L), key: 'nav.analyses', label: h('nav.analyses', L) },
+  { href: `${langHref('/', L)}#kontakt`, key: 'nav.contact', label: h('nav.contact', L) },
+] as const;
+const bookHref = `${langHref('/', L)}#navbat-widget`;
+
+/*
+  Til tugmalari — faqat ommaviy sahifada. Kabinetda til brauzerda
+  almashadi (Sozlamalar bo'limida), sahifa qayta yuklanmaydi.
+*/
+const bare = Astro.url.pathname.replace(/^\/(ru|en)(?=\/|$)/, '') || '/';
+const langLinks = lang ? LANGS.map((code) => ({ code, href: langHref(bare, code) })) : [];
 ---
 
 <!--
@@ -16,19 +37,35 @@ const links = [
   odatdagi shisha kartochka. Avval faqat kartochka bor edi — uning
   atrofidagi 12px bo'shliqdan sarlavhalar ko'rinib qolardi.
 -->
-<header class="nav-bar" id="siteHeader">
+<header class="nav-bar" id="siteHeader" data-nav-lang={lang ?? ''}>
   <nav class="nav wrap" aria-label="Asosiy navigatsiya">
     <div class="nav-in glass">
-      <a class="nav-logo" href="/" aria-label="Dimed bosh sahifa">
+      <a class="nav-logo" href={langHref('/', L)} aria-label="Dimed">
         <Logo height={26} label="Dimed logotipi" />
       </a>
       <div class="nav-links">
-        {links.map((l) => <a href={l.href}>{l.label}</a>)}
+        {links.map((l) => <a href={l.href} data-t={l.key}>{l.label}</a>)}
       </div>
       <div class="nav-cta">
         <!-- Kirgan foydalanuvchida JS bu tugmani ism/avatar bilan menyu tugmasiga almashtiradi (C1) -->
-        <a class="btn btn-ghost btn-sm nav-kabinet" id="navKabinet" href="/kabinet">Kabinet</a>
-        <a class="btn btn-sm nav-book" href="/#navbat-widget">Navbat olish</a>
+        {
+          langLinks.length > 0 && (
+            <div class="lang-pick" role="group" aria-label={h('nav.lang', L)}>
+              {langLinks.map((l) => (
+                <a
+                  class:list={['lang-btn', { on: l.code === L }]}
+                  href={l.href}
+                  hreflang={l.code}
+                  aria-current={l.code === L ? 'true' : undefined}
+                >
+                  {LANG_LABEL[l.code]}
+                </a>
+              ))}
+            </div>
+          )
+        }
+        <a class="btn btn-ghost btn-sm nav-kabinet" id="navKabinet" href="/kabinet" data-t="nav.cabinet">{h('nav.cabinet', L)}</a>
+        <a class="btn btn-sm nav-book" href={bookHref} data-t="nav.book">{h('nav.book', L)}</a>
         <button
           class="burger"
           id="navBurger"
@@ -44,8 +81,19 @@ const links = [
 
     <!-- Mobil menyu: burger ostida ochiladi. Kabinet tugmasi bu yerga kirmaydi — u headerda doim ko'rinadi. -->
     <div class="nav-menu glass" id="navMenu" hidden>
-      {links.map((l) => <a class="nav-menu-link" href={l.href}>{l.label}</a>)}
-      <a class="btn nav-menu-book" href="/#navbat-widget">Navbat olish</a>
+      {
+        langLinks.length > 0 && (
+          <div class="lang-pick menu-lang" role="group" aria-label={h('nav.lang', L)}>
+            {langLinks.map((l) => (
+              <a class:list={['lang-btn', { on: l.code === L }]} href={l.href} hreflang={l.code}>
+                {LANG_LABEL[l.code]}
+              </a>
+            ))}
+          </div>
+        )
+      }
+      {links.map((l) => <a class="nav-menu-link" href={l.href} data-t={l.key}>{l.label}</a>)}
+      <a class="btn nav-menu-book" href={bookHref} data-t="nav.book">{h('nav.book', L)}</a>
     </div>
 
     <!-- Kabinet menyusi (kirgan foydalanuvchi): ism, telefon va bo'limlar -->
@@ -55,9 +103,17 @@ const links = [
 
 <script>
   import { t } from '../data/i18n';
-  import { getLang } from '../lib/lang';
+  import { getLang, applyPageLang } from '../lib/lang';
 
   const header = document.getElementById('siteHeader');
+
+  /*
+    Ommaviy sahifada matn serverda o'sha tilda yozilgan — tegilmaydi.
+    Kabinet va kirish sahifalarida esa til faqat brauzerda ma'lum
+    (`?lang=`, manzil prefiksi yoki Sozlamalardagi tanlov), shuning
+    uchun sarlavha matni shu yerda almashtiriladi.
+  */
+  if (header && !header.dataset.navLang) applyPageLang(getLang(), header);
   const burger = document.getElementById('navBurger') as HTMLButtonElement | null;
   const menu = document.getElementById('navMenu');
   const acctMenu = document.getElementById('acctMenu');
@@ -300,6 +356,41 @@ const links = [
     margin-left: auto;
   }
 
+  /* Til tanlash — uchta qisqa tugma, sarlavhada kam joy egallaydi. */
+  .lang-pick {
+    display: flex;
+    gap: 4px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px;
+  }
+
+  .lang-btn {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--muted);
+    text-decoration: none;
+    line-height: 1;
+  }
+
+  .lang-btn:hover {
+    color: var(--ink);
+  }
+
+  .lang-btn.on {
+    background: var(--rose);
+    color: #fff;
+  }
+
+  .menu-lang {
+    align-self: flex-start;
+    margin: 4px 8px 8px;
+  }
+
   .nav-links + .nav-cta {
     margin-left: 0;
   }
@@ -518,7 +609,8 @@ const links = [
 
   @media (max-width: 900px) {
     .nav-links,
-    .nav-book {
+    .nav-book,
+    .nav-cta .lang-pick {
       display: none;
     }
 

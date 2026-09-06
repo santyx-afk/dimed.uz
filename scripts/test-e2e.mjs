@@ -237,6 +237,72 @@ await test('telefon raqami har xil yozilsa ham qabul qilinadi', async () => {
   await ctx.close();
 });
 
+
+await test('/ru/ sahifasi rus tilida chiqadi va vidjet ham ruschada', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  const jsErrors = [];
+  page.on('pageerror', (e) => jsErrors.push(e.message));
+  await page.goto(`${base}/ru/`, { waitUntil: 'networkidle' });
+
+  assert.equal(await page.getAttribute('html', 'lang'), 'ru', '<html lang> ruscha bo‘lishi kerak');
+  assert.match(await page.textContent('h1'), /Запись к врачу/, 'sarlavha ruscha');
+  assert.match(
+    await page.textContent('.widget-title'),
+    /Онлайн-запись/,
+    'vidjet sarlavhasi ham ruscha',
+  );
+
+  // Bo'lim nomlari ham tarjima bilan chiziladi (ma'lumot ichidagi name_ru).
+  await page.click('[data-book-dept="terapiya"]');
+  await page.waitForTimeout(300);
+  const pane = await page.textContent('.pane-label');
+  assert.match(pane, /Выберите врача/, `2-qadam ruscha bo‘lishi kerak, keldi: ${pane}`);
+
+  assert.deepEqual(jsErrors, [], 'JS xatosi bo‘lmasligi kerak');
+  await ctx.close();
+});
+
+await test('til tugmasi va hreflang uch sahifani bog‘laydi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
+
+  const hrefs = await page.$$eval('link[rel="alternate"][hreflang]', (ls) =>
+    ls.map((l) => `${l.getAttribute('hreflang')}:${new URL(l.href).pathname}`),
+  );
+  assert.deepEqual(
+    hrefs.filter((x) => !x.startsWith('x-default')).sort(),
+    ['en:/en/', 'ru:/ru/', 'uz:/'],
+    `hreflang uchtasini ko‘rsatishi kerak, keldi: ${hrefs.join(' ')}`,
+  );
+
+  await page.click('.nav-cta .lang-btn[hreflang="ru"]');
+  await page.waitForLoadState('domcontentloaded');
+  assert.equal(new URL(page.url()).pathname, '/ru/', 'til tugmasi /ru/ ga olib borishi kerak');
+
+  // Manzil tanlovni eslab qoladi: kabinetga o'tsa ham ruscha qoladi.
+  const stored = await page.evaluate(() => localStorage.getItem('dimed_lang'));
+  assert.equal(stored, 'ru', 'til brauzerda eslab qolinishi kerak');
+  await ctx.close();
+});
+
+await test('/en/tahlillar tahlil nomlarini inglizchada beradi', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await mockApi(ctx, { signedIn: false });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/en/tahlillar`, { waitUntil: 'domcontentloaded' });
+
+  assert.equal(await page.getAttribute('html', 'lang'), 'en');
+  const body = await page.textContent('body');
+  assert.ok(body.includes('Complete blood count'), 'tahlil nomi inglizchada bo‘lishi kerak');
+  assert.ok(body.includes('Blood biochemistry'), 'guruh nomi ham tarjima qilinadi');
+  assert.ok(!body.includes('Umumiy qon tahlili'), 'o‘zbekcha nom qolmasligi kerak');
+  await ctx.close();
+});
+
 await browser.close();
 stop();
 

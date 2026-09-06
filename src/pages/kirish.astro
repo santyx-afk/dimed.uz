@@ -1,27 +1,37 @@
 ---
 import Base from '../layouts/Base.astro';
 import { site } from '../data/site';
+import { t } from '../data/i18n';
+
+/*
+  Kirish sahifasi bitta manzilda turadi (robots.txt uni yopadi —
+  indekslanmaydi), shuning uchun `/ru/kirish` yo'q. Matn serverda
+  o'zbekcha yoziladi, brauzerda esa `applyPageLang` tanlangan tilga
+  almashtiradi: bemor `?lang=ru` bilan yoki ruscha sahifadan kelgan
+  bo'lishi mumkin.
+*/
+const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
 ---
 
 <Base
-  title="Kirish — Dimed klinikasi"
-  description="Telegram bot orqali shaxsiy kabinetga kirish. SMS ham, parol ham kerak emas."
+  title={uz('signin.page.title')}
+  description={uz('signin.page.description')}
 >
   <section class="wrap page">
     <div class="card glass">
-      <div class="eyebrow">Shaxsiy kabinet</div>
-      <h1>Saytga kirish</h1>
-      <p class="lede">Telegram bot orqali — SMS ham, parol ham kerak emas.</p>
+      <div class="eyebrow" data-t="signin.page.eyebrow">{uz('signin.page.eyebrow')}</div>
+      <h1 data-t="signin.page.heading">{uz('signin.page.heading')}</h1>
+      <p class="lede" data-t="signin.page.lede">{uz('signin.page.lede')}</p>
 
       <ol class="steps">
         <li>
-          <b>Botga o‘ting va kontaktingizni ulashing</b>
+          <b data-t="signin.page.step1">{uz('signin.page.step1')}</b>
           <a class="btn btn-sm tg" href={site.telegramBot} target="_blank" rel="noopener">
-            Dimed klinikasi botini ochish
+            <span data-t="signin.page.botBtn">{uz('signin.page.botBtn')}</span>
           </a>
         </li>
         <li>
-          <b>Telefon raqamingizni kiriting</b>
+          <b data-t="signin.page.step2">{uz('signin.page.step2')}</b>
           <input
             id="phone"
             type="tel"
@@ -32,7 +42,7 @@ import { site } from '../data/site';
           />
         </li>
         <li>
-          <b>Bot yuborgan 6 xonali kodni kiriting</b>
+          <b data-t="signin.page.step3">{uz('signin.page.step3')}</b>
           <div class="otp-row" id="otpRow">
             {
               [1, 2, 3, 4, 5, 6].map((n) => (
@@ -41,7 +51,7 @@ import { site } from '../data/site';
                   type="text"
                   inputmode="numeric"
                   maxlength="1"
-                  aria-label={`${n}-raqam`}
+                  aria-label={t('signin.page.digit', 'uz', { n })}
                 />
               ))
             }
@@ -50,11 +60,12 @@ import { site } from '../data/site';
       </ol>
 
       <p class="msg" id="msg" role="status" aria-live="polite"></p>
-      <button class="btn" id="submit">Kirish</button>
+      <button class="btn" id="submit" data-t="booking.login.button">{uz('booking.login.button')}</button>
 
       <p class="help">
-        Kod kelmadimi? Botga <code>/start</code> yuboring — yangi kod olasiz.<br />
-        Savollar bo‘lsa: <a href={site.phoneHref}>{site.phone}</a>
+        <span data-t="signin.page.help">{uz('signin.page.help')}</span><br />
+        <span data-t="signin.page.questions">{uz('signin.page.questions')}</span>
+        <a href={site.phoneHref}>{site.phone}</a>
       </p>
     </div>
 
@@ -64,34 +75,34 @@ import { site } from '../data/site';
       kim kirayotganini bir marta so'raymiz.
     -->
     <div class="card glass" id="whoCard" hidden>
-      <div class="eyebrow">Deyarli tayyor</div>
-      <h1 id="whoTitle">Kim kirmoqda?</h1>
-      <p class="lede" id="whoLede">Bu raqamga bogʻlangan bemorlar:</p>
+      <div class="eyebrow" data-t="signin.who.eyebrow">{uz('signin.who.eyebrow')}</div>
+      <h1 id="whoTitle">{uz('signin.who.title')}</h1>
+      <p class="lede" id="whoLede">{uz('signin.who.lede')}</p>
 
       <div class="who-list" id="whoList"></div>
 
-      <button class="btn btn-ghost" id="whoNew" type="button">+ Boshqa odam</button>
+      <button class="btn btn-ghost" id="whoNew" type="button" data-t="signin.who.other">{uz('signin.who.other')}</button>
 
       <div class="who-form" id="whoForm" hidden>
         <label class="fld">
-          <span>Familiya<i>*</i></span>
+          <span><span data-t="signin.who.lastName">{uz('signin.who.lastName')}</span><i>*</i></span>
           <input id="w-last" type="text" autocomplete="family-name" placeholder="Yoʻldoshev" />
         </label>
         <label class="fld">
-          <span>Ism<i>*</i></span>
+          <span><span data-t="signin.who.firstName">{uz('signin.who.firstName')}</span><i>*</i></span>
           <input id="w-first" type="text" autocomplete="given-name" placeholder="Anvar" />
         </label>
         <label class="fld">
-          <span>Sharif</span>
-          <input id="w-mid" type="text" placeholder="Baxtiyorovich (ixtiyoriy)" />
+          <span data-t="signin.who.patronymic">{uz('signin.who.patronymic')}</span>
+          <input id="w-mid" type="text" data-t-placeholder="signin.who.patronymicHint" placeholder={uz('signin.who.patronymicHint')} />
         </label>
         <div class="fld">
-          <span>Tugʻilgan sana<i>*</i></span>
+          <span><span data-t="booking.birthDate">{uz('booking.birthDate')}</span><i>*</i></span>
           <div id="w-birth"></div>
         </div>
         <div class="who-actions">
-          <button class="btn btn-ghost btn-sm" id="whoCancel" type="button">Bekor qilish</button>
-          <button class="btn btn-sm" id="whoSave" type="button">Saqlash va davom etish</button>
+          <button class="btn btn-ghost btn-sm" id="whoCancel" type="button" data-t="signin.who.cancel">{uz('signin.who.cancel')}</button>
+          <button class="btn btn-sm" id="whoSave" type="button" data-t="signin.who.save">{uz('signin.who.save')}</button>
         </div>
       </div>
 
@@ -103,7 +114,12 @@ import { site } from '../data/site';
 <script>
   import { parsePhone, formatPhone } from '../lib/phone';
   import { birthDateSelectsHtml, readBirthDate } from '../lib/birthdate';
-  import { getLang } from '../lib/lang';
+  import { getLang, applyPageLang } from '../lib/lang';
+  import { t } from '../data/i18n';
+
+  const lang = getLang();
+  const tr = (key: Parameters<typeof t>[0], vars?: Parameters<typeof t>[2]) => t(key, lang, vars);
+  applyPageLang(lang);
 
   const phoneInput = document.getElementById('phone') as HTMLInputElement;
   const otpInputs = [...document.querySelectorAll<HTMLInputElement>('#otpRow .otp')];
@@ -169,13 +185,13 @@ import { site } from '../data/site';
     }
     const phone = checked.value;
     if (code.length !== 6) {
-      setMsg('6 xonali kodni to‘liq kiriting.', 'error');
+      setMsg(tr('booking.login.codeRequired'), 'error');
       otpInputs.find((i) => !i.value)?.focus();
       return;
     }
 
     submit.disabled = true;
-    setMsg('Tekshirilmoqda…');
+    setMsg(tr('booking.login.working'));
 
     try {
       const res = await fetch('/api/auth-verify', {
@@ -186,16 +202,16 @@ import { site } from '../data/site';
       const data = (await res.json()) as { error?: string };
 
       if (res.ok) {
-        setMsg('Xush kelibsiz!', 'ok');
+        setMsg(tr('signin.page.welcome'), 'ok');
         await askWho();
         return;
       }
 
-      setMsg(data.error ?? 'Kirishda xatolik.', 'error');
+      setMsg(data.error ?? tr('booking.login.failed'), 'error');
       otpInputs.forEach((i) => (i.value = ''));
       otpInputs[0]?.focus();
     } catch {
-      setMsg('Internetga ulanishda muammo. Qayta urinib ko‘ring.', 'error');
+      setMsg(tr('common.error.network'), 'error');
     } finally {
       submit.disabled = false;
     }
@@ -248,9 +264,9 @@ import { site } from '../data/site';
     el('whoCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
     if (data.patients.length === 0) {
-      el('whoTitle').textContent = 'Oʻzingizni tanishtiring';
+      el('whoTitle').textContent = tr('signin.who.introduce');
       el('whoLede').textContent =
-        'Bu raqam boʻyicha klinikada yozuv topilmadi. Ism-familiyangizni kiriting.';
+        tr('signin.who.notFound');
       el('whoNew').hidden = true;
       el('whoForm').hidden = false;
       return;
@@ -261,7 +277,7 @@ import { site } from '../data/site';
         (p) =>
           `<button class="who-item" data-pick="${esc(p.id)}">
              <span class="who-nm">${esc(p.name)}</span>
-             ${p.source === '1c' ? '<span class="who-tag">klinikada bor</span>' : ''}
+             ${p.source === '1c' ? `<span class="who-tag">${tr('signin.who.inClinic')}</span>` : ''}
            </button>`,
       )
       .join('');
@@ -281,7 +297,7 @@ import { site } from '../data/site';
   };
 
   async function select(id: string): Promise<void> {
-    setWhoMsg('Saqlanmoqda…');
+    setWhoMsg(tr('booking.saving'));
     try {
       const res = await fetch('/api/patients', {
         method: 'POST',
@@ -292,12 +308,12 @@ import { site } from '../data/site';
       if (!res.ok) throw new Error(String(res.status));
       go();
     } catch {
-      setWhoMsg('Saqlab boʻlmadi. Qayta urinib koʻring.', 'error');
+      setWhoMsg(tr('booking.saveFailed'), 'error');
     }
   }
 
   // Tug'ilgan sana — kun/oy/yil select'lari (brauzer kalendari emas).
-  el('w-birth').innerHTML = birthDateSelectsHtml('new', getLang());
+  el('w-birth').innerHTML = birthDateSelectsHtml('new', lang);
 
   el('whoNew').addEventListener('click', () => {
     el('whoForm').hidden = false;
@@ -318,11 +334,11 @@ import { site } from '../data/site';
     const birthDate = readBirthDate(el('whoForm'), 'new');
 
     if (!lastName || !firstName) {
-      setWhoMsg('Familiya va ism majburiy.', 'error');
+      setWhoMsg(tr('booking.field.nameRequired'), 'error');
       return;
     }
     if (!birthDate) {
-      setWhoMsg('Tugʻilgan sanani toʻliq kiriting.', 'error');
+      setWhoMsg(tr('signin.who.birthRequired'), 'error');
       return;
     }
 
@@ -336,12 +352,12 @@ import { site } from '../data/site';
       });
       const body = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setWhoMsg(body.error ?? 'Saqlab boʻlmadi.', 'error');
+        setWhoMsg(body.error ?? tr('booking.saveFailed'), 'error');
         return;
       }
       go();
     } catch {
-      setWhoMsg('Internetga ulanishda muammo.', 'error');
+      setWhoMsg(tr('common.error.network'), 'error');
     }
   });
 </script>

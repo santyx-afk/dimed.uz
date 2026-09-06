@@ -2,6 +2,13 @@
 import { departments } from '../data/departments';
 import { activeDoctors as doctors } from '../data/doctors';
 import DeptIcon from './DeptIcon.astro';
+import { t, type Lang } from '../data/i18n';
+
+interface Props {
+  /** Ommaviy sahifada — o'sha sahifaning tili; berilmasa o'zbekcha. */
+  lang?: Lang;
+}
+const { lang = 'uz' } = Astro.props;
 
 /*
   Navbat vidjeti. Bo'sh slotlar `GET /api/slots` dan keladi — band
@@ -18,15 +25,15 @@ const widgetData = JSON.stringify({ departments, doctors });
 
 <div class="widget glass" id="navbat-widget" aria-live="polite">
   <div class="widget-head">
-    <div class="widget-title">Onlayn navbat</div>
-    <div class="live-dot"><i></i> jonli slotlar</div>
+    <div class="widget-title">{t('booking.widget.title', lang)}</div>
+    <div class="live-dot"><i></i> {t('booking.widget.live', lang)}</div>
   </div>
   <div class="steps" id="wSteps">
-    <button class="step-pill on" data-step="1"><span class="n">1</span><span class="lbl">Boʻlim</span></button>
-    <button class="step-pill" data-step="2" disabled><span class="n">2</span><span class="lbl">Shifokor</span></button>
-    <button class="step-pill" data-step="3" disabled><span class="n">3</span><span class="lbl">Vaqt</span></button>
-    <button class="step-pill" data-step="4" disabled><span class="n">4</span><span class="lbl">Bemor</span></button>
-    <button class="step-pill" data-step="5" disabled><span class="n">5</span><span class="lbl">Tasdiqlash</span></button>
+    <button class="step-pill on" data-step="1"><span class="n">1</span><span class="lbl">{t('booking.step.dept', lang)}</span></button>
+    <button class="step-pill" data-step="2" disabled><span class="n">2</span><span class="lbl">{t('booking.step.doctor', lang)}</span></button>
+    <button class="step-pill" data-step="3" disabled><span class="n">3</span><span class="lbl">{t('booking.step.time', lang)}</span></button>
+    <button class="step-pill" data-step="4" disabled><span class="n">4</span><span class="lbl">{t('booking.step.patient', lang)}</span></button>
+    <button class="step-pill" data-step="5" disabled><span class="n">5</span><span class="lbl">{t('booking.step.confirm', lang)}</span></button>
   </div>
   <div id="wBody"></div>
 
@@ -56,12 +63,37 @@ const widgetData = JSON.stringify({ departments, doctors });
   const lang = getLang();
   const tr = (key, vars) => t(key, lang, vars);
 
-  const WD = ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'];
-  const MONTHS = [
-    'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
-    'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
-  ];
-  const fmtPrice = (n) => n.toLocaleString('ru-RU').replace(/,/g, ' ') + ' soʻm';
+  /*
+    Sana tugmalari uchun hafta kunlari va oylar. Serverdan emas,
+    brauzerdan: sahifa uch tilda alohida yig'ilsa ham vidjet tilni
+    `getLang()` dan oladi (`?lang=`, manzil prefiksi yoki kabinetdagi
+    tanlov) — shuning uchun uchtasi ham shu yerda turadi.
+  */
+  const WEEKDAYS = {
+    uz: ['Yak', 'Du', 'Se', 'Chor', 'Pay', 'Ju', 'Sh'],
+    ru: ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'],
+    en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  };
+  const MONTH_NAMES = {
+    uz: ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+         'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'],
+    ru: ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+         'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'],
+    en: ['January', 'February', 'March', 'April', 'May', 'June',
+         'July', 'August', 'September', 'October', 'November', 'December'],
+  };
+  const WD = WEEKDAYS[lang] ?? WEEKDAYS.uz;
+  const MONTHS = MONTH_NAMES[lang] ?? MONTH_NAMES.uz;
+
+  /*
+    Bo'lim nomi va shifokor lavozimi tarjimasi ma'lumotning o'zida
+    keladi (`name_ru`, `job_en`, …) — tarjimasi yozilmagan yangi yozuv
+    o'zbekchasicha ko'rinadi, bo'sh emas.
+  */
+  const deptName = (d) => (lang === 'uz' ? d.name : (d[`name_${lang}`] || d.name));
+  const jobText = (d) => (lang === 'uz' ? d.job : (d[`job_${lang}`] || d.job));
+
+  const fmtPrice = (n) => `${n.toLocaleString('ru-RU').replace(/,/g, ' ')} ${tr('lab.sum')}`;
   const BOT_URL = site.telegramBot;
   /** Tanlangan shifokorning yosh cheklovi; belgilanmagan bo'lsa cheklovsiz. */
   const docAgeGroup = () => toAgeGroup(state.doc?.ageGroup);
@@ -198,7 +230,7 @@ const widgetData = JSON.stringify({ departments, doctors });
 
   function slotsHtml(slots) {
     if (!slots.length) {
-      return '<p class="slot-empty">Bu kunga slot yoʻq — boshqa sanani tanlang.</p>';
+      return `<p class="slot-empty">${esc(tr('booking.slot.none'))}</p>`;
     }
     return slots
       .map(
@@ -211,12 +243,12 @@ const widgetData = JSON.stringify({ departments, doctors });
   function render() {
     if (state.step === 1) {
       wBody.innerHTML =
-        '<div class="pane-label">Boʻlimni tanlang</div><div class="dept-grid">' +
+        `<div class="pane-label">${esc(tr('booking.pickDept'))}</div><div class="dept-grid">` +
         departments
           .map(
             (d) => `<button class="dept-btn" data-id="${d.id}">
               <span class="ic">${iconHtml[d.id] ?? ''}</span>
-              <span>${d.name}<small>${docs.filter((x) => x.deptId === d.id).length} shifokor</small></span>
+              <span>${esc(deptName(d))}<small>${docs.filter((x) => x.deptId === d.id).length} ${esc(tr('booking.doctorCount'))}</small></span>
             </button>`,
           )
           .join('') +
@@ -231,23 +263,23 @@ const widgetData = JSON.stringify({ departments, doctors });
     } else if (state.step === 2) {
       const list = docs.filter((d) => d.deptId === state.deptId);
       wBody.innerHTML =
-        '<div class="pane-label">Shifokorni tanlang</div><div class="doc-list">' +
+        `<div class="pane-label">${esc(tr('booking.pickDoctor'))}</div><div class="doc-list">` +
         list
           .map(
             (d) => `<button class="doc-btn" data-id="${d.id}">
               <img src="${d.photo}" alt="" width="42" height="42" loading="lazy">
-              <span><span class="nm">${d.name}</span><br><span class="jb">${d.job}</span></span>
+              <span><span class="nm">${esc(d.name)}</span><br><span class="jb">${esc(jobText(d))}</span></span>
               <span class="tags">${
                 ageChip(toAgeGroup(d.ageGroup), lang)
                   ? `<span class="age-tag">${esc(ageChip(toAgeGroup(d.ageGroup), lang))}</span>`
                   : ''
               }${
                 d.ratingCount ? `<span class="rate-tag" title="${d.ratingCount} ta baho">★ ${d.ratingAvg}</span>` : ''
-              }<span class="slot-tag">${d.slotMinutes} daq</span></span>
+              }<span class="slot-tag">${d.slotMinutes} ${esc(tr('booking.minutes.short'))}</span></span>
             </button>`,
           )
           .join('') +
-        '</div><button class="back-link">← boʻlimlarga qaytish</button>';
+        `</div><button class="back-link">${esc(tr('booking.back.depts'))}</button>`;
       wBody.querySelectorAll('.doc-btn').forEach((b) =>
         b.addEventListener('click', () => {
           state.doc = docById(b.dataset.id);
@@ -274,7 +306,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     if (!state.date && workdays.length) state.date = dstr(workdays[0].date);
 
     wBody.innerHTML =
-      `<div class="pane-label">${doc.name} · sana va vaqt</div><div class="date-row">` +
+      `<div class="pane-label">${esc(doc.name)} · ${esc(tr('booking.pickWhen'))}</div><div class="date-row">` +
       days
         .map(
           (x) => `<button class="date-pill${dstr(x.date) === state.date ? ' on' : ''}"
@@ -283,8 +315,8 @@ const widgetData = JSON.stringify({ departments, doctors });
         )
         .join('') +
       `</div><div class="slot-grid" id="slotGrid"></div>
-       <div class="slot-legend"><span class="free"><i></i>boʻsh</span><span class="busy"><i></i>band</span></div>
-       <button class="back-link">← shifokorni almashtirish</button>`;
+       <div class="slot-legend"><span class="free"><i></i>${esc(tr('booking.slot.free'))}</span><span class="busy"><i></i>${esc(tr('booking.slot.busy'))}</span></div>
+       <button class="back-link">${esc(tr('booking.back.doctor'))}</button>`;
 
     const grid = wBody.querySelector('#slotGrid');
 
@@ -296,12 +328,12 @@ const widgetData = JSON.stringify({ departments, doctors });
     };
 
     const paint = async (dateKey, { autoAdvance = false } = {}) => {
-      grid.innerHTML = '<p class="slot-empty">Yuklanmoqda…</p>';
+      grid.innerHTML = `<p class="slot-empty">${esc(tr('common.loading'))}</p>`;
       let data;
       try {
         data = await fetchSlots(doc.id, dateKey);
       } catch {
-        grid.innerHTML = '<p class="slot-empty">Slotlarni yuklab boʻlmadi. Qayta urinib koʻring.</p>';
+        grid.innerHTML = `<p class="slot-empty">${esc(tr('booking.slot.failed'))}</p>`;
         return;
       }
 
@@ -354,7 +386,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     );
 
     if (state.date) paint(state.date, { autoAdvance: true });
-    else grid.innerHTML = '<p class="slot-empty">Bu shifokorning yaqin kunlarda qabuli yoʻq.</p>';
+    else grid.innerHTML = `<p class="slot-empty">${esc(tr('booking.slot.noDays'))}</p>`;
   }
 
   /**
@@ -403,9 +435,9 @@ const widgetData = JSON.stringify({ departments, doctors });
       <div class="who-list" id="whoList"><p class="slot-empty">${esc(tr('common.loading'))}</p></div>
       <button class="btn btn-ghost w-full" id="whoNew" type="button">+ Boshqa odam</button>
       <div class="who-form" id="whoForm" hidden>
-        <input id="w-last" type="text" placeholder="Familiya *" autocomplete="family-name" />
-        <input id="w-first" type="text" placeholder="Ism *" autocomplete="given-name" />
-        <input id="w-mid" type="text" placeholder="Sharif (ixtiyoriy)" />
+        <input id="w-last" type="text" placeholder="${esc(tr('booking.field.lastName'))}" autocomplete="family-name" />
+        <input id="w-first" type="text" placeholder="${esc(tr('booking.field.firstName'))}" autocomplete="given-name" />
+        <input id="w-mid" type="text" placeholder="${esc(tr('booking.field.patronymic'))}" />
         <div class="fld-label">${esc(tr('booking.birthDate'))} *</div>
         ${birthDateSelectsHtml('new', lang)}
         <button class="btn w-full" id="whoSave" type="button">Saqlash va davom etish</button>
@@ -422,7 +454,7 @@ const widgetData = JSON.stringify({ departments, doctors });
         })}</span>
       </label>
       <p class="book-msg" id="whoMsg" role="status" aria-live="polite"></p>
-      <button class="back-link">← vaqtni oʻzgartirish</button>`;
+      <button class="back-link">${esc(tr('booking.back.time'))}</button>`;
 
     wBody.querySelector('.back-link').addEventListener('click', () => {
       state.time = null;
@@ -536,7 +568,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       const patronymic = wBody.querySelector('#w-mid').value.trim();
       const birthDate = readBirthDate(form, 'new');
 
-      if (!lastName || !firstName) return setMsg('Familiya va ism majburiy.', 'error');
+      if (!lastName || !firstName) return setMsg(tr('booking.field.nameRequired'), 'error');
       if (!birthDate) return setMsg(tr('booking.birthDate.required'), 'error');
       if (!privacyOk()) return;
       // Yoshi to'g'ri kelmasa — bemorni bekorga qo'shib o'tirmaymiz.
@@ -546,7 +578,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       try {
         const res = await post({ action: 'add', firstName, lastName, patronymic, birthDate });
         const body = await res.json();
-        if (!res.ok) return setMsg(body.error ?? 'Saqlab boʻlmadi.', 'error');
+        if (!res.ok) return setMsg(body.error ?? tr('booking.saveFailed'), 'error');
         patients.patients.push(body.patient);
         proceed(body.patient);
       } catch {
@@ -581,7 +613,7 @@ const widgetData = JSON.stringify({ departments, doctors });
     wBody.innerHTML = `<div class="pane-label">${esc(tr('booking.whoFor'))}</div>
       <p class="book-msg error">${esc(tr('common.error.network'))}</p>
       <button class="btn w-full" id="whoRetry" type="button">${esc(tr('common.retry'))}</button>
-      <button class="back-link">← vaqtni oʻzgartirish</button>`;
+      <button class="back-link">${esc(tr('booking.back.time'))}</button>`;
     wBody.querySelector('#whoRetry').addEventListener('click', () => renderPatient());
     wBody.querySelector('.back-link').addEventListener('click', () => {
       state.time = null;
@@ -608,7 +640,7 @@ const widgetData = JSON.stringify({ departments, doctors });
       <input class="login-inp code" id="wCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" />
       <p class="book-msg" id="loginMsg" role="status" aria-live="polite"></p>
       <button class="btn w-full" id="wLogin" type="button">${esc(tr('booking.login.button'))}</button>
-      <button class="back-link">← vaqtni oʻzgartirish</button>`;
+      <button class="back-link">${esc(tr('booking.back.time'))}</button>`;
 
     wBody.querySelector('.back-link').addEventListener('click', () => {
       state.time = null;
@@ -693,17 +725,17 @@ const widgetData = JSON.stringify({ departments, doctors });
       wBody.innerHTML = `<div class="success">
         <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></div>
         <h4>${esc(tr('booking.success.title'))}</h4>
-        <p>${b.mode === 'at_clinic' ? esc(tr('booking.confirm.payAtDesk', { price: priceNumber })) : 'Toʻlov qabul qilindi.'}</p>
+        <p>${esc(b.mode === 'at_clinic' ? tr('booking.confirm.payAtDesk', { price: priceNumber }) : tr('booking.paid'))}</p>
         <div class="sum-card" style="margin-top:14px;text-align:left">
-          ${state.patientName ? `<div class="sum-row"><span class="k">Bemor</span><span class="v">${esc(state.patientName)}</span></div>` : ''}
-          <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
-          <div class="sum-row"><span class="k">Sana · vaqt</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
+          ${state.patientName ? `<div class="sum-row"><span class="k">${esc(tr('booking.summary.patient'))}</span><span class="v">${esc(state.patientName)}</span></div>` : ''}
+          <div class="sum-row"><span class="k">${esc(tr('booking.summary.doctor'))}</span><span class="v">${esc(d.name)}</span></div>
+          <div class="sum-row"><span class="k">${esc(tr('booking.summary.when'))}</span><span class="v">${state.dateLabel} · ${state.time}</span></div>
           <div class="sum-row total"><span class="k">${esc(tr('booking.confirm.price'))}</span><span class="v">${fmtPrice(d.price)}</span></div>
         </div>
         <p class="pay-note">${esc(tr('booking.success.telegram'))}</p>
         <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap">
-          <a class="btn sm" href="/kabinet">Kabinetda koʻrish</a>
-          <button class="btn btn-ghost btn-sm" id="resetBtn">Yana navbat olish</button>
+          <a class="btn sm" href="/kabinet">${esc(tr('booking.success.cabinet'))}</a>
+          <button class="btn btn-ghost btn-sm" id="resetBtn">${esc(tr('booking.success.again'))}</button>
         </div>
       </div>`;
       wBody.querySelector('#resetBtn').addEventListener('click', () => {
@@ -726,18 +758,18 @@ const widgetData = JSON.stringify({ departments, doctors });
         <div class="price-note">${esc(tr('booking.confirm.payAtDesk', { price: priceNumber }))}</div>
       </div>
       <div class="sum-card">
-        <div class="sum-row" id="whoRow" hidden><span class="k">Bemor</span>
+        <div class="sum-row" id="whoRow" hidden><span class="k">${esc(tr('booking.summary.patient'))}</span>
           <span class="v"><b id="whoName"></b>
-            <button class="who-change" id="whoChange" type="button">oʻzgartirish</button></span></div>
-        <div class="sum-row"><span class="k">Shifokor</span><span class="v">${d.name}</span></div>
-        <div class="sum-row"><span class="k">Yoʻnalish</span><span class="v">${d.job}</span></div>
-        <div class="sum-row"><span class="k">Sana</span><span class="v">${state.dateLabel}</span></div>
-        <div class="sum-row"><span class="k">Vaqt</span><span class="v">${state.time} · ${d.slotMinutes} daqiqa</span></div>
+            <button class="who-change" id="whoChange" type="button">${esc(tr('booking.change'))}</button></span></div>
+        <div class="sum-row"><span class="k">${esc(tr('booking.summary.doctor'))}</span><span class="v">${esc(d.name)}</span></div>
+        <div class="sum-row"><span class="k">${esc(tr('booking.summary.field'))}</span><span class="v">${esc(jobText(d))}</span></div>
+        <div class="sum-row"><span class="k">${esc(tr('booking.summary.date'))}</span><span class="v">${state.dateLabel}</span></div>
+        <div class="sum-row"><span class="k">${esc(tr('booking.summary.time'))}</span><span class="v">${state.time} · ${d.slotMinutes} ${esc(tr('booking.minutes'))}</span></div>
       </div>
       <p class="book-msg" id="bookMsg" role="status" aria-live="polite"></p>
       <button class="btn w-full" id="wBook">${esc(tr('booking.confirm.button'))}</button>
       <p class="pay-note">${esc(tr('booking.confirm.note'))}</p>
-      <button class="back-link">← orqaga</button>`;
+      <button class="back-link">${esc(tr('booking.back'))}</button>`;
 
     wBody.querySelector('.back-link').addEventListener('click', () => setStep(4));
 
@@ -781,7 +813,7 @@ const widgetData = JSON.stringify({ departments, doctors });
         }
 
         if (res.status === 409) {
-          msg.textContent = data.error ?? 'Bu vaqt band qilindi.';
+          msg.textContent = data.error ?? tr('booking.taken');
           msg.className = 'book-msg error';
           btn.disabled = false;
           setTimeout(() => {
@@ -792,7 +824,7 @@ const widgetData = JSON.stringify({ departments, doctors });
         }
 
         if (!res.ok) {
-          msg.textContent = data.error ?? 'Bron qilib boʻlmadi.';
+          msg.textContent = data.error ?? tr('booking.failed');
           msg.className = 'book-msg error';
           btn.disabled = false;
           return;
@@ -806,7 +838,7 @@ const widgetData = JSON.stringify({ departments, doctors });
         state.booked = data;
         render();
       } catch {
-        msg.textContent = 'Internetga ulanishda muammo. Qayta urinib koʻring.';
+        msg.textContent = tr('common.error.network');
         msg.className = 'book-msg error';
         btn.disabled = false;
       }
@@ -882,7 +914,7 @@ const widgetData = JSON.stringify({ departments, doctors });
           const go = card.querySelector('.go');
           if (go) {
             go.disabled = n === 0;
-            go.title = n === 0 ? 'Bu boʻlimda hozircha shifokor yoʻq' : '';
+            go.title = n === 0 ? tr('booking.dept.empty') : '';
           }
         });
       }

@@ -1,4 +1,5 @@
 import type { AgeGroup } from '../lib/age';
+import type { Lang } from './i18n';
 
 export type Shift = { start: string; end: string };
 
@@ -30,6 +31,13 @@ export type Doctor = {
    * vidjeti mos kelmagan bemorni tanlatmaydi, server ham tekshiradi.
    */
   ageGroup?: AgeGroup;
+  /**
+   * Lavozimning ru/en tarjimasi. Ism tarjima qilinmaydi; tajriba va ish
+   * vaqti esa qat'iy shaklda yozilgani uchun `experienceText` va
+   * `hoursText` bilan hosil qilinadi — har shifokorga qo'lda yozilmaydi.
+   */
+  job_ru: string;
+  job_en: string;
 };
 
 /**
@@ -42,6 +50,8 @@ export const doctors: Doctor[] = [
     id: 'narimbetov',
     name: 'Narimbetov Alisher',
     job: 'Pediatr',
+    job_ru: 'Педиатр',
+    job_en: 'Paediatrician',
     deptId: 'pediatriya',
     experience: '10+ yil',
     photo: '/images/team/narimbetov-alisher.webp',
@@ -58,6 +68,8 @@ export const doctors: Doctor[] = [
     id: 'rahimov',
     name: 'Rahimov Umidjon',
     job: 'Oliy toifali pediatr',
+    job_ru: 'Педиатр высшей категории',
+    job_en: 'Senior paediatrician',
     deptId: 'pediatriya',
     experience: '20+ yil',
     photo: '/images/team/rahimov-umid.webp',
@@ -74,6 +86,8 @@ export const doctors: Doctor[] = [
     id: 'ashurov',
     name: 'Ashurov Tursunali',
     job: 'Terapevt · Kardiolog',
+    job_ru: 'Терапевт · Кардиолог',
+    job_en: 'Physician · Cardiologist',
     deptId: 'terapiya',
     experience: '40+ yil',
     photo: '/images/team/ashurov-tursunali.webp',
@@ -90,6 +104,8 @@ export const doctors: Doctor[] = [
     id: 'ilxomov',
     name: 'Ilxomov Laziz',
     job: 'Terapevt · Kardiolog',
+    job_ru: 'Терапевт · Кардиолог',
+    job_en: 'Physician · Cardiologist',
     deptId: 'terapiya',
     experience: '',
     photo: '/images/team/ilxomov-laziz.webp',
@@ -103,6 +119,8 @@ export const doctors: Doctor[] = [
     id: 'murtazayeva',
     name: 'Murtazayeva Raʼno',
     job: 'Ginekolog · UTT shifokori',
+    job_ru: 'Гинеколог · УЗИ-специалист',
+    job_en: 'Gynaecologist · Ultrasound',
     deptId: 'ginekologiya',
     experience: '',
     photo: '/images/team/murtazayeva-rano.webp',
@@ -122,6 +140,8 @@ export const doctors: Doctor[] = [
     id: 'mansurov',
     name: 'Mansurov Qobil',
     job: 'Bolalar nevrologi',
+    job_ru: 'Детский невролог',
+    job_en: 'Paediatric neurologist',
     deptId: 'nevrologiya',
     experience: '9+ yil',
     photo: '/images/team/mansurov-qobil.webp',
@@ -135,6 +155,8 @@ export const doctors: Doctor[] = [
     id: 'umatqulov',
     name: 'Umatqulov Husan',
     job: 'Nevrolog · Nevropatolog',
+    job_ru: 'Невролог · Невропатолог',
+    job_en: 'Neurologist',
     deptId: 'nevrologiya',
     experience: '',
     photo: '/images/team/umatqulov-husan.webp',
@@ -148,6 +170,8 @@ export const doctors: Doctor[] = [
     id: 'qobilxojayev',
     name: 'Qobilxoʻjayev Yorqinxoʻja',
     job: 'LOR · Otorinolaringolog',
+    job_ru: 'ЛОР · Оториноларинголог',
+    job_en: 'ENT · Otorhinolaryngologist',
     deptId: 'lor',
     experience: '3+ yil',
     photo: '/images/team/yorqinxoja-qobulxojayev.webp',
@@ -164,6 +188,8 @@ export const doctors: Doctor[] = [
     id: 'abdullayev',
     name: 'Abdullayev Bekmirza',
     job: 'Logoped · Fizioterapevt',
+    job_ru: 'Логопед · Физиотерапевт',
+    job_en: 'Speech therapist · Physiotherapist',
     deptId: 'fizio',
     experience: '10+ yil',
     photo: '/images/team/abdullayev-bekmirza.webp',
@@ -182,3 +208,36 @@ export const doctors: Doctor[] = [
 export const activeDoctors = doctors.filter((d) => d.active !== false);
 
 export const doctorsByDept = (deptId: string) => activeDoctors.filter((d) => d.deptId === deptId);
+
+
+/** `job` ning tanlangan tildagi ko'rinishi. */
+export const jobText = (d: Doctor, lang: Lang): string =>
+  lang === 'ru' ? d.job_ru : lang === 'en' ? d.job_en : d.job;
+
+/*
+  Tajriba va ish vaqti qat'iy shaklda yoziladi ("10+ yil",
+  "Du–Sh · 08:30–16:00"), shuning uchun tarjimasi hosil qilinadi —
+  har shifokorga uchta qatordan yozib chiqilmaydi. Shakl buzilgan
+  bo'lsa matn o'zgarishsiz qaytadi: yomon tarjimadan ko'ra o'zbekchasi.
+*/
+const YEARS: Record<Lang, string> = { uz: 'yil', ru: 'лет', en: 'years' };
+
+export function experienceText(value: string, lang: Lang): string {
+  const m = value.match(/^(\d+\+?)\s*yil$/);
+  return m ? `${m[1]} ${YEARS[lang]}` : value;
+}
+
+/** Du, Se, Ch, Pa, Ju, Sh, Ya — hafta kunlari qisqartmasi. */
+const DAYS: Record<string, Record<Lang, string>> = {
+  Du: { uz: 'Du', ru: 'Пн', en: 'Mon' },
+  Se: { uz: 'Se', ru: 'Вт', en: 'Tue' },
+  Ch: { uz: 'Ch', ru: 'Ср', en: 'Wed' },
+  Pa: { uz: 'Pa', ru: 'Чт', en: 'Thu' },
+  Ju: { uz: 'Ju', ru: 'Пт', en: 'Fri' },
+  Sh: { uz: 'Sh', ru: 'Сб', en: 'Sat' },
+  Ya: { uz: 'Ya', ru: 'Вс', en: 'Sun' },
+};
+
+export function hoursText(value: string, lang: Lang): string {
+  return value.replace(/\b(Du|Se|Ch|Pa|Ju|Sh|Ya)\b/g, (day) => DAYS[day]?.[lang] ?? day);
+}
