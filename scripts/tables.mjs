@@ -96,6 +96,22 @@ export const tables = [
     keys: [HASH('phone'), RANGE('sort_key')],
   },
   {
+    // 1C "Doktorga Qabul" (Document.DoctorsAdmission) hujjatlari — 1C o'zi
+    // yozadi: kalit telefon, sort_key = hujjat UUID. Hujjat o'tkazilgan
+    // bo'lsa (Posted=true) bemor kelgan hisoblanadi va sayt navbatni
+    // "done" deb belgilaydi (docs/1c-sync.md, 6.3).
+    //
+    // date-index: cron butun klinika bo'yicha "shu kundagi qabullar" ni
+    // so'raydi — telefonni oldindan bilmaydi.
+    name: 'visits',
+    backup: true,
+    attrs: [S('phone'), S('sort_key'), S('date')],
+    keys: [HASH('phone'), RANGE('sort_key')],
+    indexes: [
+      { IndexName: 'date-index', KeySchema: [HASH('date'), RANGE('sort_key')], Projection: ALL },
+    ],
+  },
+  {
     name: 'payments',
     backup: true,
     attrs: [S('payment_id')],

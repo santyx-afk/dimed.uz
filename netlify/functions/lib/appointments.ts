@@ -47,8 +47,14 @@ export type Appointment = {
   privacy_accepted_at?: string;
   /** eslatma yuborilgan lahza — takror yuborilmasligi uchun */
   reminded_at?: string;
-  /** shifokor done / no_show deb belgilagan lahza (E2) */
+  /** done / no_show deb belgilangan lahza (E2) */
   marked_at?: string;
+  /** kim belgiladi: shifokor (bo'sh) yoki 1C avtomat (`'1c'`) */
+  marked_by?: string;
+  /** 1C "Doktorga Qabul" hujjati UUID — bemor kelgani shundan ma'lum */
+  visit_ref?: string;
+  /** hujjat o'tkazilgan lahza (1C sanasi ISO ga o'girilgan) */
+  arrived_at?: string;
   /** bemordan baho so'ralgan lahza (G2) — bir marta so'raladi */
   rating_asked_at?: string;
   /** bemor qo'ygan baho 1–5 va lahzasi (G2) */

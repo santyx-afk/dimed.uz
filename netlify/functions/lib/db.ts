@@ -21,6 +21,7 @@ export const TABLES = {
   otpCodes: tableName('otp_codes'),
   individuals: tableName('individuals'),
   analysisResults: tableName('analysis_results'),
+  visits: tableName('visits'),
   doctors: tableName('doctors'),
   schedules: tableName('schedules'),
   appointments: tableName('appointments'),

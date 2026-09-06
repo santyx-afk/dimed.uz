@@ -372,6 +372,57 @@ JSON
 )"
 pitr "analysis_results"
 
+jadval "visits" "$(cat <<JSON
+{
+  "TableName": "${PREFIX}_visits",
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "phone",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "sort_key",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "date",
+      "AttributeType": "S"
+    }
+  ],
+  "KeySchema": [
+    {
+      "AttributeName": "phone",
+      "KeyType": "HASH"
+    },
+    {
+      "AttributeName": "sort_key",
+      "KeyType": "RANGE"
+    }
+  ],
+  "BillingMode": "PAY_PER_REQUEST",
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "date-index",
+      "KeySchema": [
+        {
+          "AttributeName": "date",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "sort_key",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      }
+    }
+  ]
+}
+JSON
+)"
+pitr "visits"
+
 jadval "payments" "$(cat <<JSON
 {
   "TableName": "${PREFIX}_payments",
@@ -496,7 +547,7 @@ pitr "ratings"
 # --- 2-qadam: jadvallar tayyor bo'lishini kutamiz ---
 echo
 echo "2-qadam: jadvallar tayyor bo'lishini kutamiz"
-for t in users otp_codes individuals doctors schedules appointments analysis_results payments lab_results prices rate_limits ratings; do
+for t in users otp_codes individuals doctors schedules appointments analysis_results visits payments lab_results prices rate_limits ratings; do
   ddb wait table-exists --table-name "${PREFIX}_$t"
 done
 echo "  hammasi tayyor"
