@@ -39,7 +39,8 @@ src/
   components/     Nav (burger + Kabinet menyusi), Footer, BookingWidget, Logo, DeptIcon
   data/           doctors.ts, departments.ts, site.ts, analyses.json, i18n.ts (uz/ru/en)
   layouts/        Base.astro — umumiy qolip; Cabinet.astro — kabinet bo'limlari (tablar)
-  lib/            lang, birthdate, dates, doctor-cabinet, live-prices
+  lib/            lang, birthdate, dates, doctor-cabinet, live-prices,
+                  result-title, age, phone, reveal, signin
   pages/          index, tahlillar, kirish, natija, maxfiylik,
                   kabinet/{navbatlar,tahlillar,sozlamalar},
                   kabinet/shifokor/{index,jadval,dam,sozlamalar},
@@ -48,11 +49,14 @@ src/
 netlify/
   functions/      API — har fayl bitta /api/<nom> endpoint; cron'lar config.schedule bilan
     lib/          db, telegram, session, env, http, time, slots, appointments, schedule,
-                  auth, payment, patients, results, analyte-info, share, ratings, i18n
+                  auth, payment, patients, results, panels, visits, analyte-info,
+                  share, ratings, rate-limit, age, phone, i18n
 scripts/          create-tables, seed-doctors, seed-prices, migrate-slot-minutes,
                   link-doctor, import-patients, build-analyses, gen-cloudshell-setup,
                   fake-dynamo (testlar), test-*.mjs
-docs/             QOLGAN-ISHLAR, ISHGA-TUSHIRISH, HANDOFF, 1c-integration, 1c-sync, payme-integration
+docs/             LOYIHA-XARITASI (kod qayerda nima qiladi), OCHILISH-REJASI,
+                  QOLGAN-ISHLAR, ISHGA-TUSHIRISH, HANDOFF,
+                  1c-integration, 1c-sync, payme-integration
 legacy/           eski Jekyll sayti (arxiv, deploy qilinmaydi)
 ```
 
@@ -175,6 +179,8 @@ tizimini ulaydigan dasturchiga (kassa ochilgach).
 
 | Fayl | Kim uchun |
 | --- | --- |
+| [`docs/LOYIHA-XARITASI.md`](docs/LOYIHA-XARITASI.md) | **Yangi dasturchi yoki AI — nima qayerda: oqimlar, jadvallar, endpointlar, tuzoqlar** |
+| [`docs/OCHILISH-REJASI.md`](docs/OCHILISH-REJASI.md) | Klinika egasi — ochilishdan oldingi to'rt qadam (deploy, 1C, shifokorlar, sozlamalar) |
 | [`docs/QOLGAN-ISHLAR.md`](docs/QOLGAN-ISHLAR.md) | Klinika egasi — hozir nima qilish kerak (joriy ro'yxat) |
 | [`docs/ISHGA-TUSHIRISH.md`](docs/ISHGA-TUSHIRISH.md) | Klinika egasi — qadamma-qadam ishga tushirish |
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | Sayt dasturchisi — texnik qarorlar, kod tuzilishi, tuzoqlar |

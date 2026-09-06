@@ -208,6 +208,29 @@ kelsa ISO ga o'giriladi — lekin `DF=yyyy-MM-ddTHH:mm:ss` ishonchliroq.
 > saytga ko'rinmaydi. Konstanta o'zgargach eski yozuvlarni yangi
 > jadvalga qayta yuborish kifoya.
 
+## "Doktorga Qabul" — bemor keldimi (2026-09-07)
+
+Uchinchi jadval qo'shildi. Registrator bemorni qabul qilganda 1C'da
+**"Doktorga Qabul"** (`Document.DoctorsAdmission`) hujjatini
+**o'tkazadi** — kengaytma uni quyidagi jadvalga yozadi, sayt esa
+navbatni «bemor keldi» deb belgilaydi.
+
+| Sozlama | Qiymat |
+| --- | --- |
+| Jadval nomi (`DynamoVisitsTable` konstantasi) | **`dimed_visits`** |
+| Region | **`us-east-1`** |
+| Partition key | `phone` (String) — `+998XXXXXXXXX` |
+| Sort key | `sort_key` (String) — hujjat UUID |
+| Indeks | `date-index` (`date` + `sort_key`) |
+
+Muhim maydon — **`Posted`** (BOOL): `true` bo'lsa bemor kelgan.
+Kun oxirigacha hujjat o'tkazilmasa sayt navbatni «kelmadi» deb
+belgilaydi. Maydonlarning to'liq ro'yxati va bog'lash tartibi —
+`docs/1c-sync.md`, 6.3.
+
+Teskari yo'nalish (saytdagi navbat → 1C da "Doktorga Qabul" hujjati)
+ham ishlaydi: `docs/1c-sync.md`, 6.2.
+
 ## Sinxronizatsiya yo'nalishi — hali ochiq
 
 Yuqoridagi maydon ro'yxati va `code-index` sayt tomonida tayyor. Ma'lumot

@@ -4,8 +4,8 @@
 > tayyor ma'lumotni qanday saqlashi, 1C tomoni uni qanday o'qishi va
 > ikki tomon bir-birini qanday tekshirishi shu yerda. Ma'lumot
 > **oqimi ikki yo'nalishda**: 1C → sayt (bemor profili, tahlil
-> natijalari — ishlayapti) va sayt → 1C (navbatlar — shu hujjat
-> taklif qiladi). Tahlil natijalari bo'yicha shartnoma
+> natijalari, bemor kelgani) va sayt → 1C (navbatlar). Ikkalasi ham
+> ishlaydi. Tahlil natijalari bo'yicha shartnoma
 > `docs/1c-integration.md` da, bu hujjat uni **to'ldiradi**.
 
 ## 1. Qisqacha
@@ -14,12 +14,15 @@
 | --- | --- | --- | --- |
 | 1C → sayt | Bemor profili (F.I.Sh., jins, tug'ilgan kun, kod) | `dimed_individuals` | ✅ ishlayapti — 1C kengaytmasi (ДинамоДБЭкспорт) yozadi, sayt o'qiydi |
 | 1C → sayt | Tahlil natijalari (hujjat + analitlar) | `dimed_analysis_results` | ✅ ishlayapti; sayt har 15 daqiqada yangisini topib bemorga bot orqali havola yuboradi |
-| Sayt → 1C | Navbatlar (kim, qaysi shifokorga, qachon, holati) | `dimed_appointments` | 🟡 taklif: 1C reglament topshirig'i jadvalni o'qib `dm_WebBooking` hujjatini yaratadi |
+| Sayt → 1C | Navbatlar (kim, qaysi shifokorga, qachon, holati) | `dimed_appointments` | ✅ 1C reglament topshirig'i o'qib "Doktorga Qabul" hujjatini yaratadi (6.2) |
+| 1C → sayt | Bemor keldimi ("Doktorga Qabul" o'tkazilgani) | `dimed_visits` | ✅ hujjat o'tkazilsa sayt navbatni "keldi" deb belgilaydi (6.3) |
 
 Umumiy qoida o'zgarmaydi: **har bir jadvalga faqat bitta tomon yozadi.**
-1C `dimed_individuals` va `dimed_analysis_results` ga, sayt — qolgan
-hammasiga. Navbat jadvalida 1C faqat **o'ziga tegishli belgi** (`onec_ref`,
-`synced_at`) qo'yishi mumkin — quyida.
+1C `dimed_individuals`, `dimed_analysis_results` va `dimed_visits` ga
+yozadi, sayt — qolgan hammasiga. `dimed_appointments` ni 1C faqat
+**o'qiydi**: navbatning holati (`status`) saytniki va uni 1C
+o'zgartirmaydi. Bemor kelgani ham shu qoida bilan uzatiladi — 1C
+o'ziniki bo'lgan `dimed_visits` ga yozadi, sayt o'qib xulosa chiqaradi.
 
 ## 2. Mavjud kengaytma (ДинамоДБЭкспорт) nima qiladi
 
@@ -30,15 +33,20 @@ ishlaydi va reglament topshirig'i orqali DynamoDB'ga `PutItem` yuboradi:
 | --- | --- | --- |
 | `DynamoDBIndividualsTable` | `dimed_individuals` | Jismoniy shaxs (bemor) kartasi — telefon bo'yicha |
 | `DynamoDBAnalysisResultTable` | `dimed_analysis_results` | Laboratoriya natijasi hujjati — telefon bo'yicha |
+| `DynamoVisitsTable` | `dimed_visits` | "Doktorga Qabul" hujjati — bemor kelgani (6.3) |
+| `DynamoAppointmentsTable` | `dimed_appointments` | Saytdagi navbatlar — **o'qish uchun** (6.2) |
+| `DynamoBookingImportEnabled` | ✓ | Saytdan navbat olib kirishni yoqadi (6.2) |
 
 Kalitlar va yozuv shakli — `docs/1c-integration.md` («1C to'g'ridan-to'g'ri
 DynamoDB'ga yozadi»). Kengaytma **o'chirmaydi**: bekor qilingan hujjat
 `Posted=false` yoki `DeletionMark=true` bilan qayta yoziladi, sayt uni
 yashiradi. Shu tartib navbatlar uchun ham saqlanadi.
 
-Kengaytmaga ikki narsa qo'shilishi kutilmoqda (D1 natija sahifasi uchun):
-tahlil (panel) nomi va yuborgan shifokor, me'yoriy oraliq — 4-bo'limdagi
-«sayt o'qiydigan nomlar» jadvali.
+**2026-09-07 dan boshlab** kengaytma tahlil natijasi bilan birga
+`AnalysisName` (tahlil/panel nomi — `Document.AnalysisResult.Analysis`,
+bo'lmasa jadval qismidagi tahlillar nomi) va `Doctor` (yo'naltirgan
+shifokor — `ReferencedPerson`) ni ham yuboradi. Me'yoriy oraliq
+(`ReferenceMin` / `ReferenceMax`) hali qo'shilmagan — 4.3 ga qarang.
 
 ## 3. DynamoDB tuzilmasi — `phone` / `sort_key`
 
@@ -129,8 +137,8 @@ tasdiqlasa, ro'yxat bittaga qisqartiriladi:
 
 | Nima | Sayt o'qiydigan nomlar (tartib bilan) | Qayerda |
 | --- | --- | --- |
-| Tahlil (panel) nomi | `AnalysisName`, `Analysis`, `PanelName`, `Nomenclature`, `ServiceName`, `Title` | hujjat |
-| Yuborgan shifokor | `Doctor`, `ReferringDoctor`, `DoctorName`, `Physician` | hujjat |
+| Tahlil (panel) nomi | `AnalysisName` ✅ yuborilyapti (qolganlari zaxira: `Analysis`, `PanelName`, `Nomenclature`, `ServiceName`, `Title`) | hujjat |
+| Yuborgan shifokor | `Doctor` ✅ yuborilyapti (zaxira: `ReferringDoctor`, `DoctorName`, `Physician`) | hujjat |
 | Me'yoriy oraliq (matn) | `Reference`, `ReferenceRange`, `ReferenceText`, `Norm`, `NormText` | analit |
 | Me'yor pastki / yuqori chegarasi (son) | `ReferenceMin`/`ReferenceMax`, `MinValue`/`MaxValue`, `LowerLimit`/`UpperLimit`, `NormMin`/`NormMax` | analit |
 | Me'yordan chetlanish bayrog'i | `Flag` yoki `Status`: `H`/`HIGH`/`↑`, `L`/`LOW`/`↓`, `N` | analit |
@@ -201,37 +209,112 @@ osonroq va aniq).
   cron'i orqali **har 15 daqiqada** (yangi tayyor hujjat topilsa —
   nom, sana va sahifa havolasi).
 
-### 6.2 Sayt → 1C (taklif: navbatlar)
+### 6.2 Sayt → 1C: navbatni "Doktorga Qabul" qilib ro'yxatga olish
 
-Tavsiya — **1C tomondan o'qish (pull)**, chunki 1C serveri internetdan
-ochiq emas va kengaytma DynamoDB bilan allaqachon gaplasha oladi:
+> **Holat: bajarildi (2026-09-07).** Kod MedHisob konfiguratsiyasida —
+> `CommonModule.DynamoSyncBookings`. Ilgari bu bo'lim `dm_WebBooking`
+> degan alohida hujjatni taklif qilardi; endi klinikaning o'z
+> **`Document.DoctorsAdmission` ("Doktorga Qabul")** hujjati ishlatiladi.
 
-1. Reglament topshirig'i **har 5–10 daqiqada** `date-index` bo'yicha
-   bugundan 7 kun oldinga so'raydi (7 ta `Query`).
-2. Har qator uchun kengaytmadagi **`dm_WebBooking`** hujjati (1C dasturchisi
-   taklif qilgan C-variant) topiladi yoki yaratiladi. Kalit — `doctor_day`
-   + `time` + `created_at` (ko'chirilgan navbat yangi `created_at` bilan
-   keladi). `Document.Sales` ga saytdan yozilmaydi — kassa va o'zaro
-   hisob-kitobga tegilmaydi; qabul bo'lib o'tgach registrator o'zi
-   `dm_WebBooking` asosida sotuv hujjatini kiritadi.
-3. `status` o'zgarishi hujjatga ko'chadi: `done` / `no_show` — belgi,
-   `moved` / `cancelled*` — hujjat bekor qilinadi (`Posted=false`).
-4. Qayta ishlangan qatorga 1C **`UpdateItem`** bilan `onec_ref` (hujjat
-   UUID) va `synced_at` (ISO) qo'yadi. Sayt bu maydonlarni o'qimaydi, lekin
-   saqlaydi — keyingi aylanishda `attribute_not_exists(synced_at) OR
-   updated_at > synced_at` bo'lganlar qayta ishlanadi. Boshqa maydonlarni
-   1C **o'zgartirmaydi** (`status` ham) — u saytniki.
+Yo'nalish — **1C tomondan o'qish (pull)**: 1C serveri internetdan ochiq
+emas, kengaytma esa DynamoDB bilan allaqachon gaplashadi.
 
-Alternativ — **push**: sayt har bronda 1C HTTP-servisiga `POST` yuboradi.
-Bu 1C serverini internetga ochishni talab qiladi va so'rov yetib bormasa
-navbat yo'qoladi; shuning uchun tavsiya etilmaydi. Kelajakda kerak bo'lsa
-sayt tomonida `book` / `reschedule` / `doctor-off` / `appointment-status`
-funksiyalariga bitta `notifyOneC()` chaqiruvi qo'shiladi.
+Reglament topshirig'i (`DynamoSyncJob`) har aylanishda:
 
-IAM (1C kaliti) uchun qo'shimcha huquq: `dynamodb:Query` —
-`table/dimed_appointments` va `table/dimed_appointments/index/date-index`,
-`dynamodb:UpdateItem` — `table/dimed_appointments` (faqat `onec_ref`,
-`synced_at`). `DeleteItem` **kerak emas**.
+1. `dimed_appointments` ni `date-index` bo'yicha bugundan **8 kun**
+   oldinga o'qiydi (kuniga bitta `Query`, sahifalash bilan).
+2. Har `booked` / `paid` / `done` navbat uchun `Document.DoctorsAdmission`
+   topiladi yoki yaratiladi. Kalit — **`WebBookingKey`** = `doctor_day|time`
+   (masalan `ashurov#2026-09-08|10:00`). Shu kalit tufayli topshiriq
+   necha marta ishlasa ham hujjat nusxalanmaydi.
+3. Hujjat **o'tkazilmagan** holda yaratiladi. Uni bemor kelganda
+   registrator o'tkazadi — 6.3 ga qarang.
+4. Navbat bekor qilinsa yoki ko'chirilsa (`cancelled`, `moved`,
+   `cancelled_by_clinic`) hujjat **o'chirishga belgilanadi**. O'tkazilgan
+   hujjatga tegilmaydi: bemor kelgan bo'lsa, kelgani rost.
+5. `Document.Sales` ga saytdan **yozilmaydi** — kassa va o'zaro
+   hisob-kitobga tegilmaydi. Qabul bo'lib o'tgach registrator sotuv
+   hujjatini o'zi kiritadi.
+
+**Sozlash (bir marta):**
+
+| Nima | Qiymat |
+| --- | --- |
+| `Constant.DynamoAppointmentsTable` | `dimed_appointments` |
+| `Constant.DynamoBookingImportEnabled` | ✓ (yoqilgan) |
+| `Catalog.Staff.WebDoctorID` | har shifokorda saytdagi kodi: `ashurov`, `murtazayeva`, … |
+
+`WebDoctorID` to'ldirilmagan shifokorning navbati **o'tkazib yuboriladi**
+va jurnalga yoziladi. Bu ataylab: noto'g'ri shifokorga yozib qo'yishdan
+ko'ra ko'rinadigan bo'shliq yaxshiroq. Saytdagi kodlar ro'yxatini
+`npm run link-doctor` yoki admin panel (`/kabinet/admin`) ko'rsatadi.
+
+**Bemor qanday topiladi:** avval `patient_id` (1C kodi) bo'yicha, keyin
+telefon bo'yicha (oxirgi 9 raqam). Topilmasa navbat o'tkazib yuboriladi
+va jurnalga yoziladi — **yangi karta ochilmaydi**, aks holda saytdan
+kelgan ma'lumot bilan ochilgan karta qo'lda kiritilganiga qo'shilib,
+ikki nusxa paydo bo'lardi. Bunday holatda registrator bemorni o'zi
+bog'laydi (kartani ochib, telefonini to'g'rilaydi — keyingi aylanishda
+navbat o'zi ulanadi).
+
+### 6.3 Davomat: bemor keldimi-kelmadimi
+
+Bu klinikaning talabi: **1C'da hujjat o'tkazilgan bo'lsa — keldi; kun
+davomida o'tkazilmasa — kelmadi.**
+
+Oqim:
+
+1. Registrator bemorni qabul qilganda "Doktorga Qabul" hujjatini
+   **o'tkazadi** (Провести).
+2. `DoctorsAdmissionOnWrite` obunasi hujjatni navbatga qo'yadi,
+   `DynamoSyncJob` esa uni **`dimed_visits`** jadvaliga yozadi.
+3. Saytdagi `sync-attendance` cron'i (har 10 daqiqada) o'sha kundagi
+   qabullarni o'qib, mos navbatni **`done`** ("keldi") deb belgilaydi.
+4. Kun tugagach hujjatsiz qolgan navbatlar **`no_show`** ("kelmadi")
+   bo'ladi.
+
+Shifokorning kabinetda qo'lda qo'ygan belgisi **ustun**: `marked_at`
+to'ldirilgan navbatga avtomat tegmaydi.
+
+**`dimed_visits` jadvali — 1C yozadi, sayt o'qiydi:**
+
+| Sozlama | Qiymat |
+| --- | --- |
+| Jadval nomi (`DynamoVisitsTable` konstantasi) | **`dimed_visits`** |
+| Partition key | `phone` (S) — `+998XXXXXXXXX` |
+| Sort key | `sort_key` (S) — hujjat UUID |
+| Indeks | `date-index` (`date` + `sort_key`) |
+
+| Maydon | Turi | Izoh |
+| --- | --- | --- |
+| `date` | S | `YYYY-MM-DD`, klinika vaqti — `date-index` kaliti |
+| `Date` | S | hujjat sanasi va vaqti, ISO |
+| `Posted` | BOOL | **eng muhimi**: `true` = bemor keldi |
+| `DeletionMark` | BOOL | o'chirishga belgilangan — hisobga olinmaydi |
+| `PatientName`, `PatientCode` | S | bemor (kod — `patient_id` bilan bir xil) |
+| `DoctorName`, `DoctorCode` | S | shifokor |
+| `Queue`, `Symptoms`, `Number` | N, S, S | navbat raqami, simptomlar, hujjat raqami |
+| `AppointmentKey` | S | `doctor_day\|time` — saytdan kelgan navbatda |
+
+**Bog'lash tartibi (sayt tomoni):** `AppointmentKey` → telefon + kun
+(ikkala tomonda bemor kodi bo'lsa u ham mos kelishi shart). Har hujjat
+**bir marta** ishlatiladi: bemor bir kunda ikki shifokorga yozilgan
+bo'lsa, bitta hujjat ikkalasini ham "keldi" qilib qo'ymaydi.
+
+Bemor navbatsiz kelsa hujjat baribir `dimed_visits` ga tushadi, lekin
+unga bog'lanadigan navbat bo'lmaydi — bunday yozuv e'tiborsiz qoladi.
+
+### 6.4 IAM huquqlari (1C kaliti)
+
+Yuqoridagi ikki yo'nalish uchun kerak:
+
+- `dynamodb:PutItem` — `table/dimed_individuals`, `table/dimed_analysis_results`,
+  **`table/dimed_visits`**;
+- `dynamodb:Query` — **`table/dimed_appointments`** va
+  **`table/dimed_appointments/index/date-index`**.
+
+`DeleteItem` va `UpdateItem` **kerak emas**: bekor qilingan hujjat
+`Posted=false` / `DeletionMark=true` bilan qayta yoziladi.
 
 ## 7. Xatolarni tekshirish
 

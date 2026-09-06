@@ -3,11 +3,25 @@
 > **Bu hujjat kimga:** klinika egasiga.
 > **Sana:** 2026-09-06. Har o'zgarishdan keyin yangilanadi.
 >
-> Boshqa hujjatlar: `ISHGA-TUSHIRISH.md` — noldan ishga tushirish
-> (Netlify, AWS, Telegram); `HANDOFF.md` — dasturchi uchun texnik
-> qarorlar; `1c-sync.md` — 1C dasturchisi uchun.
+> **Batafsil qadamlar — `OCHILISH-REJASI.md` da.** Bu yerda umumiy
+> ro'yxat, u yerda esa har qadam qanday bajarilishi va nima bilan
+> tekshirilishi.
+>
+> Boshqa hujjatlar: `LOYIHA-XARITASI.md` — kod qayerda nima qiladi;
+> `ISHGA-TUSHIRISH.md` — noldan ishga tushirish (Netlify, AWS,
+> Telegram); `HANDOFF.md` — dasturchi uchun texnik qarorlar;
+> `1c-sync.md` — 1C dasturchisi uchun.
 
 ---
+
+## ⚠️ Avval shuni o'qing
+
+`dimed.uz` da **eski nusxa** turibdi: sitemap'da atigi 2 ta manzil,
+`/natija` va `/ru/` — 404, API javob bermayapti. Ya'ni bron, kirish,
+kabinet va tahlil natijasi bemorlar uchun ishlamayapti.
+
+Sabab va tuzatish tartibi — **`OCHILISH-REJASI.md`, 1-qadam**. Bu
+tuzalmaguncha quyidagi ro'yxatning ma'nosi yo'q.
 
 ## Hozirgi holat
 
@@ -28,31 +42,33 @@ qaror. Ular kodga tegishli emas, lekin ularsiz sayt to'liq ishlamaydi.
 
 Tartib bilan bajaring. Har birida «qanday tekshirasiz» bor.
 
-### 1.1. AWS jadvallarini yangilash (10 daqiqa)
+### 1.1. AWS jadvallari — ✅ bajarildi (2026-09-07)
 
-Ikkita yangi narsa bor: **so'rov cheklovlari jadvali** (`rate_limits`)
-va **zaxira nusxa** (PITR — 35 kun ichidagi istalgan soniyaga
-qaytarish). Ikkalasi ham bitta skript bilan qo'shiladi.
+Bu qadam **tugatildi**, hech narsa qilish kerak emas. Nima qilingani:
 
-1. AWS konsolida **CloudShell** ni oching (yuqoridagi `>_` tugmasi)
-2. `scripts/cloudshell-setup.sh` faylini yuklang (Actions → Upload file)
-3. Ishga tushiring:
+- yetishmayotgan jadvallar yaratildi: `dimed_prices`, `dimed_rate_limits`,
+  `dimed_ratings` va yangi `dimed_visits` (bemor kelgani — 1.6 ga qarang);
+- **zaxira nusxa (PITR)** bemor ma'lumoti bor barcha jadvalda yoqildi —
+  35 kun ichidagi istalgan soniyaga qaytarish mumkin;
+- `rate_limits` yaratilgani uchun so'rov cheklovlari endi haqiqatan
+  ishlaydi (ilgari jimgina o'chiq turardi);
+- tahlil narxlari bazaga yozildi (43 ta) — endi ularni admin paneldan
+  o'zgartirsangiz sayt darhol yangilanadi.
 
-   ```bash
-   bash cloudshell-setup.sh
-   ```
+**Qanday tekshirasiz:** `/kabinet/admin/narxlar` da 43 ta tahlil
+ko'rinadi va narxni o'zgartirsangiz `/tahlillar` sahifasida yangisi
+chiqadi.
 
-Skript **xavfsiz**: mavjud jadvalga tegmaydi, shifokorlarning
-`telegram_id` bog'lanishini o'chirmaydi, admin panelda qo'ygan yosh
-cheklovlaringizni saqlaydi.
+> **Diqqat — kalitlarni almashtiring.** AWS kaliti menga xabar orqali
+> yuborilgan edi. Ish tugadi; **AWS konsolida o'sha kalitni o'chirib,
+> yangisini yarating** va yangi kalitni faqat ikki joyga qo'ying:
+> Netlify sozlamalari (`DIMED_AWS_ACCESS_KEY_ID`,
+> `DIMED_AWS_SECRET_ACCESS_KEY`) va 1C konstantalari
+> (`DynamoAccessKeyID`, `DynamoSecretKey`).
 
-**Qanday tekshirasiz:** skript oxirida `rate_limits yaratildi` va har
-bir jadval ostida `zaxira nusxa yoqildi (35 kun)` yozuvi chiqadi.
-
-> **Nega muhim.** `rate_limits` bo'lmasa cheklovlar jimgina o'chiq
-> turadi — kimdir kirish kodini cheksiz terib ko'ra oladi. Zaxira
-> nusxasiz esa xato bilan o'chirilgan bemor ma'lumotini qaytarib
-> bo'lmaydi.
+> **Region:** hamma jadval `us-east-1` da. Kodda ham endi standart shu —
+> ilgari `eu-central-1` edi va `DIMED_AWS_REGION` unutilsa jadvallar
+> "topilmay" qolardi.
 
 ### 1.2. Shifokorlarga yosh cheklovini qo'yish (5 daqiqa)
 
@@ -69,20 +85,15 @@ kattalar shifokoriga bolalar yozilib qolmasin.
 paydo bo'ladi (masalan «16+»). Bron vidjetida mos kelmagan bemorni
 tanlab bo'lmaydi.
 
-### 1.3. Narxlarni kiritish (10 daqiqa)
+### 1.3. Narxlarni tekshirish (5 daqiqa)
 
-Tahlil narxlari saytda statik ro'yxatdan chiqadi. Bazaga kiritsangiz —
-admin paneldan istalgan payt o'zgartira olasiz va sayt darhol
-yangilanadi.
+Tahlil narxlari bazaga kiritildi (43 ta) — endi ularni admin paneldan
+o'zgartira olasiz va sayt darhol yangilanadi.
 
-```bash
-npm run seed-prices
-```
+**Kabinet → Narxlar** ni ochib, narxlar to'g'riligini tekshiring.
+Shifokor qabuli narxi esa **Kabinet → Shifokorlar** da.
 
-Keyin **Kabinet → Narxlar** dan tekshiring va kerakli narxni
-to'g'rilang. Shifokor qabuli narxi esa **Kabinet → Shifokorlar** da.
-
-**Qanday tekshirasiz:** `/tahlillar` sahifasida narx admin paneldagi
+**Qanday tekshirasiz:** `/tahlillar` sahifasidagi narx admin paneldagi
 bilan bir xil.
 
 ### 1.4. Telegram va admin (5 daqiqa)
@@ -109,6 +120,40 @@ Sayt uch tilda alohida manzilda: `/`, `/ru/`, `/en/`. Google buni
 
 **Qanday tekshirasiz:** Search Console'da sitemap «Success» va 6 ta
 manzil topilgan bo'ladi.
+
+### 1.6. 1C (MedHisob) konfiguratsiyasini yangilash — 1C dasturchisi bilan
+
+Bu qadamsiz ikkita yangi narsa ishlamaydi: **saytdagi navbat 1C ga
+tushmaydi** va **"bemor keldi / kelmadi" belgisi qo'yilmaydi**.
+
+Konfiguratsiyaga o'zgartirishlar kiritildi (`C:\...\MH3`). 1C
+dasturchisi ularni Konfiguratorda yuklab, sintaksis nazoratidan
+o'tkazishi va bazaga qo'yishi kerak. Keyin **konstantalarni to'ldiring**:
+
+| Konstanta | Qiymat |
+| --- | --- |
+| `DynamoVisitsTable` | `dimed_visits` |
+| `DynamoAppointmentsTable` | `dimed_appointments` |
+| `DynamoBookingImportEnabled` | ✓ (belgilang) |
+
+Va **har bir shifokorda** (Ma'lumotnomalar → Xodimlar) yangi
+«Saytdagi shifokor kodi» (`WebDoctorID`) maydonini to'ldiring:
+`ashurov`, `murtazayeva` va hokazo. Ro'yxatni admin panelda
+(`/kabinet/admin`) ko'rasiz.
+
+**Qanday ishlaydi:**
+
+1. Bemor saytdan navbat oladi → 1C da **"Doktorga Qabul"** hujjati
+   o'z-o'zidan paydo bo'ladi (o'tkazilmagan holda);
+2. Bemor kelganda registrator o'sha hujjatni **o'tkazadi** (Провести);
+3. Sayt buni ko'rib navbatni **«qabul bo'ldi»** deb belgilaydi;
+4. Kun oxirigacha hujjat o'tkazilmasa — **«kelmadi»**.
+
+**Qanday tekshirasiz:** saytdan sinov navbat oling → 5–10 daqiqada 1C
+da «Doktorga Qabul» ro'yxatida paydo bo'ladi → uni o'tkazing →
+10 daqiqada `/kabinet/admin/navbatlar` da «qabul bo'ldi» yoziladi.
+
+Batafsil: `docs/1c-sync.md`, 6.2–6.4 bo'limlari.
 
 ---
 
