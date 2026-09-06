@@ -31,6 +31,9 @@ const marshal = (v) => {
  * `doctors` jadvaliga yoziladigan maydonlar: baza nomi -> doctors.ts
  * dagi manba nomi. `active` alohida hisoblanadi: doctors.ts da
  * `active: false` bo'lmasa true (faolsiz shifokor seed'da yoqilmaydi).
+ * Uchinchi qiymat `true` bo'lsa maydon `if_not_exists` bilan yoziladi:
+ * adminda belgilangani (yosh cheklovi) qayta ishga tushirishda
+ * o'chib ketmasin.
  *
  * Hammasi `#f0` kabi taxallus bilan yoziladi: DynamoDB'ning band
  * so'zlari ro'yxati uzun (name, hour, status, ...) va u kengayib
@@ -48,6 +51,7 @@ const FIELDS = [
   ['photo', 'photo'],
   ['experience', 'experience'],
   ['hours', 'hours'],
+  ['age_group', 'ageGroup', true],
 ];
 
 /** Skript matnini qaytaradi — sof funksiya, test shuni chaqiradi. */
@@ -67,13 +71,17 @@ export function buildScript(tableDefs, doctors) {
 
   const names = Object.fromEntries(FIELDS.map(([attr], i) => [`#f${i}`, attr]));
   names['#upd'] = 'updated_at';
-  const setClause = FIELDS.map((_, i) => `#f${i} = :v${i}`).join(', ') + ', #upd = :upd';
+  const setClause =
+    FIELDS.map(([, , keep], i) => (keep ? `#f${i} = if_not_exists(#f${i}, :v${i})` : `#f${i} = :v${i}`)).join(', ') +
+    ', #upd = :upd';
 
   const doctorBlocks = doctors.map((d) => {
     const values = Object.fromEntries(
       FIELDS.map(([attr, src], i) => [
         `:v${i}`,
-        marshal(attr === 'active' ? d.active !== false : d[src] ?? ''),
+        marshal(
+          attr === 'active' ? d.active !== false : attr === 'age_group' ? d[src] ?? 'all' : d[src] ?? '',
+        ),
       ]),
     );
     // $NOW qobiqda hisoblanadi, shuning uchun bitta tirnoqdan chiqamiz.

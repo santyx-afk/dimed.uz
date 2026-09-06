@@ -1,5 +1,7 @@
 ---
 import Cabinet from '../../../layouts/Cabinet.astro';
+import SignInCard from '../../../components/SignInCard.astro';
+import { t } from '../../../data/i18n';
 
 /*
   Admin — Baholar (F3). Bemorlar qabuldan keyin botda qo'ygan baholar:
@@ -20,11 +22,7 @@ import Cabinet from '../../../layouts/Cabinet.astro';
 
   <div id="loading" class="state">Yuklanmoqda…</div>
 
-  <div id="denied" class="state" hidden>
-    <p id="deniedText">Bu bo‘lim faqat administrator uchun.</p>
-    <p id="idHint" class="id-hint" hidden></p>
-    <a class="btn" href="/kirish?next=/kabinet/admin/baholar">Kirish</a>
-  </div>
+  <SignInCard what={t('signin.what.admin')} next="/kabinet/admin/baholar" id="denied" hidden />
 
   <div id="content" hidden>
     <div class="card glass">
@@ -54,6 +52,10 @@ import Cabinet from '../../../layouts/Cabinet.astro';
 </Cabinet>
 
 <script>
+  import { t } from '../../../data/i18n';
+  import { getLang } from '../../../lib/lang';
+  import { showSignIn } from '../../../lib/signin';
+
   type Rating = {
     id: string;
     doctorId: string;
@@ -92,17 +94,19 @@ import Cabinet from '../../../layouts/Cabinet.astro';
     try {
       const res = await fetch('/api/admin-ratings', { credentials: 'same-origin' });
       if (res.status === 401 || res.status === 403) {
-        el('loading').hidden = true;
-        el('denied').hidden = false;
-        if (res.status === 403) {
-          const body = (await res.json()) as { telegramId?: string };
-          el('deniedText').textContent = 'Bu hisobda administrator huquqi yo‘q.';
-          if (body.telegramId) {
-            const hint = el('idHint');
-            hint.hidden = false;
-            hint.textContent = `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`;
-          }
-        }
+        const body = res.status === 403 ? ((await res.json()) as { telegramId?: string }) : {};
+        showSignIn(
+          res.status,
+          [
+            t('denied.admin', getLang()),
+            body.telegramId
+              ? `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+          'denied',
+        );
         return;
       }
       if (!res.ok) throw new Error(String(res.status));
@@ -229,17 +233,6 @@ import Cabinet from '../../../layouts/Cabinet.astro';
     margin-top: 16px;
   }
 
-  .id-hint {
-    color: var(--ink);
-    background: var(--chip-bg);
-    border: 1px solid var(--card-brd);
-    border-radius: 10px;
-    padding: 16px;
-    margin: 16px auto 0;
-    max-width: 460px;
-    font-size: 13px;
-    font-weight: 600;
-  }
 
   .card {
     border-radius: 16px;

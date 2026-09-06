@@ -102,6 +102,14 @@ export const tables = [
     keys: [HASH('item_id')],
   },
   {
+    // So'rov cheklovi: kalit — "nima#kim#oyna", TTL bilan o'zi o'chadi.
+    // Jadval bo'lmasa sayt ishlayveradi (cheklov o'chgan holatda).
+    name: 'rate_limits',
+    attrs: [S('bucket')],
+    keys: [HASH('bucket')],
+    ttlAttribute: 'expires_at',
+  },
+  {
     // Bemor baholari (G2/F3): PK shifokor, SK baho qo'yilgan lahza (ISO).
     // O'rtacha baho va soni doctors jadvalida (rating_sum, rating_count)
     // yig'ilib turadi — sayt kartasi shu yerdan o'qiydi.

@@ -57,6 +57,7 @@ const me = await load('me.ts');
 const doctorSchedule = await load('doctor-schedule.ts');
 const lcResults = await load('lc-results.ts');
 const reschedule = await load('reschedule.ts');
+const cancelApi = await load('cancel.ts');
 const doctorOff = await load('doctor-off.ts');
 const remindPatients = await load('remind-patients.ts');
 const doctorDaily = await load('doctor-daily.ts');
@@ -238,6 +239,62 @@ await test('kirishda 1C profili yangilanadi', async () => {
   assert.equal(tableOf('test_users').get('777').last_name, 'Azizova');
 });
 
+console.log('\nKirish kodini himoyalash:');
+const otpFor = (phone, code) => seed('test_otp_codes', phone, {
+  phone, code, telegram_id: '999', expires_at: Math.floor(Date.now() / 1000) + 300,
+});
+const tryCode = (phone, code) =>
+  call(authVerify, 'https://dimed.uz/api/auth-verify', jsonBody({ phone, code }));
+
+await test('5 ta noto\'g\'ri urinishdan keyin kod kuyadi', async () => {
+  const phone = '+998900000101';
+  otpFor(phone, '111111');
+
+  for (let i = 1; i <= 4; i++) {
+    const res = await tryCode(phone, '000000');
+    assert.equal(res.status, 401);
+    assert.match((await res.json()).error, new RegExp(`Yana ${5 - i} ta urinish`));
+    assert.ok(tableOf('test_otp_codes').has(phone), 'kod hali turibdi');
+  }
+
+  const last = await tryCode(phone, '000000');
+  assert.equal(last.status, 401);
+  assert.match((await last.json()).error, /yangi kod oling/);
+  assert.equal(tableOf('test_otp_codes').has(phone), false, 'kod o\'chirilishi kerak');
+
+  // To'g'ri kod bilan ham endi kirib bo'lmaydi — botdan yangisini olish kerak.
+  const after = await tryCode(phone, '111111');
+  assert.equal(after.status, 401);
+});
+
+await test('to\'g\'ri kod urinishlardan keyin ham ishlaydi', async () => {
+  const phone = '+998900000102';
+  otpFor(phone, '222222');
+  await tryCode(phone, '000000');
+  await tryCode(phone, '000001');
+  const ok = await tryCode(phone, '222222');
+  assert.equal(ok.status, 200);
+  assert.ok(ok.headers.get('set-cookie')?.includes('dimed_session'));
+});
+
+await test('bitta raqamga soatiga urinishlar cheklanadi', async () => {
+  const phone = '+998900000103';
+  let blocked = 0;
+  for (let i = 0; i < 12; i++) {
+    otpFor(phone, '333333');
+    const res = await tryCode(phone, '000000');
+    if (res.status === 429) blocked++;
+  }
+  assert.ok(blocked > 0, 'chegaradan keyin 429 kelishi kerak');
+});
+
+await test('noto\'g\'ri formatdagi raqam bazaga umuman bormaydi', async () => {
+  for (const bad of ['123', '90 123 45', '']) {
+    const res = await tryCode(bad, '111111');
+    assert.equal(res.status, 400, `${bad} rad etilishi kerak`);
+  }
+});
+
 console.log('\nSlotlar:');
 await test('slot ro\'yxati qaytadi', async () => {
   const res = await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${BOOK_DATE}`);
@@ -305,6 +362,30 @@ const authed = (obj) => ({
   (555A) 1C dan Birthday bilan kelgan — bron shu bemor nomiga olinadi.
 */
 const bookAs = (obj) => authed({ patientId: '555A', privacyAccepted: true, ...obj });
+
+/** Ikkinchi bemor (boshqa telefon) — begona so'rovlarni tekshirish uchun. */
+const otherCookie = createSessionCookie({ phone: '+998907777777', userId: '888' }).split(';')[0];
+
+/*
+  Test telefonining kelgusi bronlarini vaqtincha olib turadi: haqiqiy
+  bemorda ular bo'lmaydi, lekin testlar ketma-ket yurgani uchun
+  yig'ilib qoladi va "bir vaqtda 5 ta" chegarasiga urilib ketadi.
+  Qaytaruvchi funksiya qaytaradi — keyingi testlarning ma'lumoti
+  joyida qolsin.
+*/
+const clearUpcoming = (phone = '+998901234567') => {
+  const table = tableOf('test_appointments');
+  const now = new Date().toISOString();
+  const removed = [];
+  for (const [key, row] of [...table.entries()]) {
+    if (row.phone === phone && row.starts_at > now) {
+      removed.push([key, row]);
+      table.delete(key);
+    }
+  }
+  return () => removed.forEach(([key, row]) => seed('test_appointments', key, row));
+};
+
 
 await test('maxfiylik siyosatiga rozilik bo\'lmasa bron qilinmaydi', async () => {
   const res = await call(book, 'https://dimed.uz/api/book', bookAs({
@@ -872,6 +953,38 @@ await test('yangi tayyor natija tushganda havola bilan xabar ketadi, takrorlanma
   assert.equal(telegramCalls.filter((c) => c.body.chat_id === '777').length, 0, 'ikkinchi marta yuborilmaydi');
 });
 
+await test('tez yugurish faqat yaqinda kelgan bemorni qaraydi', async () => {
+  // Tarixi belgilangan, lekin yaqinda navbati bo'lmagan bemor — o'tkazib
+  // yuboriladi; tungi to'liq aylanishda esa qaraladi.
+  const user = tableOf('test_users').get('888');
+  seed('test_users', '888', { ...user, results_notified: [] });
+  seed('test_analysis_results', '+998907777777|uzoq-1', {
+    phone: '+998907777777', sort_key: 'uzoq-1', Date: '01.02.2026 10:00:00',
+    AnalysisResults: [{ Analyte: 'Gemoglobin', Result: '130', AnalyteUnit: 'g/L' }],
+  });
+
+  telegramCalls.length = 0;
+  const res = await call(notifyResults, 'https://dimed.uz/api/notify-results?mode=recent');
+  const data = await res.json();
+  assert.equal(data.mode, 'recent');
+  assert.ok(data.users > data.checked, 'hamma bemor qaralmasligi kerak');
+  assert.equal(
+    telegramCalls.filter((c) => c.body.chat_id === '888').length,
+    0,
+    'yaqinda kelmagan bemorga xabar yo\'q',
+  );
+
+  // Tungi to'liq aylanishda esa u ham qaraladi va natijasi yetib boradi.
+  telegramCalls.length = 0;
+  const full = await (await call(notifyResults, 'https://dimed.uz/api/notify-results?mode=full')).json();
+  assert.equal(full.mode, 'full');
+  assert.equal(full.checked, full.users, 'to\'liq aylanishda hammasi qaraladi');
+  assert.ok(
+    telegramCalls.some((c) => c.body.chat_id === '888' && c.body.text?.includes('Gemoglobin')),
+    'to\'liq aylanishda natija haqida xabar ketadi',
+  );
+});
+
 console.log('\nBemorni tanlash (bir telefon — bir oila):');
 
 await test('sessiyasiz /api/patients 401 qaytaradi', async () => {
@@ -1231,6 +1344,71 @@ await test('kabinetda faqat yangi vaqt ko\'rinadi', async () => {
   assert.equal(data.appointments.length, 1);
   assert.equal(data.appointments[0].time, '10:00');
   assert.equal(data.appointments[0].canMove, true);
+});
+
+console.log('\nBemor bronni bekor qiladi:');
+await test('bekor qilish slotni bo\'shatadi va botga xabar ketadi', async () => {
+  const restore = clearUpcoming();
+  const CANCEL_DATE = addDays(BOOK_DATE, 6);
+  const before = tableOf('test_doctors').get('ashurov');
+  seed('test_doctors', 'ashurov', {
+    ...before, slot_minutes: 60, shifts: [{ start: '08:00', end: '17:00' }],
+    workdays: [0, 1, 2, 3, 4, 5, 6], age_group: 'all',
+  });
+
+  const booked = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: CANCEL_DATE, time: '09:00',
+  }));
+  assert.equal(booked.status, 200, JSON.stringify(await booked.clone().json()));
+
+  const kirmagan = await call(cancelApi, 'https://dimed.uz/api/cancel',
+    jsonBody({ doctor: 'ashurov', date: CANCEL_DATE, time: '09:00' }));
+  assert.equal(kirmagan.status, 401);
+
+  const begona = await call(cancelApi, 'https://dimed.uz/api/cancel', {
+    ...jsonBody({ doctor: 'ashurov', date: CANCEL_DATE, time: '09:00' }),
+    headers: { 'content-type': 'application/json', cookie: otherCookie },
+  });
+  assert.equal(begona.status, 403);
+
+  telegramCalls.length = 0;
+  const res = await call(cancelApi, 'https://dimed.uz/api/cancel', {
+    ...jsonBody({ doctor: 'ashurov', date: CANCEL_DATE, time: '09:00' }),
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_appointments').get(`ashurov#${CANCEL_DATE}|09:00`).status, 'cancelled');
+  assert.ok(telegramCalls.some((c) => c.body.text?.includes('bekor qilindi')));
+
+  // Slot yana bo'sh — boshqa bemor olishi mumkin.
+  const free = await (await call(slots, `https://dimed.uz/api/slots?doctor=ashurov&date=${CANCEL_DATE}`)).json();
+  assert.equal(free.slots.find((x) => x.time === '09:00').free, true);
+
+  // Ikkinchi marta bekor qilib bo'lmaydi.
+  const again = await call(cancelApi, 'https://dimed.uz/api/cancel', {
+    ...jsonBody({ doctor: 'ashurov', date: CANCEL_DATE, time: '09:00' }),
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+  });
+  assert.equal(again.status, 400);
+  seed('test_doctors', 'ashurov', before);
+  restore();
+});
+
+await test('qabulga 1 soatdan kam qolsa bekor qilib bo\'lmaydi', async () => {
+  const soon = new Date(Date.now() + 30 * 60_000);
+  const { dateKey } = toTashkent(soon);
+  const time = toHHMM(toTashkent(soon).minutes);
+  seed('test_appointments', `ashurov#${dateKey}|${time}`, {
+    doctor_day: `ashurov#${dateKey}`, time, doctor_id: 'ashurov', date: dateKey,
+    phone: '+998901234567', telegram_id: '777', starts_at: soon.toISOString(),
+    status: 'booked', price: 70000, created_at: new Date().toISOString(),
+  });
+  const res = await call(cancelApi, 'https://dimed.uz/api/cancel', {
+    ...jsonBody({ doctor: 'ashurov', date: dateKey, time }),
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /1 soatdan kam/);
 });
 
 console.log('\nEslatmalar:');
@@ -1773,6 +1951,181 @@ await test('admin baholar ro\'yxati va yashirish (F3)', async () => {
   assert.equal(show.status, 200);
   assert.equal(tableOf('test_doctors').get('ashurov').rating_count, 1);
   assert.equal(tableOf('test_doctors').get('ashurov').rating_sum, 5);
+});
+
+console.log('\nBemor ro\'yxati to\'liq keladi:');
+await test('25 tadan ko\'p 1C yozuvi bo\'lsa ham hammasi ko\'rinadi', async () => {
+  // Avval Limit: 25 turardi va sahifalanmasdi — oilaning bir qismi yo'qolardi.
+  for (let i = 0; i < 30; i++) {
+    seed('test_individuals', `+998907777777|90${String(i).padStart(2, '0')}`, {
+      phone: '+998907777777', sort_key: `90${String(i).padStart(2, '0')}`,
+      Surname: 'Toirov', Name: `Farzand${i}`, Birthday: '01.01.2010',
+    });
+  }
+  const res = await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: otherCookie },
+  });
+  assert.equal(res.status, 200);
+  const { patients } = await res.json();
+  assert.ok(patients.length >= 31, `hammasi kelishi kerak edi, keldi: ${patients.length}`);
+  assert.ok(patients.some((p) => p.name === 'Toirov Farzand29'), 'oxirgisi ham ro\'yxatda');
+});
+
+await test('kodsiz (eski PROFILE) yozuv ham ro\'yxatda qoladi', async () => {
+  seed('test_individuals', '+998907777777|PROFILE', {
+    phone: '+998907777777', sort_key: 'PROFILE', Surname: 'Toirova', Name: 'Xadicha',
+  });
+  const { patients } = await (await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: otherCookie },
+  })).json();
+  const one = patients.find((p) => p.name === 'Toirova Xadicha');
+  assert.ok(one, 'kodsiz yozuv ham chiqishi kerak');
+  assert.equal(one.id, 'PROFILE');
+});
+
+await test('bir odam ikki marta chiqmaydi', async () => {
+  // Eski PROFILE yozuvi kodli yozuv bilan bir xil ismda — bittasi qoladi.
+  seed('test_individuals', '+998907777777|PROFILE', {
+    phone: '+998907777777', sort_key: 'PROFILE', Surname: 'Toirov', Name: 'Farzand0',
+  });
+  const { patients } = await (await call(patientsApi, 'https://dimed.uz/api/patients', {
+    headers: { cookie: otherCookie },
+  })).json();
+  assert.equal(patients.filter((p) => p.name === 'Toirov Farzand0').length, 1);
+});
+
+console.log('\nBir vaqtda ochiq navbatlar cheklovi:');
+await test('bitta telefon cheksiz navbat ololmaydi', async () => {
+  const restore = clearUpcoming();
+  const CAP_DATE = addDays(BOOK_DATE, 5);
+  // Smena oldingi testlarda o'zgargan — bu test o'zi kerakligini qo'yadi.
+  const before = tableOf('test_doctors').get('ashurov');
+  seed('test_doctors', 'ashurov', {
+    ...before,
+    slot_minutes: 60,
+    shifts: [{ start: '08:00', end: '17:00' }],
+    workdays: [0, 1, 2, 3, 4, 5, 6],
+    age_group: 'all',
+  });
+  const times = ['08:00', '09:00', '10:00', '11:00', '12:00'];
+  for (const time of times) {
+    const res = await call(book, 'https://dimed.uz/api/book', bookAs({
+      doctor: 'ashurov', date: CAP_DATE, time,
+    }));
+    assert.equal(res.status, 200, `${time}: ${JSON.stringify(await res.clone().json())}`);
+  }
+
+  const over = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: CAP_DATE, time: '13:00',
+  }));
+  assert.equal(over.status, 400);
+  assert.match((await over.json()).error, /5 tadan ko‘p bo‘lmaydi/);
+  assert.equal(tableOf('test_appointments').has(`ashurov#${CAP_DATE}|13:00`), false);
+
+  // Bittasi bo'shasa yana olish mumkin.
+  const one = tableOf('test_appointments').get(`ashurov#${CAP_DATE}|08:00`);
+  seed('test_appointments', `ashurov#${CAP_DATE}|08:00`, { ...one, status: 'cancelled' });
+  const again = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: CAP_DATE, time: '13:00',
+  }));
+  assert.equal(again.status, 200, JSON.stringify(await again.clone().json()));
+  clearUpcoming();
+  seed('test_doctors', 'ashurov', before);
+  restore();
+});
+
+console.log('\nShifokorning yosh cheklovi:');
+const AGE_DATE = addDays(BOOK_DATE, 3);
+clearUpcoming(); // bu yozuvlar bundan keyingi testlarga kerak emas
+const setAgeGroup = (group) => {
+  const doc = tableOf('test_doctors').get('ashurov');
+  seed('test_doctors', 'ashurov', { ...doc, age_group: group });
+};
+// Bolaning tug'ilgan sanasi qabul kunida 10 yosh bo'ladigan qilib olinadi.
+const childBirth = `${Number(AGE_DATE.slice(0, 4)) - 10}${AGE_DATE.slice(4)}`;
+seed('test_individuals', '+998901234567|557C', {
+  phone: '+998901234567', sort_key: '557C', Surname: 'Azizov', Name: 'Sardor', Birthday: childBirth,
+});
+
+await test('kattalar shifokoriga bolani yozib bo\'lmaydi', async () => {
+  setAgeGroup('adult');
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: AGE_DATE, time: '09:00', patientId: '557C',
+  }));
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /16 yoshdan katta/);
+  assert.equal(tableOf('test_appointments').has(`ashurov#${AGE_DATE}|09:00`), false);
+});
+
+await test('bolalar shifokoriga kattani yozib bo\'lmaydi', async () => {
+  setAgeGroup('child');
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: AGE_DATE, time: '09:00', patientId: '555A',
+  }));
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /16 yoshgacha/);
+  assert.equal(tableOf('test_appointments').has(`ashurov#${AGE_DATE}|09:00`), false);
+});
+
+await test('mos yoshdagi bemor yoziladi, cheklovsizda ikkalasi ham', async () => {
+  setAgeGroup('child');
+  const bola = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: AGE_DATE, time: '09:00', patientId: '557C',
+  }));
+  assert.equal(bola.status, 200, JSON.stringify(await bola.clone().json()));
+  assert.equal((await bola.json()).appointment.patientName, 'Azizov Sardor');
+
+  setAgeGroup('all');
+  const katta = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: AGE_DATE, time: '10:00', patientId: '555A',
+  }));
+  assert.equal(katta.status, 200);
+});
+
+await test('yosh 16 ga to\'lgan kuni kattalar shifokoriga o\'tadi', async () => {
+  setAgeGroup('adult');
+  // Qabul kunida roppa-rosa 16 yosh to'ladi — chegara "16 va undan katta".
+  seed('test_individuals', '+998901234567|558D', {
+    phone: '+998901234567', sort_key: '558D', Surname: 'Azizov', Name: 'Bekzod',
+    Birthday: `${Number(AGE_DATE.slice(0, 4)) - 16}${AGE_DATE.slice(4)}`,
+  });
+  const res = await call(book, 'https://dimed.uz/api/book', bookAs({
+    doctor: 'ashurov', date: AGE_DATE, time: '11:00', patientId: '558D',
+  }));
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+});
+
+await test('admin yosh cheklovini belgilaydi, u /api/doctors da ko\'rinadi', async () => {
+  const current = tableOf('test_doctors').get('ashurov');
+  const payload = {
+    id: 'ashurov', name: current.name, job: current.job, deptId: current.dept_id,
+    price: current.price, slotMinutes: current.slot_minutes, workdays: current.workdays,
+    shifts: current.shifts, ageGroup: 'child',
+  };
+  const res = await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', {
+    ...jsonBody(payload),
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+  });
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.equal(tableOf('test_doctors').get('ashurov').age_group, 'child');
+
+  const list = await (await call(doctorsList, 'https://dimed.uz/api/doctors')).json();
+  assert.equal(list.find((d) => d.id === 'ashurov').ageGroup, 'child');
+
+  const bad = await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', {
+    ...jsonBody({ ...payload, ageGroup: 'chaqaloq' }),
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+  });
+  assert.equal(bad.status, 400);
+  assert.match((await bad.json()).error, /Yosh cheklovi/);
+
+  // Berilmasa cheklovsiz bo'ladi — eski panel yozuvlari shunday keladi.
+  const { ageGroup, ...withoutAge } = payload;
+  await call(adminDoctors, 'https://dimed.uz/api/admin-doctors', {
+    ...jsonBody(withoutAge),
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+  });
+  assert.equal(tableOf('test_doctors').get('ashurov').age_group, 'all');
 });
 
 console.log('\nPayme to\'lovi:');

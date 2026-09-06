@@ -6,7 +6,8 @@ import { sendMessage, logToAdmin } from './lib/telegram.ts';
 import { generateOtp } from './lib/session.ts';
 import { mergeIndividualProfile } from './lib/patients.ts';
 import { handleRatingCallback, handleRatingComment, type CallbackQuery } from './lib/ratings.ts';
-import { json, normalizePhone } from './lib/http.ts';
+import { json } from './lib/http.ts';
+import { normalizePhone } from './lib/phone.ts';
 
 const OTP_TTL_SECONDS = 5 * 60;
 

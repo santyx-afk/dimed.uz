@@ -2,9 +2,10 @@ import type { Context } from '@netlify/functions';
 import { timingSafeEqual } from 'node:crypto';
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLES } from './lib/db.ts';
-import { required } from './lib/env.ts';
+import { optional } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
-import { json, error, normalizePhone } from './lib/http.ts';
+import { json, error } from './lib/http.ts';
+import { parsePhone } from './lib/phone.ts';
 import { botText, isLang } from './lib/i18n.ts';
 import { siteOrigin } from './result.ts';
 
@@ -36,8 +37,16 @@ type Body = {
 export default async (request: Request, _context: Context): Promise<Response> => {
   if (request.method !== 'POST') return error('Faqat POST', 405);
 
+  /*
+    Eski yo'l: 1C endi bazaga to'g'ridan-to'g'ri yozadi. Kalit
+    berilmagan bo'lsa endpoint umuman yopiq — ishlatilmayotgan eshik
+    ochiq turmasin. Qaytadan kerak bo'lsa LC_API_KEY qo'yiladi.
+  */
+  const key = optional('LC_API_KEY');
+  if (!key) return error('Bu yo‘l yopiq', 404);
+
   const given = Buffer.from(request.headers.get('x-api-key') ?? '');
-  const expected = Buffer.from(required('LC_API_KEY'));
+  const expected = Buffer.from(key);
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
     return error('API kalit noto‘g‘ri', 401);
   }
@@ -52,7 +61,9 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       if (!item.value) return error(`"${item.title}": value maydoni kerak (matn natija)`);
     }
 
-    const phone = normalizePhone(body.phone);
+    const checked = parsePhone(body.phone);
+    if (!checked.ok) return error(`phone: ${checked.error}`);
+    const phone = checked.value;
     const date = body.date ?? new Date().toISOString();
 
     for (const item of body.results) {

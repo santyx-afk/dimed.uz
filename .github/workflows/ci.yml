@@ -33,3 +33,13 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Brauzer testi: bron vidjeti va yopiq sahifalar. API testlari
+      # serverni tekshiradi, bu esa bemor ko'radigan oqimni — "bemor
+      # tanlanmasdan 5-qadamga o'tib ketardi" kabi xato shu yerda
+      # ushlanadi.
+      - name: Brauzer uchun Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Brauzer testlari
+        run: npm run test:e2e

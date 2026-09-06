@@ -101,6 +101,7 @@ import { site } from '../data/site';
 </Base>
 
 <script>
+  import { parsePhone, formatPhone } from '../lib/phone';
   import { birthDateSelectsHtml, readBirthDate } from '../lib/birthdate';
   import { getLang } from '../lib/lang';
 
@@ -147,15 +148,26 @@ import { site } from '../data/site';
     if (e.key === 'Enter') otpInputs[0]?.focus();
   });
 
+  /*
+    Raqam har xil yozilishi mumkin — bo'sh joy, chiziqcha, qavs,
+    mamlakat kodi bilan yoki usiz. Hammasini qabul qilamiz, lekin
+    noto'g'risini serverga yubormasdan aytamiz.
+  */
+  phoneInput.addEventListener('blur', () => {
+    const checked = parsePhone(phoneInput.value);
+    if (checked.ok) phoneInput.value = formatPhone(checked.value);
+  });
+
   submit.addEventListener('click', async () => {
-    const phone = phoneInput.value.trim();
+    const checked = parsePhone(phoneInput.value);
     const code = otpInputs.map((i) => i.value).join('');
 
-    if (phone.replace(/\D/g, '').length < 9) {
-      setMsg('Telefon raqamini to‘liq kiriting.', 'error');
+    if (!checked.ok) {
+      setMsg(checked.error, 'error');
       phoneInput.focus();
       return;
     }
+    const phone = checked.value;
     if (code.length !== 6) {
       setMsg('6 xonali kodni to‘liq kiriting.', 'error');
       otpInputs.find((i) => !i.value)?.focus();

@@ -1,5 +1,7 @@
 ---
 import Cabinet from '../../layouts/Cabinet.astro';
+import SignInCard from '../../components/SignInCard.astro';
+import { t } from '../../data/i18n';
 ---
 
 <Cabinet
@@ -24,10 +26,7 @@ import Cabinet from '../../layouts/Cabinet.astro';
 
   <div id="loading" class="state">Yuklanmoqda…</div>
 
-  <div id="guest" class="state" hidden>
-    <p>Navbatlaringizni ko‘rish uchun Telegram orqali kiring.</p>
-    <a class="btn" href="/kirish?next=/kabinet/navbatlar">Kirish</a>
-  </div>
+  <SignInCard what={t('signin.what.appointments')} next="/kabinet/navbatlar" hidden />
 
   <div id="content" class="grid" hidden>
     <div class="card glass">
@@ -43,6 +42,7 @@ import Cabinet from '../../layouts/Cabinet.astro';
 </Cabinet>
 
 <script>
+  import { showSignIn } from '../../lib/signin';
   type Appointment = {
     doctorId: string;
     doctorName: string;
@@ -129,8 +129,7 @@ import Cabinet from '../../layouts/Cabinet.astro';
     try {
       const res = await fetch('/api/me?include=appointments', { credentials: 'same-origin' });
       if (res.status === 401) {
-        el('loading').hidden = true;
-        el('guest').hidden = false;
+        showSignIn(401);
         return;
       }
       if (!res.ok) throw new Error(String(res.status));
@@ -207,7 +206,10 @@ import Cabinet from '../../layouts/Cabinet.astro';
       tilida ochiladi, tugmalar esa har doim o'zbekcha.
     */
     const move = a.canMove
-      ? `<button class="mv-btn" data-move="${key}">Vaqtni koʻchirish</button>
+      ? `<div class="appt-btns">
+           <button class="mv-btn" data-move="${key}">Vaqtni koʻchirish</button>
+           <button class="mv-btn danger" data-cancel="${key}">Bekor qilish</button>
+         </div>
          <div class="mv" data-panel="${key}" hidden>
            <div class="mv-lab">Yangi sana</div>
            <div class="mv-days" data-days="${key}"></div>
@@ -291,6 +293,35 @@ import Cabinet from '../../layouts/Cabinet.astro';
     msg.className = `mv-msg${kind ? ` ${kind}` : ''}`;
   }
 
+  /*
+    Bekor qilish: kela olmaydigan bemor slotni o'zi bo'shatadi — avval
+    faqat ko'chirish bor edi va kelmagan bemorning vaqti o'lik ketardi.
+    Qoida ko'chirish bilan bir xil: qabulga 1 soatdan ko'p qolgan bo'lsa.
+  */
+  async function cancelAppointment(key: string) {
+    const { doctor, date, time } = partsOf(key);
+    if (!confirm('Navbat bekor qilinsinmi? Vaqt boshqa bemorlarga ochiladi.')) return;
+
+    setMoveMsg(key, 'Bekor qilinmoqda…');
+    try {
+      const res = await fetch('/api/cancel', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ doctor, date, time }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setMoveMsg(key, data.error ?? 'Bekor qilib boʻlmadi.', 'error');
+        return;
+      }
+      openMove = '';
+      await load();
+    } catch {
+      setMoveMsg(key, 'Internetga ulanishda muammo.', 'error');
+    }
+  }
+
   async function moveTo(key: string, toTime: string) {
     const toDate = moveDates[key];
     if (!toDate) return;
@@ -323,6 +354,12 @@ import Cabinet from '../../layouts/Cabinet.astro';
   /* Kartochkalar qaytadan chiziladi — hodisalar ota-elementda ushlanadi. */
   el('upcoming').addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
+
+    const cancel = target.closest<HTMLButtonElement>('[data-cancel]');
+    if (cancel) {
+      void cancelAppointment(cancel.dataset.cancel ?? '');
+      return;
+    }
 
     const move = target.closest<HTMLButtonElement>('[data-move]');
     if (move) {
@@ -474,6 +511,21 @@ import Cabinet from '../../layouts/Cabinet.astro';
   .card :global(.pill.muted) {
     color: var(--muted);
     background: var(--busy);
+  }
+
+  .card :global(.appt-btns) {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .card :global(.mv-btn.danger) {
+    color: var(--rose);
+  }
+
+  .card :global(.mv-btn.danger:hover) {
+    border-color: var(--rose);
+    background: var(--rose-soft);
   }
 
   /* Vaqtni ko'chirish */

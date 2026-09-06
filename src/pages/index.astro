@@ -3,6 +3,7 @@ import Base from '../layouts/Base.astro';
 import BookingWidget from '../components/BookingWidget.astro';
 import DeptIcon from '../components/DeptIcon.astro';
 import { departments } from '../data/departments';
+import { ageChip } from '../lib/age';
 import { activeDoctors, doctorsByDept } from '../data/doctors';
 import { site } from '../data/site';
 import analyses from '../data/analyses.json';
@@ -139,6 +140,9 @@ const featuredAnalyses = featured
             <div class="meta">
               {d.experience && <span class="m-chip exp">{d.experience} tajriba</span>}
               <span class="m-chip">{d.hours}</span>
+              <span class="m-chip age" data-doc-age hidden={!ageChip(d.ageGroup ?? 'all')}>
+                {ageChip(d.ageGroup ?? 'all')}
+              </span>
               <span class="m-chip rating" data-doc-rating hidden></span>
             </div>
             <div class="foot">
@@ -647,6 +651,13 @@ const featuredAnalyses = featured
   .doc-card .m-chip.exp {
     color: var(--leaf);
     background: var(--leaf-soft);
+    border-color: transparent;
+  }
+
+  /* Yosh cheklovi — pediatr / kattalar shifokori darhol ko'rinsin */
+  .doc-card .m-chip.age {
+    color: var(--rose);
+    background: var(--rose-soft);
     border-color: transparent;
   }
 

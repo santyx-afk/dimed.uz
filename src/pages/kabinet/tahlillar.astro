@@ -1,5 +1,7 @@
 ---
 import Cabinet from '../../layouts/Cabinet.astro';
+import SignInCard from '../../components/SignInCard.astro';
+import { t } from '../../data/i18n';
 ---
 
 <Cabinet
@@ -19,10 +21,7 @@ import Cabinet from '../../layouts/Cabinet.astro';
 
   <div id="loading" class="state">Yuklanmoqda…</div>
 
-  <div id="guest" class="state" hidden>
-    <p>Tahlil natijalaringizni ko‘rish uchun Telegram orqali kiring.</p>
-    <a class="btn" href="/kirish?next=/kabinet/tahlillar">Kirish</a>
-  </div>
+  <SignInCard what={t('signin.what.results')} next="/kabinet/tahlillar" hidden />
 
   <div id="content" hidden>
     <div class="list glass" id="results"></div>
@@ -34,6 +33,7 @@ import Cabinet from '../../layouts/Cabinet.astro';
 </Cabinet>
 
 <script>
+  import { showSignIn } from '../../lib/signin';
   import { t } from '../../data/i18n';
   import { getLang } from '../../lib/lang';
 
@@ -139,8 +139,7 @@ import Cabinet from '../../layouts/Cabinet.astro';
     try {
       const res = await fetch('/api/me?include=results', { credentials: 'same-origin' });
       if (res.status === 401) {
-        el('loading').hidden = true;
-        el('guest').hidden = false;
+        showSignIn(401);
         return;
       }
       if (!res.ok) throw new Error(String(res.status));

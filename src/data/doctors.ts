@@ -1,3 +1,5 @@
+import type { AgeGroup } from '../lib/age';
+
 export type Shift = { start: string; end: string };
 
 export type Doctor = {
@@ -22,6 +24,12 @@ export type Doctor = {
    * bir xil; admin paneldan yoqib-o'chiriladi.
    */
   active?: boolean;
+  /**
+   * Yosh cheklovi: 'all' — hamma yosh (standart), 'adult' — 16 yoshdan
+   * katta, 'child' — 16 yoshgacha. Admin paneldan belgilanadi; bron
+   * vidjeti mos kelmagan bemorni tanlatmaydi, server ham tekshiradi.
+   */
+  ageGroup?: AgeGroup;
 };
 
 /**

@@ -1,4 +1,5 @@
 import { QueryCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { toAgeGroup, type AgeGroup } from './age.ts';
 import { db, TABLES } from './db.ts';
 import { optional } from './env.ts';
 import { readSession, type Session } from './session.ts';
@@ -22,6 +23,8 @@ export type DoctorRecord = {
   /** Bemor baholari yig'indisi va soni (G2) — o'rtacha shulardan chiqadi. */
   rating_sum?: number;
   rating_count?: number;
+  /** Yosh cheklovi: 'all' | 'adult' (16+) | 'child' (16 gacha). */
+  age_group?: string;
 };
 
 /** Saytga (bron vidjeti, jamoa) ko'rsatiladigan shifokor shakli. */
@@ -40,6 +43,8 @@ export type PublicDoctor = {
   /** O'rtacha baho (1 kasr) va baholar soni; baho bo'lmasa null / 0. */
   ratingAvg: number | null;
   ratingCount: number;
+  /** Yosh cheklovi — bron vidjeti bemorni shunga qarab filtrlaydi. */
+  ageGroup: AgeGroup;
 };
 
 /** Ko'rinadigan (yashirilmagan) baholar bo'yicha o'rtacha. */
@@ -68,6 +73,7 @@ export const toPublicDoctor = (d: DoctorRecord): PublicDoctor => ({
   slotMinutes: d.slot_minutes,
   workdays: d.workdays,
   price: d.price,
+  ageGroup: toAgeGroup(d.age_group),
   ...ratingOf(d),
 });
 

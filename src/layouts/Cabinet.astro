@@ -52,7 +52,7 @@ const tabs: Record<Area, { key: string; href: string; label: string }[]> = {
       </div>
     </div>
 
-    <nav class="tabs" aria-label="Kabinet bo‘limlari">
+    <nav class="tabs" data-cabinet-tabs aria-label="Kabinet bo‘limlari">
       {tabs[area].map((t) => (
         <a class:list={['tab', { on: t.key === active }]} href={t.href} aria-current={t.key === active ? 'page' : undefined}>
           {t.label}

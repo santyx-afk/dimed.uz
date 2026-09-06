@@ -26,7 +26,7 @@ const test = (name, fn) => {
 
 console.log('Jadval ta\'riflari:');
 
-test('11 ta jadval', () => assert.equal(tables.length, 11));
+test('12 ta jadval', () => assert.equal(tables.length, 12));
 
 test('har bir jadvalda nom, maydon va kalit bor', () => {
   for (const t of tables) {

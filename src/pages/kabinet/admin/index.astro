@@ -1,6 +1,9 @@
 ---
 import Cabinet from '../../../layouts/Cabinet.astro';
+import SignInCard from '../../../components/SignInCard.astro';
+import { t } from '../../../data/i18n';
 import { departments } from '../../../data/departments';
+import { AGE_GROUPS, ageLabel } from '../../../lib/age';
 
 const slotOptions = [10, 15, 20, 30, 60];
 const weekdays = [
@@ -27,11 +30,7 @@ const weekdays = [
 
   <div id="loading" class="state">Yuklanmoqda…</div>
 
-  <div id="denied" class="state" hidden>
-    <p id="deniedText">Bu bo‘lim faqat administrator uchun.</p>
-    <p id="idHint" class="id-hint" hidden></p>
-    <a class="btn" href="/kirish?next=/kabinet/admin">Kirish</a>
-  </div>
+  <SignInCard what={t('signin.what.admin')} next="/kabinet/admin" id="denied" hidden />
 
   <div id="content" hidden>
     <div id="list" class="doc-rows"></div>
@@ -71,6 +70,14 @@ const weekdays = [
           <div class="seg" id="f-slot">
             {slotOptions.map((m) => <button type="button" data-min={m}>{m} daq</button>)}
           </div>
+        </div>
+
+        <div class="fld">
+          <span>Bemor yoshi</span>
+          <div class="seg" id="f-age">
+            {AGE_GROUPS.map((g) => <button type="button" data-age={g}>{ageLabel(g)}</button>)}
+          </div>
+          <small class="fld-note">Pediatr faqat bolalarni, kattalar shifokori faqat kattalarni qabul qilsin.</small>
         </div>
 
         <div class="fld">
@@ -119,6 +126,10 @@ const weekdays = [
 </Cabinet>
 
 <script>
+  import { t } from '../../../data/i18n';
+  import { getLang } from '../../../lib/lang';
+  import { showSignIn } from '../../../lib/signin';
+
   type Shift = { start: string; end: string };
   type Doctor = {
     id: string;
@@ -134,6 +145,7 @@ const weekdays = [
     hours: string;
     phone: string;
     active: boolean;
+    ageGroup: 'all' | 'adult' | 'child';
     telegramId: string;
     linked: boolean;
   };
@@ -149,9 +161,16 @@ const weekdays = [
   };
   const fmtPrice = (n: number) => n.toLocaleString('ru-RU').replace(/,/g, ' ');
 
+  const AGE_TEXT: Record<Doctor['ageGroup'], string> = {
+    all: '',
+    adult: '16+ yosh',
+    child: '16 yoshgacha',
+  };
+
   let doctors: Doctor[] = [];
   let shifts: Shift[] = [];
   let slotMinutes = 60;
+  let ageGroup: Doctor['ageGroup'] = 'all';
 
   // ---------- yuklash ----------
   async function load() {
@@ -159,17 +178,19 @@ const weekdays = [
     try {
       const res = await fetch('/api/admin-doctors', { credentials: 'same-origin' });
       if (res.status === 401 || res.status === 403) {
-        el('loading').hidden = true;
-        el('denied').hidden = false;
-        if (res.status === 403) {
-          const body = (await res.json()) as { telegramId?: string };
-          el('deniedText').textContent = 'Bu hisobda administrator huquqi yo‘q.';
-          if (body.telegramId) {
-            const hint = el('idHint');
-            hint.hidden = false;
-            hint.textContent = `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`;
-          }
-        }
+        const body = res.status === 403 ? ((await res.json()) as { telegramId?: string }) : {};
+        showSignIn(
+          res.status,
+          [
+            t('denied.admin', getLang()),
+            body.telegramId
+              ? `Sizning Telegram ID: ${body.telegramId} — buni Netlify’da ADMIN_TELEGRAM_IDS ga qo‘ying.`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+          'denied',
+        );
         return;
       }
       if (!res.ok) throw new Error(String(res.status));
@@ -237,7 +258,9 @@ const weekdays = [
     return `<div class="doc-row${d.active ? '' : ' off'}">
       <div class="doc-main">
         <span class="nm">${esc(d.name)}</span>
-        <span class="meta">${esc(d.job)} · ${fmtPrice(d.price)} so‘m · ${d.slotMinutes} daqiqa</span>
+        <span class="meta">${esc(d.job)} · ${fmtPrice(d.price)} so‘m · ${d.slotMinutes} daqiqa${
+          AGE_TEXT[d.ageGroup] ? ` · ${AGE_TEXT[d.ageGroup]}` : ''
+        }</span>
       </div>
       <div class="doc-tags">
         ${
@@ -288,6 +311,9 @@ const weekdays = [
     slotMinutes = d?.slotMinutes ?? 60;
     renderSlotSeg();
 
+    ageGroup = d?.ageGroup ?? 'all';
+    renderAgeSeg();
+
     const days = d?.workdays ?? [1, 2, 3, 4, 5, 6];
     el('f-days')
       .querySelectorAll<HTMLInputElement>('input')
@@ -311,6 +337,19 @@ const weekdays = [
         btn.onclick = () => {
           slotMinutes = Number(btn.dataset.min);
           renderSlotSeg();
+        };
+      });
+  }
+
+  /** Yosh cheklovi tanlovi — slot davomiyligi bilan bir xil segment. */
+  function renderAgeSeg() {
+    el('f-age')
+      .querySelectorAll<HTMLButtonElement>('button')
+      .forEach((btn) => {
+        btn.classList.toggle('on', btn.dataset.age === ageGroup);
+        btn.onclick = () => {
+          ageGroup = btn.dataset.age as Doctor['ageGroup'];
+          renderAgeSeg();
         };
       });
   }
@@ -373,6 +412,7 @@ const weekdays = [
       deptId: el<HTMLSelectElement>('f-dept').value,
       price: Number(el<HTMLInputElement>('f-price').value),
       slotMinutes,
+      ageGroup,
       workdays,
       shifts,
       experience: el<HTMLInputElement>('f-exp').value.trim(),
@@ -464,17 +504,6 @@ const weekdays = [
     margin-top: 16px;
   }
 
-  .id-hint {
-    color: var(--ink);
-    background: var(--chip-bg);
-    border: 1px solid var(--card-brd);
-    border-radius: 10px;
-    padding: 16px;
-    margin: 16px auto 0;
-    max-width: 460px;
-    font-size: 13px;
-    font-weight: 600;
-  }
 
   /* ---- ro'yxat ---- */
   /*
@@ -701,6 +730,11 @@ const weekdays = [
     background: var(--leaf);
     border-color: var(--leaf);
     color: #fff;
+  }
+
+  .fld-note {
+    font-size: 12px;
+    color: var(--muted);
   }
 
   .days {

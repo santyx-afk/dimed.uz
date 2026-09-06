@@ -10,6 +10,7 @@ import {
   DEFAULT_SLOT_MINUTES,
 } from './lib/schedule.ts';
 import { logToAdmin } from './lib/telegram.ts';
+import { AGE_GROUPS, isAgeGroup, toAgeGroup } from './lib/age.ts';
 import { json, error, normalizePhone } from './lib/http.ts';
 
 /**
@@ -66,6 +67,7 @@ async function listDoctors(): Promise<Response> {
       hours: d.hours ?? '',
       phone: d.phone ?? '',
       active: d.active !== false,
+      ageGroup: toAgeGroup(d.age_group),
       // Raqamning o'zi emas, faqat bog'langan-yo'qligi ko'rsatiladi.
       telegramId: d.telegram_id ?? '',
       linked: Boolean(d.telegram_id),
@@ -92,6 +94,7 @@ type DoctorInput = {
   phone?: string;
   telegramId?: string;
   active?: boolean;
+  ageGroup?: string;
 };
 
 const slugOk = (s: string) => /^[a-z0-9-]{2,40}$/.test(s);
@@ -133,6 +136,12 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
   const checked = checkShifts(body.shifts);
   if (!checked.ok) return error(checked.message);
 
+  // Yosh cheklovi berilmasa — cheklovsiz (avvalgi yozuvlar shunday).
+  if (body.ageGroup !== undefined && !isAgeGroup(body.ageGroup)) {
+    return error(`Yosh cheklovi ${AGE_GROUPS.join(', ')} dan biri bo‘lishi kerak`);
+  }
+  const ageGroup = toAgeGroup(body.ageGroup);
+
   // --- yozuvni yig'amiz: telegram_id alohida (bog'lanishni ehtiyot qilamiz) ---
   const now = new Date().toISOString();
   const sets: string[] = [
@@ -148,6 +157,7 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
     'hours = :hours',
     'phone = :phone',
     'active = :active',
+    'age_group = :ageGroup',
     'updated_at = :updated',
   ];
   const values: Record<string, unknown> = {
@@ -163,6 +173,7 @@ async function upsertDoctor(body: DoctorInput): Promise<Response> {
     ':hours': String(body.hours ?? '').trim(),
     ':phone': body.phone ? normalizePhone(String(body.phone)) : '',
     ':active': body.active !== false,
+    ':ageGroup': ageGroup,
     ':updated': now,
   };
   const removes: string[] = [];

@@ -95,6 +95,22 @@ export const isConfirmed = (appointment: { status: string }): boolean =>
   CONFIRMED.has(appointment.status);
 
 /**
+ * Bemorning kelgusidagi kuchdagi bronlari (patient-index).
+ *
+ * Slotlarni band qilib tashlashga qarshi: bitta telefon cheksiz
+ * navbat olib, klinikaning kunini to'sib qo'yishi mumkin edi.
+ */
+export async function upcomingForPhone(phone: string, now: Date): Promise<Appointment[]> {
+  const found = await queryAllPages({
+    TableName: TABLES.appointments,
+    IndexName: 'patient-index',
+    KeyConditionExpression: 'phone = :p AND starts_at > :now',
+    ExpressionAttributeValues: { ':p': phone, ':now': now.toISOString() },
+  });
+  return (found as Appointment[]).filter(isConfirmed);
+}
+
+/**
  * Butun klinika bo'yicha shu kundagi yozuvlar (date-index).
  * Eslatmalar va kunlik xulosa uchun — ular shifokorni oldindan bilmaydi.
  */

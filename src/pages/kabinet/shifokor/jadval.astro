@@ -1,5 +1,7 @@
 ---
 import Cabinet from '../../../layouts/Cabinet.astro';
+import SignInCard from '../../../components/SignInCard.astro';
+import { t } from '../../../data/i18n';
 
 const slotOptions = [10, 15, 20, 30, 60];
 ---
@@ -16,10 +18,7 @@ const slotOptions = [10, 15, 20, 30, 60];
 
   <div id="loading" class="state">Yuklanmoqda…</div>
 
-  <div id="denied" class="state" hidden>
-    <p id="deniedText">Bu bo‘lim faqat shifokorlar uchun.</p>
-    <a class="btn" href="/kirish?next=/kabinet/shifokor/jadval">Kirish</a>
-  </div>
+  <SignInCard what={t('signin.what.doctor')} next="/kabinet/shifokor/jadval" id="denied" hidden />
 
   <div id="content" class="grid" hidden>
     <div class="card glass">
