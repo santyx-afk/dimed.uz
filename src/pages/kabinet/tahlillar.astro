@@ -36,11 +36,14 @@ import { t } from '../../data/i18n';
   import { showSignIn } from '../../lib/signin';
   import { t } from '../../data/i18n';
   import { getLang } from '../../lib/lang';
+  import { resultTitle } from '../../lib/result-title';
 
   /* /api/me dagi bitta laboratoriya buyurtmasi (C2). */
   type ResultGroup = {
     id: string;
     title: string;
+    /** Sarlavha lug'atdan kelgan bo'lsa — kalit (`panel.cbc`). */
+    titleKey?: string;
     date: string;
     patientName: string | null;
     doctor: string | null;
@@ -121,7 +124,7 @@ import { t } from '../../data/i18n';
                   : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2.5"/></svg>'
               }</span>
               <span class="lab-body">
-                <span class="nm">${esc(g.title)}${g.seen ? '' : ' <span class="pill new">yangi</span>'}</span>
+                <span class="nm">${esc(resultTitle(g, lang))}${g.seen ? '' : ' <span class="pill new">yangi</span>'}</span>
                 <span class="dt">${meta}</span>
               </span>
               <span class="lab-side">

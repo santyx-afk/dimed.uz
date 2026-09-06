@@ -2,6 +2,7 @@ import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { TABLES, queryAllPages } from './db.ts';
 import { logToAdmin } from './telegram.ts';
 import { analyteInfo, type AnalyteDescription } from './analyte-info.ts';
+import { detectPanel } from './panels.ts';
 
 /**
  * Bemorning laboratoriya natijalari — ikki manbadan:
@@ -110,8 +111,14 @@ export type ResultItem = {
 /** Bitta laboratoriya hujjati (buyurtma) va uning ko'rsatkichlari. */
 export type ResultGroup = {
   id: string;
-  /** Tahlil (panel) nomi — ro'yxatda ko'rinadi (C2). */
+  /** Tahlil (panel) nomi — ro'yxatda ko'rinadi (C2). O'zbekcha. */
   title: string;
+  /**
+   * Sarlavha sayt lug'atidagi kalitdan kelgan bo'lsa (`panel.cbc`) —
+   * brauzer uni tanlangan tilda ko'rsatadi. 1C bergan nom yoki
+   * ko'rsatkich nomi tarjima qilinmaydi va bu maydon bo'sh qoladi.
+   */
+  titleKey?: string;
   date: string;
   patientName: string | null;
   patientBirthDate: string | null;
@@ -267,14 +274,35 @@ function toItem(a: AnalyteRow, id: string): ResultItem | null {
 }
 
 /**
- * Ro'yxatdagi sarlavha: 1C bergan tahlil nomi; bo'lmasa bitta
- * ko'rsatkich bo'lsa uning nomi; ko'p bo'lsa biomaterial bo'yicha.
+ * Ro'yxatdagi sarlavha — tartib bilan:
+ *
+ *   1. 1C bergan tahlil nomi (`AnalysisName`) — eng ishonchlisi;
+ *   2. ko'rsatkichlardan tanilgan panel ("Umumiy qon tahlili");
+ *   3. bitta ko'rsatkich bo'lsa — uning nomi (u chindan ham bitta tahlil);
+ *   4. uchtagacha bo'lsa — nomlari vergul bilan;
+ *   5. qolganida biomaterial yoki umumiy nom.
+ *
+ * Ilgari oxirgi holat "Gemoglobin +23" berardi: bemor tahlil nomi
+ * o'rniga birinchi ko'rsatkichning nomini ko'rardi.
  */
-function titleOf(explicit: string | null, biomaterial: string | null, items: { title: string }[]): string {
-  if (explicit) return explicit;
-  if (items.length === 1 && items[0]) return items[0].title;
-  if (biomaterial) return `${biomaterial} tahlili`;
-  return items.length ? `${items[0]?.title ?? 'Tahlil'} +${items.length - 1}` : 'Tahlil natijalari';
+function titleOf(
+  explicit: string | null,
+  biomaterial: string | null,
+  items: { title: string }[],
+): { title: string; titleKey?: string } {
+  if (explicit) return { title: explicit };
+
+  const panel = detectPanel(items.map((i) => i.title));
+  if (panel) return { title: panel.uz, titleKey: panel.key };
+
+  if (items.length === 1 && items[0]) return { title: items[0].title };
+  if (items.length > 1 && items.length <= 3) {
+    return { title: items.map((i) => i.title).join(', ') };
+  }
+  if (biomaterial) return { title: `${biomaterial} tahlili` };
+  return items.length
+    ? { title: 'Laboratoriya tahlili', titleKey: 'panel.generic' }
+    : { title: 'Tahlil natijalari', titleKey: 'panel.empty' };
 }
 
 /** Kamida bitta qiymat bo'lsa — tayyor; hammasi bo'sh — laboratoriya hali kiritmagan. */
@@ -379,14 +407,16 @@ export async function loadResults(phone: string): Promise<ResultGroup[]> {
     if (!items.length) return [];
 
     const biomaterial = doc.Biomaterial?.trim() || null;
+    const named = titleOf(
+      firstText(doc.AnalysisName, doc.Analysis, doc.PanelName, doc.Nomenclature, doc.ServiceName, doc.Title),
+      biomaterial,
+      items,
+    );
     return [
       {
         id: doc.sort_key,
-        title: titleOf(
-          firstText(doc.AnalysisName, doc.Analysis, doc.PanelName, doc.Nomenclature, doc.ServiceName, doc.Title),
-          biomaterial,
-          items,
-        ),
+        title: named.title,
+        ...(named.titleKey ? { titleKey: named.titleKey } : {}),
         date: fromOneCDate(doc.Date) || fromOneCDate(doc.RegisterDate),
         patientName: doc.PatientName?.trim() || null,
         patientBirthDate: birthdayOf(doc.PatientBirthday),
@@ -405,7 +435,9 @@ export async function loadResults(phone: string): Promise<ResultGroup[]> {
 
   // Sayt API'si orqali kelganlarga ham sarlavha va holat.
   for (const group of byDate.values()) {
-    group.title = titleOf(null, null, group.items);
+    const named = titleOf(null, null, group.items);
+    group.title = named.title;
+    if (named.titleKey) group.titleKey = named.titleKey;
     group.status = groupStatus(group.items);
   }
 
