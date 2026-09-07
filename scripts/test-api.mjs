@@ -2464,14 +2464,22 @@ await test('bekor qilish ham bir hisobdan cheklanadi', async () => {
 console.log('\nDavomat — 1C "Doktorga Qabul" bo\'yicha:');
 const ATT_TODAY = toTashkent(new Date()).dateKey;
 const ATT_YESTERDAY = addDays(ATT_TODAY, -1);
-const seedVisit = (date, sortKey, extra) => seed('test_visits', `+998901234567|${sortKey}`, {
-  phone: '+998901234567', sort_key: sortKey, date, Date: `${date}T09:05:00`,
+/*
+  Davomat testlari o'z telefonida ishlaydi. Umumiy raqamda ishlaganda
+  boshqa testlar bugungi kunga qo'ygan navbatlar (masalan eslatma
+  testiniki) hujjatni "o'g'irlab" ketardi va natija ishga tushish
+  soatiga bog'liq bo'lib qolardi.
+*/
+const ATT_PHONE = '+998901111111';
+const seedAtt = (date, time, extra) => seedAppt(date, time, { phone: ATT_PHONE, ...extra });
+const seedVisit = (date, sortKey, extra) => seed('test_visits', `${ATT_PHONE}|${sortKey}`, {
+  phone: ATT_PHONE, sort_key: sortKey, date, Date: `${date}T09:05:00`,
   Posted: true, DeletionMark: false, PatientName: 'Azizova', PatientCode: '555A',
   DoctorName: 'Ashurov T.', Queue: 1, ...extra,
 });
 
 await test('1C hujjati o\'tkazilgan bo\'lsa navbat "keldi" bo\'ladi', async () => {
-  seedAppt(ATT_TODAY, '07:05');
+  seedAtt(ATT_TODAY, '07:05');
   seedVisit(ATT_TODAY, 'visit-keldi');
 
   const res = await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
@@ -2485,7 +2493,7 @@ await test('1C hujjati o\'tkazilgan bo\'lsa navbat "keldi" bo\'ladi', async () =
 });
 
 await test('hujjat o\'tkazilmagan bo\'lsa bugun hech narsa o\'zgarmaydi', async () => {
-  seedAppt(ATT_TODAY, '07:10');
+  seedAtt(ATT_TODAY, '07:10');
   seedVisit(ATT_TODAY, 'visit-qoralama', { Posted: false, PatientCode: '999Z' });
 
   await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
@@ -2496,7 +2504,7 @@ await test('hujjat o\'tkazilmagan bo\'lsa bugun hech narsa o\'zgarmaydi', async 
 });
 
 await test('kun tugagach hujjatsiz navbat "kelmadi" bo\'ladi', async () => {
-  seedAppt(ATT_YESTERDAY, '07:15');
+  seedAtt(ATT_YESTERDAY, '07:15');
 
   await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
 
@@ -2508,7 +2516,7 @@ await test('kun tugagach hujjatsiz navbat "kelmadi" bo\'ladi', async () => {
 
 await test('shifokorning qo\'lda qo\'ygan belgisi o\'zgarmaydi', async () => {
   // Shifokor "kelmadi" degan, 1C esa keyin hujjatni o'tkazgan.
-  seedAppt(ATT_YESTERDAY, '07:20', {
+  seedAtt(ATT_YESTERDAY, '07:20', {
     status: 'no_show', marked_at: '2026-01-01T00:00:00.000Z',
   });
   seedVisit(ATT_YESTERDAY, 'visit-kech');
@@ -2521,7 +2529,7 @@ await test('shifokorning qo\'lda qo\'ygan belgisi o\'zgarmaydi', async () => {
 });
 
 await test('bekor qilingan navbatga tegilmaydi', async () => {
-  seedAppt(ATT_YESTERDAY, '07:25', { status: 'cancelled' });
+  seedAtt(ATT_YESTERDAY, '07:25', { status: 'cancelled' });
 
   await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
 
@@ -2533,7 +2541,7 @@ await test('bekor qilingan navbatga tegilmaydi', async () => {
 
 await test('boshqa oila a\'zosining hujjati navbatga bog\'lanmaydi', async () => {
   // Bitta telefon, ikki bemor: kodi boshqa hujjat "keldi" demaydi.
-  seedAppt(ATT_TODAY, '07:30', { patient_id: '111B' });
+  seedAtt(ATT_TODAY, '07:30', { patient_id: '111B' });
   seedVisit(ATT_TODAY, 'visit-boshqa-bemor', { PatientCode: '222C' });
 
   await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
@@ -2546,7 +2554,7 @@ await test('boshqa oila a\'zosining hujjati navbatga bog\'lanmaydi', async () =>
 
 await test('AppointmentKey bo\'lsa telefon mos kelmasa ham bog\'lanadi', async () => {
   // Bemor boshqa raqamdan yozilgan, 1C hujjatni navbatdan yaratgan.
-  seedAppt(ATT_TODAY, '07:35');
+  seedAtt(ATT_TODAY, '07:35');
   seed('test_visits', '+998900000111|visit-kalitli', {
     phone: '+998900000111', sort_key: 'visit-kalitli', date: ATT_TODAY,
     Date: `${ATT_TODAY}T10:00:00`, Posted: true,

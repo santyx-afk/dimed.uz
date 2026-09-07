@@ -362,6 +362,11 @@ export const messages = {
     ru: 'Результатов пока нет. Они появятся здесь, как только будут готовы.',
     en: 'No results yet. They will appear here as soon as they are ready.',
   },
+  'results.emptyFor': {
+    uz: '{name} uchun hozircha tahlil natijasi yoʻq.',
+    ru: 'Для «{name}» результатов пока нет.',
+    en: 'No results yet for {name}.',
+  },
 
   // --- natija sahifasi (D1, D2) ---
   'result.download': { uz: 'PDF yuklash', ru: 'Скачать PDF', en: 'Download PDF' },
