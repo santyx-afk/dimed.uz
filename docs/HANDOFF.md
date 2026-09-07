@@ -267,6 +267,23 @@ bilan qayta hosil qilinadi.
 
 ---
 
+
+### 9-bosqich — 1C bilan ikki tomonlama bog'lanish ✅ (2026-09-07)
+- **Davomat.** `sync-attendance` cron'i (har 10 daqiqada) `dimed_visits`
+  dagi o'tkazilgan "Doktorga Qabul" hujjatlarini o'qib navbatni `done`,
+  kuni tugab hujjat topilmasa `no_show` qiladi. Shifokorning qo'lda
+  qo'ygan belgisi ustun (`marked_at` bor yozuvga tegilmaydi). Har hujjat
+  bir marta ishlatiladi — `lib/visits.ts` `matchArrivals`.
+- **Sayt → 1C.** MedHisob konfiguratsiyasida `DynamoSyncBookings`
+  moduli `dimed_appointments` ni `date-index` bo'yicha o'qib
+  `Document.DoctorsAdmission` yaratadi (`WebBookingKey` = `doctor_day|time`,
+  o'tkazilmagan holda). Batafsil: `docs/1c-sync.md` 6.2–6.4.
+- **Tahlil nomi.** 1C endi `AnalysisName` va `Doctor` yuboradi; eski
+  hujjatlar uchun `lib/panels.ts` panelni ko'rsatkichlardan taniydi.
+- **Jadval:** `dimed_visits` (`phone` + `sort_key`, `date-index`).
+- **Region:** kodda standart region `us-east-1` ga o'zgartirildi —
+  jadvallar o'sha yerda.
+
 ## Kod tuzilishi
 
 ```
@@ -285,10 +302,13 @@ src/
 netlify/functions/
   lib/          db, env, http, session, telegram (inline tugmalar ham), time, slots,
                 appointments, schedule, auth, payment, patients (1C profil),
-                results (natija hujjatlari, me'yor), analyte-info (ko'rsatkich izohlari),
+                results (natija hujjatlari, me'yor), panels (tahlil nomini tanish),
+                visits (1C "Doktorga Qabul" - bemor keldimi),
+                analyte-info (ko'rsatkich izohlari),
                 share (ulashish tokeni), ratings (baho oqimi), i18n (bot matnlari)
   *.ts          har bir fayl — bitta /api/<nom> endpoint
-  remind-patients, doctor-daily, notify-results, ask-ratings — cron (config.schedule)
+  remind-patients, doctor-daily, notify-results, ask-ratings,
+  sync-attendance — cron (config.schedule)
 scripts/        create-tables, seed-doctors, seed-prices, migrate-slot-minutes,
                 link-doctor, import-patients, build-analyses,
                 cloudshell-setup.sh (+ gen-cloudshell-setup),
@@ -547,11 +567,25 @@ standart nomi bilan yaratilgan `AnalysisResult` — ega tasdiqlagach o'chiriladi
 24. **Natija sahifasi (`/natija?id=`)** ma'lumotni `/api/result` dan
     oladi (`lib/results.ts` — ikkala natija jadvali, me'yoriy oraliq va
     holat `parseReference`/`statusOf`, ko'rsatkich izohlari
-    `analyte-info.ts`). PDF **brauzerda** (html2pdf.js, cdnjs; fayl nomi
-    `Dimed_{FISh}_{sana}.pdf`), server PDF yo'q. Ulashish havolasi —
-    HMAC token (`lib/share.ts`, 30 kun), sessiyasiz ochiladi.
-    1C hozircha panel nomi, shifokor va me'yor chegaralarini yubormaydi —
-    sayt bir nechta ehtimoliy nomni o'qiydi (`docs/1c-sync.md` 4.3).
+    `analyte-info.ts`). PDF **brauzerda** (html2pdf.js npm paketi, faqat
+    tugma bosilganda alohida chunk bo'lib yuklanadi; fayl nomi
+    `Dimed_{FISh}_{sana}.pdf`), server PDF yo'q. Kutubxona ilgari
+    cdnjs'dan olinardi — CSP (`script-src 'self'`) uni bloklardi va
+    tugma jimgina `window.print()` ga tushib ketardi.
+    PDF olishdan oldin sahifa **darhol** tepaga chiqariladi
+    (`scroll-behavior: smooth` shu safar o'chiriladi) va html2canvas'ga
+    `scrollY: -window.scrollY` beriladi: aks holda surilgan masofa PDF
+    tepasida bo'sh varaq bo'lib qolardi (Safari'da ayniqsa).
+    Ulashish havolasi — HMAC token (`lib/share.ts`, 30 kun), sessiyasiz
+    ochiladi.
+
+    **Sarlavha.** 1C endi `AnalysisName` va `Doctor` yuboradi. Bazadagi
+    eski hujjatlarda ular yo'q, shuning uchun `lib/panels.ts`
+    ko'rsatkichlar to'plamiga qarab panelni taniydi ("Umumiy qon
+    tahlili"). Ilgari bu holatda birinchi ko'rsatkich nomi chiqardi —
+    "Gemoglobin +23". Server `title` (o'zbekcha) bilan birga `titleKey`
+    (`panel.cbc`) ham yuboradi, brauzer uni tanlangan tilda ko'rsatadi
+    (`src/lib/result-title.ts`).
 
 25. **Baho oqimi (`lib/ratings.ts`).** `askRating` — `rating_asked_at`
     shartli yoziladi (bir marta), so'ng inline tugmalar

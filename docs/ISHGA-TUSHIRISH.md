@@ -88,7 +88,8 @@ Bu yerda baza (navbatlar, bemorlar, tahlil natijalari) saqlanadi.
 S3 kerak emas — tahlil PDF'ini sayt brauzerning o'zida yasab beradi.
 
 1. https://aws.amazon.com da akkaunt oching
-2. **Region tanlang va shuni hamma joyda ishlating** — tavsiya: `eu-central-1`
+2. **Region tanlang va shuni hamma joyda ishlating** — klinikada `us-east-1`
+   (jadvallar shu yerda, 1C kengaytmasi ham shu regionga yozadi)
    (Frankfurt). Keyin o'zgartirish qiyin
 3. IAM → foydalanuvchi yarating → quyidagi policy'ni biriktiring
 4. Shu foydalanuvchi uchun **Access Key** va **Secret Key** yarating
@@ -183,13 +184,13 @@ cd dimed.uz
 npm i @aws-sdk/client-dynamodb @aws-sdk/lib-dynamodb
 
 # 11 ta jadval va indekslar
-DIMED_AWS_REGION=eu-central-1 node scripts/create-tables.mjs
+DIMED_AWS_REGION=us-east-1 node scripts/create-tables.mjs
 
 # shifokorlarni bazaga yozish
-DIMED_AWS_REGION=eu-central-1 node --experimental-strip-types scripts/seed-doctors.mjs
+DIMED_AWS_REGION=us-east-1 node --experimental-strip-types scripts/seed-doctors.mjs
 
 # tahlil narxlarini bazaga yozish (bir marta; keyin admin panel → Narxlar)
-DIMED_AWS_REGION=eu-central-1 node scripts/seed-prices.mjs
+DIMED_AWS_REGION=us-east-1 node scripts/seed-prices.mjs
 ```
 
 Ikkala yo'l ham bir xil natija beradi — `cloudshell-setup.sh` aynan
@@ -336,7 +337,7 @@ Netlify → Site settings → Environment variables.
 | `TELEGRAM_LOG_BOT_TOKEN` | @BotFather, log-bot | siz |
 | `TELEGRAM_LOG_CHAT_ID` | Guruh id (manfiy raqam) | siz |
 | `SESSION_SECRET` | Tasodifiy satr, ≥32 belgi | men yarataman |
-| `DIMED_AWS_REGION` | `eu-central-1` | tayyor |
+| `DIMED_AWS_REGION` | `us-east-1` | tayyor |
 | `DIMED_TABLE_PREFIX` | `dimed` | tayyor |
 | `DIMED_AWS_ACCESS_KEY_ID` | AWS IAM | siz |
 | `DIMED_AWS_SECRET_ACCESS_KEY` | AWS IAM | siz |

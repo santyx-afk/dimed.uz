@@ -362,6 +362,11 @@ export const messages = {
     ru: 'Результатов пока нет. Они появятся здесь, как только будут готовы.',
     en: 'No results yet. They will appear here as soon as they are ready.',
   },
+  'results.emptyFor': {
+    uz: '{name} uchun hozircha tahlil natijasi yoʻq.',
+    ru: 'Для «{name}» результатов пока нет.',
+    en: 'No results yet for {name}.',
+  },
 
   // --- natija sahifasi (D1, D2) ---
   'result.download': { uz: 'PDF yuklash', ru: 'Скачать PDF', en: 'Download PDF' },
@@ -398,7 +403,10 @@ export const messages = {
     ru: 'Результаты готовы. Сравнение с нормой выполнит ваш врач.',
     en: 'Your results are ready. Your doctor will compare them with the reference ranges.',
   },
-  'result.col.name': { uz: 'Tahlil nomi', ru: 'Показатель', en: 'Test' },
+  // Ustunda ko'rsatkich nomi turadi (Gemoglobin, Eritrotsitlar),
+  // tahlil nomi esa jadval tepasidagi sarlavhada. Ilgari o'zbekchasi
+  // "Tahlil nomi" edi va ikkalasi bemor uchun aralashib ketardi.
+  'result.col.name': { uz: 'Koʻrsatkich', ru: 'Показатель', en: 'Indicator' },
   'result.col.value': { uz: 'Natija', ru: 'Результат', en: 'Result' },
   'result.col.status': { uz: 'Status', ru: 'Статус', en: 'Status' },
   'result.col.range': { uz: 'Meʼyoriy oraliq', ru: 'Референсный интервал', en: 'Reference range' },
@@ -411,6 +419,23 @@ export const messages = {
     ru: 'Результаты лабораторных анализов должен оценивать только квалифицированный врач. Референсные интервалы зависят от методики лаборатории.',
     en: 'Laboratory results must be interpreted only by a qualified physician. Reference ranges depend on the laboratory method.',
   },
+  // --- tahlil (panel) nomlari ---
+  // 1C hujjatda nom yubormaganda sayt ko'rsatkichlarga qarab taniydi
+  // (netlify/functions/lib/panels.ts). Kalitlar shu modul bilan bir xil.
+  'panel.cbc': { uz: 'Umumiy qon tahlili', ru: 'Общий анализ крови', en: 'Complete blood count' },
+  'panel.urine': { uz: 'Umumiy siydik tahlili', ru: 'Общий анализ мочи', en: 'Urinalysis' },
+  'panel.stool': { uz: 'Najas tahlili', ru: 'Анализ кала (копрограмма)', en: 'Stool analysis' },
+  'panel.coagulogram': { uz: 'Koagulogramma', ru: 'Коагулограмма', en: 'Coagulation panel' },
+  'panel.biochem': {
+    uz: 'Biokimyoviy qon tahlili',
+    ru: 'Биохимический анализ крови',
+    en: 'Blood chemistry panel',
+  },
+  'panel.rheuma': { uz: 'Revmoproba', ru: 'Ревмопробы', en: 'Rheumatoid panel' },
+  'panel.torch': { uz: 'TORCH infeksiyalari', ru: 'TORCH-инфекции', en: 'TORCH panel' },
+  'panel.express': { uz: 'Ekspress testlar', ru: 'Экспресс-тесты', en: 'Rapid tests' },
+  'panel.generic': { uz: 'Laboratoriya tahlili', ru: 'Лабораторный анализ', en: 'Lab test' },
+  'panel.empty': { uz: 'Tahlil natijalari', ru: 'Результаты анализов', en: 'Test results' },
   'result.important': { uz: 'Muhim eslatma', ru: 'Важно', en: 'Important' },
   'result.footer': {
     uz: 'Dimed klinikasi laboratoriyasining elektron hisoboti. Chinoz, Navoiy koʻchasi 18 · +998 55 9009 103',

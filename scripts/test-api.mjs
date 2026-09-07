@@ -75,6 +75,7 @@ const notifyResults = await load('notify-results.ts');
 const askRatings = await load('ask-ratings.ts');
 const adminRatings = await load('admin-ratings.ts');
 const adminAppointments = await load('admin-appointments.ts');
+const syncAttendance = await load('sync-attendance.ts');
 const { createShareToken } = await import(pathToFileURL(join(fnDir, 'lib', 'share.ts')).href);
 
 const { toTashkent, toInstant, addDays } = await import(
@@ -807,6 +808,26 @@ await test('natija ro\'yxatida tahlil nomi, holati va shifokor bor (C2)', async 
     Biomaterial: 'Siydik',
     AnalysisResults: [{ Analyte: 'Oqsil', Result: '' }, { Analyte: 'Glyukoza', Result: '' }],
   });
+  // 1C nom yubormagan: sayt ko'rsatkichlarga qarab panelni o'zi taniydi.
+  seed('test_analysis_results', '+998901234567|doc-panel', {
+    phone: '+998901234567', sort_key: 'doc-panel', Date: '08.03.2026 10:00:00',
+    AnalysisResults: [
+      { Analyte: 'Gemoglobin', Result: '132' },
+      { Analyte: 'Gematokrit', Result: '41' },
+      { Analyte: 'Trombotsitlar', Result: '254' },
+      { Analyte: 'Leykotsitlar', Result: '6.2' },
+      { Analyte: 'Eritrotsitlar choʻkish tezligi', Result: '12' },
+    ],
+  });
+  // Na 1C nomi, na panel — biomaterial bo'yicha.
+  seed('test_analysis_results', '+998901234567|doc-bio', {
+    phone: '+998901234567', sort_key: 'doc-bio', Date: '09.03.2026 10:00:00',
+    Biomaterial: 'Qon',
+    AnalysisResults: [
+      { Analyte: 'Temir', Result: '14' }, { Analyte: 'Mis', Result: '1' },
+      { Analyte: 'Rux', Result: '12' }, { Analyte: 'Selen', Result: '80' },
+    ],
+  });
 
   const data = await (await call(me, 'https://dimed.uz/api/me?include=results', {
     headers: { cookie: sessionCookie },
@@ -818,12 +839,22 @@ await test('natija ro\'yxatida tahlil nomi, holati va shifokor bor (C2)', async 
   assert.equal(nomli.status, 'ready');
 
   const kutish = data.results.find((r) => r.id === 'doc-kutish');
-  assert.equal(kutish.title, 'Siydik tahlili', 'nom bo\'lmasa biomaterial bo\'yicha');
+  // Uchtagacha ko'rsatkich — nomlari sanaladi. Bu biomaterialdan
+  // ("Siydik tahlili") aniqroq: klinika ularni alohida ham sotadi.
+  assert.equal(kutish.title, 'Oqsil, Glyukoza', 'kam ko\'rsatkich — nomlari');
   assert.equal(kutish.status, 'pending', 'qiymatlar bo\'sh — kutilmoqda');
   assert.equal(kutish.doctor, null);
 
   const bitta = data.results.find((r) => r.id === 'doc-uuid-2');
   assert.equal(bitta.title, 'Kreatinin', 'bitta ko\'rsatkich — uning nomi');
+
+  // Asosiy shikoyat shu yerda edi: ilgari "Gemoglobin +4" chiqardi.
+  const panel = data.results.find((r) => r.id === 'doc-panel');
+  assert.equal(panel.title, 'Umumiy qon tahlili', 'panel ko\'rsatkichlardan tanildi');
+  assert.equal(panel.titleKey, 'panel.cbc', 'sarlavha uch tilda ko\'rsatiladi');
+
+  const bio = data.results.find((r) => r.id === 'doc-bio');
+  assert.equal(bio.title, 'Qon tahlili', 'panel tanilmasa biomaterial bo\'yicha');
 });
 
 console.log('\nNatija sahifasi (D1) va ulashish:');
@@ -2423,6 +2454,116 @@ await test('bekor qilish ham bir hisobdan cheklanadi', async () => {
     if (res.status === 429) tortildi = res;
   }
   assert.ok(tortildi, 'bekor qilish urinishlari cheklanishi kerak');
+});
+
+/*
+  Davomat (keldi / kelmadi) — 1C "Doktorga Qabul" hujjati bo'yicha.
+  Eng oxirida turadi: cron bugungi va kechagi barcha navbatlarni
+  ko'rib chiqadi, ya'ni oldingi testlarning yozuvlariga ham tegadi.
+*/
+console.log('\nDavomat — 1C "Doktorga Qabul" bo\'yicha:');
+const ATT_TODAY = toTashkent(new Date()).dateKey;
+const ATT_YESTERDAY = addDays(ATT_TODAY, -1);
+/*
+  Davomat testlari o'z telefonida ishlaydi. Umumiy raqamda ishlaganda
+  boshqa testlar bugungi kunga qo'ygan navbatlar (masalan eslatma
+  testiniki) hujjatni "o'g'irlab" ketardi va natija ishga tushish
+  soatiga bog'liq bo'lib qolardi.
+*/
+const ATT_PHONE = '+998901111111';
+const seedAtt = (date, time, extra) => seedAppt(date, time, { phone: ATT_PHONE, ...extra });
+const seedVisit = (date, sortKey, extra) => seed('test_visits', `${ATT_PHONE}|${sortKey}`, {
+  phone: ATT_PHONE, sort_key: sortKey, date, Date: `${date}T09:05:00`,
+  Posted: true, DeletionMark: false, PatientName: 'Azizova', PatientCode: '555A',
+  DoctorName: 'Ashurov T.', Queue: 1, ...extra,
+});
+
+await test('1C hujjati o\'tkazilgan bo\'lsa navbat "keldi" bo\'ladi', async () => {
+  seedAtt(ATT_TODAY, '07:05');
+  seedVisit(ATT_TODAY, 'visit-keldi');
+
+  const res = await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
+  assert.equal(res.status, 200);
+
+  const appt = tableOf('test_appointments').get(`ashurov#${ATT_TODAY}|07:05`);
+  assert.equal(appt.status, 'done');
+  assert.equal(appt.marked_by, '1c');
+  assert.equal(appt.visit_ref, 'visit-keldi');
+  assert.equal(appt.arrived_at, `${ATT_TODAY}T09:05:00`);
+});
+
+await test('hujjat o\'tkazilmagan bo\'lsa bugun hech narsa o\'zgarmaydi', async () => {
+  seedAtt(ATT_TODAY, '07:10');
+  seedVisit(ATT_TODAY, 'visit-qoralama', { Posted: false, PatientCode: '999Z' });
+
+  await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
+
+  const appt = tableOf('test_appointments').get(`ashurov#${ATT_TODAY}|07:10`);
+  assert.equal(appt.status, 'booked', 'kun tugamaguncha kutiladi');
+  assert.equal(appt.marked_at, undefined);
+});
+
+await test('kun tugagach hujjatsiz navbat "kelmadi" bo\'ladi', async () => {
+  seedAtt(ATT_YESTERDAY, '07:15');
+
+  await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
+
+  const appt = tableOf('test_appointments').get(`ashurov#${ATT_YESTERDAY}|07:15`);
+  assert.equal(appt.status, 'no_show');
+  assert.equal(appt.marked_by, '1c');
+  assert.equal(appt.visit_ref, undefined);
+});
+
+await test('shifokorning qo\'lda qo\'ygan belgisi o\'zgarmaydi', async () => {
+  // Shifokor "kelmadi" degan, 1C esa keyin hujjatni o'tkazgan.
+  seedAtt(ATT_YESTERDAY, '07:20', {
+    status: 'no_show', marked_at: '2026-01-01T00:00:00.000Z',
+  });
+  seedVisit(ATT_YESTERDAY, 'visit-kech');
+
+  await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
+
+  const appt = tableOf('test_appointments').get(`ashurov#${ATT_YESTERDAY}|07:20`);
+  assert.equal(appt.status, 'no_show', 'shifokor belgisi ustun');
+  assert.equal(appt.marked_at, '2026-01-01T00:00:00.000Z');
+});
+
+await test('bekor qilingan navbatga tegilmaydi', async () => {
+  seedAtt(ATT_YESTERDAY, '07:25', { status: 'cancelled' });
+
+  await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
+
+  assert.equal(
+    tableOf('test_appointments').get(`ashurov#${ATT_YESTERDAY}|07:25`).status,
+    'cancelled',
+  );
+});
+
+await test('boshqa oila a\'zosining hujjati navbatga bog\'lanmaydi', async () => {
+  // Bitta telefon, ikki bemor: kodi boshqa hujjat "keldi" demaydi.
+  seedAtt(ATT_TODAY, '07:30', { patient_id: '111B' });
+  seedVisit(ATT_TODAY, 'visit-boshqa-bemor', { PatientCode: '222C' });
+
+  await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
+
+  assert.equal(
+    tableOf('test_appointments').get(`ashurov#${ATT_TODAY}|07:30`).status,
+    'booked',
+  );
+});
+
+await test('AppointmentKey bo\'lsa telefon mos kelmasa ham bog\'lanadi', async () => {
+  // Bemor boshqa raqamdan yozilgan, 1C hujjatni navbatdan yaratgan.
+  seedAtt(ATT_TODAY, '07:35');
+  seed('test_visits', '+998900000111|visit-kalitli', {
+    phone: '+998900000111', sort_key: 'visit-kalitli', date: ATT_TODAY,
+    Date: `${ATT_TODAY}T10:00:00`, Posted: true,
+    AppointmentKey: `ashurov#${ATT_TODAY}|07:35`,
+  });
+
+  await call(syncAttendance, 'https://dimed.uz/api/sync-attendance');
+
+  assert.equal(tableOf('test_appointments').get(`ashurov#${ATT_TODAY}|07:35`).status, 'done');
 });
 
 stopFakeDynamo();

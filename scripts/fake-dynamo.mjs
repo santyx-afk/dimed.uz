@@ -14,6 +14,7 @@ const keySchema = {
   test_otp_codes: ['phone'],
   test_individuals: ['phone', 'sort_key'],
   test_analysis_results: ['phone', 'sort_key'],
+  test_visits: ['phone', 'sort_key'],
   test_doctors: ['doctor_id'],
   test_schedules: ['doctor_id', 'date'],
   test_appointments: ['doctor_day', 'time'],
