@@ -117,14 +117,30 @@ export function matchArrivals(
     if (linked) take(a, linked);
   }
 
-  // 3. Telefon va kun bo'yicha — erta navbatga erta hujjat.
+  /*
+    3. Telefon va kun bo'yicha — erta navbatga erta hujjat.
+
+    Bemor kodi bor navbatlar oldin ko'riladi va kodi aynan mos kelgan
+    hujjat afzal ko'riladi: bir telefon ostidagi kodsiz oila a'zosi
+    boshqasining hujjatini olib qo'ymasin — bu noto'g'ri odamga
+    "keldi" degani bo'lardi.
+  */
   const rest = appointments
     .filter((a) => !matched.has(appointmentKey(a)))
-    .sort((x, y) => x.time.localeCompare(y.time));
+    .sort((x, y) => {
+      const byCode = Number(Boolean(y.patient_id)) - Number(Boolean(x.patient_id));
+      return byCode !== 0 ? byCode : x.time.localeCompare(y.time);
+    });
+
   for (const a of rest) {
+    const patientId = a.patient_id?.trim();
     const found = [...free.values()]
       .filter((v) => samePatient(v, a))
-      .sort((x, y) => (x.Date ?? '').localeCompare(y.Date ?? ''))[0];
+      .sort((x, y) => {
+        const exact = (v: VisitDocument) => (patientId && v.PatientCode?.trim() === patientId ? 0 : 1);
+        const byExact = exact(x) - exact(y);
+        return byExact !== 0 ? byExact : (x.Date ?? '').localeCompare(y.Date ?? '');
+      })[0];
     if (found) take(a, found);
   }
 

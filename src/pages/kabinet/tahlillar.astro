@@ -70,10 +70,22 @@ import { t } from '../../data/i18n';
   let whoFilter = '';
   const matchesWho = (name: string | null) => !whoFilter || name === whoFilter;
 
+  /*
+    Bir telefonga bog'langan oila a'zolari (/api/patients). Ro'yxatga
+    natijasi yo'qlar ham kiradi: bemor "kimniki?" degan savolga javob
+    izlaganda, o'sha odam ro'yxatda ko'rinishi kerak — aks holda
+    natijasi bor bitta odamgina chiqib, qolganlari yo'qolgandek
+    tuyulardi.
+  */
+  let familyNames: string[] = [];
+
   function renderWhoBar(groups: ResultGroup[]) {
-    const names = [
-      ...new Set(groups.map((g) => g.patientName).filter((n): n is string => Boolean(n))),
-    ].sort((a, b) => a.localeCompare(b));
+    const fromResults = groups
+      .map((g) => g.patientName)
+      .filter((n): n is string => Boolean(n));
+    const names = [...new Set([...fromResults, ...familyNames])].sort((a, b) =>
+      a.localeCompare(b),
+    );
 
     if (names.length < 2) {
       el('whoBar').hidden = true;
@@ -118,11 +130,6 @@ import { t } from '../../data/i18n';
               .join(' · ');
             const ready = g.status === 'ready';
             return `<a class="lab-row" href="/natija?id=${encodeURIComponent(g.id)}">
-              <span class="lab-ic ${ready ? 'ready' : 'pending'}" aria-hidden="true">${
-                ready
-                  ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
-                  : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2.5"/></svg>'
-              }</span>
               <span class="lab-body">
                 <span class="nm">${esc(resultTitle(g, lang))}${g.seen ? '' : ' <span class="pill new">yangi</span>'}</span>
                 <span class="dt">${meta}</span>
@@ -134,7 +141,11 @@ import { t } from '../../data/i18n';
             </a>`;
           })
           .join('')
-      : `<p class="empty">${esc(tr('results.empty'))}</p>`;
+      : `<p class="empty">${
+          whoFilter
+            ? esc(tr('results.emptyFor', { name: whoFilter }))
+            : esc(tr('results.empty'))
+        }</p>`;
   }
 
   async function load() {
@@ -150,6 +161,18 @@ import { t } from '../../data/i18n';
     } catch {
       el('loading').textContent = 'Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.';
       return;
+    }
+
+    /* Oila ro'yxati bo'lmasa ham sahifa ishlayveradi — chiplar
+       faqat natijalardagi ismlardan yig'iladi. */
+    try {
+      const res = await fetch('/api/patients', { credentials: 'same-origin' });
+      if (res.ok) {
+        const list = (await res.json()) as { patients?: { name: string }[] };
+        familyNames = (list.patients ?? []).map((p) => p.name).filter(Boolean);
+      }
+    } catch {
+      /* jim o'tamiz */
     }
 
     el('loading').hidden = true;
@@ -212,31 +235,6 @@ import { t } from '../../data/i18n';
   .list :global(.lab-row:focus-visible) {
     background: var(--rose-soft);
     outline: none;
-  }
-
-  .list :global(.lab-ic) {
-    flex: none;
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .list :global(.lab-ic svg) {
-    width: 18px;
-    height: 18px;
-  }
-
-  .list :global(.lab-ic.ready) {
-    background: var(--ok-bg);
-    color: var(--ok);
-  }
-
-  .list :global(.lab-ic.pending) {
-    background: var(--warn-bg);
-    color: var(--warn);
   }
 
   .list :global(.lab-body) {
