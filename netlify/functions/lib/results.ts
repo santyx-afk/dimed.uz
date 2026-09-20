@@ -3,6 +3,7 @@ import { TABLES, queryAllPages } from './db.ts';
 import { logToAdmin } from './telegram.ts';
 import { analyteInfo, type AnalyteDescription } from './analyte-info.ts';
 import { detectPanel } from './panels.ts';
+import { translateAnalyte, translateAnalysisName } from './analysis-dict.ts';
 
 /**
  * Bemorning laboratoriya natijalari — ikki manbadan:
@@ -242,9 +243,14 @@ function toItem(a: AnalyteRow, id: string): ResultItem | null {
     qator yo'qolmasin: xalqaro kod bilan ko'rsatiladi. Nomi ham,
     qiymati ham bo'lmasa — ko'rsatadigan narsa qolmaydi.
   */
-  const title = a.Analyte?.trim() || a.AnalyteInternationalCode?.trim() || '';
+  const rawTitle = a.Analyte?.trim() || a.AnalyteInternationalCode?.trim() || '';
   const value = a.Result?.trim() || null;
-  if (!title && !value) return null;
+  if (!rawTitle && !value) return null;
+
+  // 1C ruscha/texnik nom yuborsa — o'zbekcha rasmiy atamaga o'giramiz
+  // (topilmasa asl nom qoladi). Bu ham ko'rinishni, ham panel tanishni
+  // yaxshilaydi: `detectPanel` o'zbekcha belgilar bo'yicha ishlaydi.
+  const title = translateAnalyte(rawTitle);
 
   const unit = a.AnalyteUnit?.trim() || null;
   const refText = firstText(a.Reference, a.ReferenceRange, a.ReferenceText, a.Norm, a.NormText);
@@ -290,7 +296,12 @@ function titleOf(
   biomaterial: string | null,
   items: { title: string }[],
 ): { title: string; titleKey?: string } {
-  if (explicit) return { title: explicit };
+  if (explicit) {
+    // 1C ruscha/texnik nom bergan bo'lsa o'zbekchaga o'giramiz; ma'lum
+    // panelga tegishli bo'lsa lug'at kaliti ham qo'yiladi (ru/en uchun).
+    const tr = translateAnalysisName(explicit);
+    return tr.key ? { title: tr.title, titleKey: tr.key } : { title: tr.title };
+  }
 
   const panel = detectPanel(items.map((i) => i.title));
   if (panel) return { title: panel.uz, titleKey: panel.key };
@@ -375,17 +386,18 @@ export async function loadResults(phone: string): Promise<ResultGroup[]> {
     const value = m ? m[1] ?? null : row.value?.trim() || null;
     const unit = m ? m[2] ?? null : null;
     const { low, high } = row.reference ? parseReference(row.reference) : { low: null, high: null };
+    const rowTitle = translateAnalyte(row.title);
     group.items.push({
       id: row.sort_key,
       code: row.code ?? '',
-      title: row.title,
+      title: rowTitle,
       value,
       unit,
       reference: row.reference ?? null,
       refLow: low,
       refHigh: high,
       status: statusOf(parseNumber(value), low, high),
-      description: analyteInfo(row.title, row.code),
+      description: analyteInfo(rowTitle, row.code),
     });
   }
 

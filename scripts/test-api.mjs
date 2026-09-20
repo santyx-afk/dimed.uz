@@ -857,6 +857,28 @@ await test('natija ro\'yxatida tahlil nomi, holati va shifokor bor (C2)', async 
   assert.equal(bio.title, 'Qon tahlili', 'panel tanilmasa biomaterial bo\'yicha');
 });
 
+await test('1C ruscha nom va ko\'rsatkichlarni o\'zbekchaga o\'giradi (I1)', async () => {
+  seed('test_analysis_results', '+998901234567|doc-ru', {
+    phone: '+998901234567', sort_key: 'doc-ru', Date: '10.03.2026 10:00:00',
+    AnalysisName: 'Общий анализ крови', Doctor: 'Ivanova R.',
+    AnalysisResults: [
+      { Analyte: 'Гемоглобин', Result: '132', AnalyteUnit: 'g/L' },
+      { Analyte: 'Билирубин общий', Result: '12', AnalyteUnit: 'mkmol/l' },
+    ],
+  });
+
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=results', {
+    headers: { cookie: sessionCookie },
+  })).json();
+
+  const ru = data.results.find((r) => r.id === 'doc-ru');
+  assert.equal(ru.title, 'Umumiy qon tahlili', 'ruscha panel nomi o\'zbekchaga');
+  assert.equal(ru.titleKey, 'panel.cbc', 'ko\'p tilli sarlavha kaliti qo\'yiladi');
+  const nomlar = ru.items.map((i) => i.title);
+  assert.ok(nomlar.includes('Gemoglobin'), 'Гемоглобин → Gemoglobin');
+  assert.ok(nomlar.includes('Umumiy bilirubin'), 'Билирубин общий → Umumiy bilirubin');
+});
+
 console.log('\nNatija sahifasi (D1) va ulashish:');
 await test('/api/result o\'z natijasini beradi, begonaniki 404', async () => {
   const anon = await call(resultApi, 'https://dimed.uz/api/result?id=doc-uuid-1');
