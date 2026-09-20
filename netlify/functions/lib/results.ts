@@ -4,6 +4,7 @@ import { logToAdmin } from './telegram.ts';
 import { analyteInfo, type AnalyteDescription } from './analyte-info.ts';
 import { detectPanel } from './panels.ts';
 import { translateAnalyte, translateAnalysisName } from './analysis-dict.ts';
+import { loadReferenceRows, buildReferenceLookup, type ReferenceRow } from './references.ts';
 
 /**
  * Bemorning laboratoriya natijalari — ikki manbadan:
@@ -453,9 +454,44 @@ export async function loadResults(phone: string): Promise<ResultGroup[]> {
     group.status = groupStatus(group.items);
   }
 
-  return [...byDate.values(), ...fromDocs].sort((a, b) =>
-    (b.date ?? '').localeCompare(a.date ?? ''),
-  );
+  const groups = [...byDate.values(), ...fromDocs];
+  await applyAdminReferences(groups);
+  return groups.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+}
+
+/**
+ * 1C me'yoriy oraliq bermagan ko'rsatkichlarga admin kiritgan referensni
+ * qo'yadi (F4). 1C oralig'i bo'lsa unga tegilmaydi — u har doim ustun.
+ * Jins bo'yicha mos referens ustun, bo'lmasa umumiy ("all").
+ */
+async function applyAdminReferences(groups: ResultGroup[]): Promise<void> {
+  if (!groups.length) return;
+  const rows = await loadReferenceRows().catch(async (err) => {
+    await logToAdmin('me/referenslar', err);
+    return [] as ReferenceRow[];
+  });
+  if (!rows.length) return;
+
+  const lookup = buildReferenceLookup(rows);
+  for (const group of groups) {
+    for (const item of group.items) {
+      // 1C oralig'i (yoki matni) bor — tegmaymiz.
+      if (item.refLow !== null || item.refHigh !== null || item.reference) continue;
+      const hit = lookup(item.title, group.patientGender);
+      if (!hit || (hit.low === null && hit.high === null)) continue;
+
+      item.refLow = hit.low;
+      item.refHigh = hit.high;
+      item.reference =
+        hit.low !== null && hit.high !== null
+          ? `${hit.low} — ${hit.high}`
+          : hit.low !== null
+            ? `> ${hit.low}`
+            : `< ${hit.high}`;
+      if (hit.unit && !item.unit) item.unit = hit.unit;
+      item.status = statusOf(parseNumber(item.value), hit.low, hit.high);
+    }
+  }
 }
 
 /** Bemorning bitta natijasi (id — hujjat sort_key yoki "lab-<sana>"). */

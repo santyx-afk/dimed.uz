@@ -72,6 +72,7 @@ const resultApi = await load('result.ts');
 const appointmentStatus = await load('appointment-status.ts');
 const pricesApi = await load('prices.ts');
 const adminPrices = await load('admin-prices.ts');
+const adminReferences = await load('admin-references.ts');
 const notifyResults = await load('notify-results.ts');
 const askRatings = await load('ask-ratings.ts');
 const adminRatings = await load('admin-ratings.ts');
@@ -1896,6 +1897,65 @@ await test('admin-prices: shifokor qabuli narxi', async () => {
     headers: { 'content-type': 'application/json', cookie: adminCookie },
     body: JSON.stringify({ kind: 'doctor', id: 'ashurov', price: 70000 }),
   });
+});
+
+console.log('\nAdmin — referens (me\'yoriy) oraliqlari (F4):');
+const postRef = (body, cookie = adminCookie) =>
+  call(adminReferences, 'https://dimed.uz/api/admin-references', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie },
+    body: JSON.stringify(body),
+  });
+
+await test('admin-references: ruxsat va tekshiruv', async () => {
+  assert.equal((await call(adminReferences, 'https://dimed.uz/api/admin-references')).status, 401);
+  assert.equal(
+    (await call(adminReferences, 'https://dimed.uz/api/admin-references', { headers: { cookie: sessionCookie } })).status,
+    403,
+  );
+  assert.equal((await postRef({ gender: 'male', low: 1, high: 2 })).status, 400, 'nomsiz');
+  assert.equal((await postRef({ name: 'X' })).status, 400, 'chegarasiz');
+  assert.equal((await postRef({ name: 'X', low: 9, high: 1 })).status, 400, 'past > yuqori');
+});
+
+await test('admin-references: qo\'shish, ro\'yxat, ommaviyga chiqmaydi', async () => {
+  const res = await postRef({ name: 'Gemoglobin', gender: 'male', low: 130, high: 170, unit: 'g/L' });
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_prices').get('reference#gemoglobin#male').low, 130);
+
+  const list = await (await call(adminReferences, 'https://dimed.uz/api/admin-references', {
+    headers: { cookie: adminCookie },
+  })).json();
+  assert.ok(list.references.some((r) => r.name === 'Gemoglobin' && r.gender === 'male' && r.high === 170));
+
+  // Ommaviy /api/prices referenslarni bermaydi (faqat kind=analysis).
+  const pub = await (await call(pricesApi, 'https://dimed.uz/api/prices')).json();
+  assert.ok(!pub.analyses.some((a) => a.code === undefined || String(a.title) === 'Gemoglobin' && a.group === ''), 'referens ommaviyga chiqmasin');
+});
+
+await test('admin referens 1C bermagan oraliqni to\'ldiradi (natijada holat)', async () => {
+  // 1C oraliqsiz Gemoglobin (erkak bemor). Admin referensi: 130–170.
+  seed('test_analysis_results', '+998901234567|doc-ref', {
+    phone: '+998901234567', sort_key: 'doc-ref', Date: '12.03.2026 09:00:00',
+    PatientIsMale: true,
+    AnalysisResults: [{ Analyte: 'Gemoglobin', Result: '118', AnalyteUnit: 'g/L' }],
+  });
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=results', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  const doc = data.results.find((r) => r.id === 'doc-ref');
+  const hgb = doc.items[0];
+  assert.equal(hgb.reference, '130 — 170', 'admin referensi qo\'yiladi');
+  assert.equal(hgb.status, 'low', '118 < 130 → past');
+
+  // Tozalash: keyingi testlarga ta'sir qilmasin.
+  const del = await call(adminReferences, 'https://dimed.uz/api/admin-references', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ id: 'reference#gemoglobin#male' }),
+  });
+  assert.equal(del.status, 200);
+  assert.equal(tableOf('test_prices').has('reference#gemoglobin#male'), false);
 });
 
 console.log('\nBaho (G2/F3):');
