@@ -30,6 +30,7 @@ export const TABLES = {
   prices: tableName('prices'),
   ratings: tableName('ratings'),
   rateLimits: tableName('rate_limits'),
+  loginSessions: tableName('login_sessions'),
 } as const;
 
 /**

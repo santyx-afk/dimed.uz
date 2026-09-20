@@ -3,6 +3,8 @@ import { TABLES, queryAllPages } from './db.ts';
 import { logToAdmin } from './telegram.ts';
 import { analyteInfo, type AnalyteDescription } from './analyte-info.ts';
 import { detectPanel } from './panels.ts';
+import { translateAnalyte, translateAnalysisName } from './analysis-dict.ts';
+import { loadReferenceRows, buildReferenceLookup, type ReferenceRow } from './references.ts';
 
 /**
  * Bemorning laboratoriya natijalari — ikki manbadan:
@@ -242,9 +244,14 @@ function toItem(a: AnalyteRow, id: string): ResultItem | null {
     qator yo'qolmasin: xalqaro kod bilan ko'rsatiladi. Nomi ham,
     qiymati ham bo'lmasa — ko'rsatadigan narsa qolmaydi.
   */
-  const title = a.Analyte?.trim() || a.AnalyteInternationalCode?.trim() || '';
+  const rawTitle = a.Analyte?.trim() || a.AnalyteInternationalCode?.trim() || '';
   const value = a.Result?.trim() || null;
-  if (!title && !value) return null;
+  if (!rawTitle && !value) return null;
+
+  // 1C ruscha/texnik nom yuborsa — o'zbekcha rasmiy atamaga o'giramiz
+  // (topilmasa asl nom qoladi). Bu ham ko'rinishni, ham panel tanishni
+  // yaxshilaydi: `detectPanel` o'zbekcha belgilar bo'yicha ishlaydi.
+  const title = translateAnalyte(rawTitle);
 
   const unit = a.AnalyteUnit?.trim() || null;
   const refText = firstText(a.Reference, a.ReferenceRange, a.ReferenceText, a.Norm, a.NormText);
@@ -290,7 +297,12 @@ function titleOf(
   biomaterial: string | null,
   items: { title: string }[],
 ): { title: string; titleKey?: string } {
-  if (explicit) return { title: explicit };
+  if (explicit) {
+    // 1C ruscha/texnik nom bergan bo'lsa o'zbekchaga o'giramiz; ma'lum
+    // panelga tegishli bo'lsa lug'at kaliti ham qo'yiladi (ru/en uchun).
+    const tr = translateAnalysisName(explicit);
+    return tr.key ? { title: tr.title, titleKey: tr.key } : { title: tr.title };
+  }
 
   const panel = detectPanel(items.map((i) => i.title));
   if (panel) return { title: panel.uz, titleKey: panel.key };
@@ -375,17 +387,18 @@ export async function loadResults(phone: string): Promise<ResultGroup[]> {
     const value = m ? m[1] ?? null : row.value?.trim() || null;
     const unit = m ? m[2] ?? null : null;
     const { low, high } = row.reference ? parseReference(row.reference) : { low: null, high: null };
+    const rowTitle = translateAnalyte(row.title);
     group.items.push({
       id: row.sort_key,
       code: row.code ?? '',
-      title: row.title,
+      title: rowTitle,
       value,
       unit,
       reference: row.reference ?? null,
       refLow: low,
       refHigh: high,
       status: statusOf(parseNumber(value), low, high),
-      description: analyteInfo(row.title, row.code),
+      description: analyteInfo(rowTitle, row.code),
     });
   }
 
@@ -441,9 +454,44 @@ export async function loadResults(phone: string): Promise<ResultGroup[]> {
     group.status = groupStatus(group.items);
   }
 
-  return [...byDate.values(), ...fromDocs].sort((a, b) =>
-    (b.date ?? '').localeCompare(a.date ?? ''),
-  );
+  const groups = [...byDate.values(), ...fromDocs];
+  await applyAdminReferences(groups);
+  return groups.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+}
+
+/**
+ * 1C me'yoriy oraliq bermagan ko'rsatkichlarga admin kiritgan referensni
+ * qo'yadi (F4). 1C oralig'i bo'lsa unga tegilmaydi — u har doim ustun.
+ * Jins bo'yicha mos referens ustun, bo'lmasa umumiy ("all").
+ */
+async function applyAdminReferences(groups: ResultGroup[]): Promise<void> {
+  if (!groups.length) return;
+  const rows = await loadReferenceRows().catch(async (err) => {
+    await logToAdmin('me/referenslar', err);
+    return [] as ReferenceRow[];
+  });
+  if (!rows.length) return;
+
+  const lookup = buildReferenceLookup(rows);
+  for (const group of groups) {
+    for (const item of group.items) {
+      // 1C oralig'i (yoki matni) bor — tegmaymiz.
+      if (item.refLow !== null || item.refHigh !== null || item.reference) continue;
+      const hit = lookup(item.title, group.patientGender);
+      if (!hit || (hit.low === null && hit.high === null)) continue;
+
+      item.refLow = hit.low;
+      item.refHigh = hit.high;
+      item.reference =
+        hit.low !== null && hit.high !== null
+          ? `${hit.low} — ${hit.high}`
+          : hit.low !== null
+            ? `> ${hit.low}`
+            : `< ${hit.high}`;
+      if (hit.unit && !item.unit) item.unit = hit.unit;
+      item.status = statusOf(parseNumber(item.value), hit.low, hit.high);
+    }
+  }
 }
 
 /** Bemorning bitta natijasi (id — hujjat sort_key yoki "lab-<sana>"). */

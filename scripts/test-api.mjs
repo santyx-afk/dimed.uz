@@ -51,6 +51,7 @@ const { createSessionCookie } = await import(
 
 const telegramWebhook = await load('telegram-webhook.ts');
 const authVerify = await load('auth-verify.ts');
+const authStart = await load('auth-start.ts');
 const slots = await load('slots.ts');
 const book = await load('book.ts');
 const me = await load('me.ts');
@@ -71,6 +72,7 @@ const resultApi = await load('result.ts');
 const appointmentStatus = await load('appointment-status.ts');
 const pricesApi = await load('prices.ts');
 const adminPrices = await load('admin-prices.ts');
+const adminReferences = await load('admin-references.ts');
 const notifyResults = await load('notify-results.ts');
 const askRatings = await load('ask-ratings.ts');
 const adminRatings = await load('admin-ratings.ts');
@@ -239,6 +241,77 @@ await test('kirishda 1C profili yangilanadi', async () => {
   assert.equal(res.status, 200);
   assert.equal(tableOf('test_users').get('777').code, '555A');
   assert.equal(tableOf('test_users').get('777').last_name, 'Azizova');
+});
+
+console.log('\n"Kodni olish" (deep-link kirish, A-auth):');
+const startLogin = async () => {
+  const res = await call(authStart, 'https://dimed.uz/api/auth-start', { method: 'POST' });
+  assert.equal(res.status, 200);
+  return res.json();
+};
+const pollLogin = (nonce) =>
+  call(authStart, `https://dimed.uz/api/auth-start?nonce=${encodeURIComponent(nonce)}`, { method: 'GET' });
+const startCmd = (chatId, nonce) =>
+  call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({ message: { chat: { id: chatId }, text: `/start kirish_${nonce}` } }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+
+await test('auth-start nonce va bot deep-link havolasini beradi', async () => {
+  const { nonce, deepLink } = await startLogin();
+  assert.match(nonce, /^[A-Za-z0-9_-]{16,64}$/);
+  assert.ok(deepLink.includes(`start=kirish_${nonce}`), 'deep-link nonce bilan bo\'lishi kerak');
+  assert.equal(tableOf('test_login_sessions').get(nonce).status, 'pending');
+});
+
+await test('poll: boshda pending, noma\'lum nonce expired, buzuq nonce 400', async () => {
+  const { nonce } = await startLogin();
+  assert.equal((await (await pollLogin(nonce)).json()).status, 'pending');
+  assert.equal((await (await pollLogin('yoq0123456789abcd')).json()).status, 'expired');
+  assert.equal((await pollLogin('qisqa')).status, 400);
+});
+
+await test('bog\'langan telefon: /start kirish_<nonce> → ready va kod keladi', async () => {
+  telegramCalls.length = 0;
+  const { nonce } = await startLogin();
+  // chat 777 telefoni allaqachon bog'langan (+998901234567).
+  const res = await startCmd(777, nonce);
+  assert.equal(res.status, 200);
+  const sess = tableOf('test_login_sessions').get(nonce);
+  assert.equal(sess.status, 'ready');
+  assert.equal(sess.phone, '+998901234567');
+  const p = await (await pollLogin(nonce)).json();
+  assert.equal(p.status, 'ready');
+  assert.equal(p.phone, '+998901234567');
+  assert.ok(
+    telegramCalls.some((c) => c.body.text?.includes('kirish kodingiz')),
+    'kod ham yuborilishi kerak',
+  );
+});
+
+await test('yangi bemor: nonce kontakt ulashilgach ready bo\'ladi', async () => {
+  const { nonce } = await startLogin();
+  // Telefoni yo'q chat — /start nonce bilan: nonce eslab qolinadi, ready emas.
+  await startCmd(9099, nonce);
+  assert.equal(tableOf('test_users').get('9099').pending_login_nonce, nonce);
+  assert.equal((await (await pollLogin(nonce)).json()).status, 'pending');
+
+  // Kontakt ulashildi → kirish sessiyasi ready bo'ladi, nonce iste'mol qilinadi.
+  await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: { chat: { id: 9099 }, contact: { phone_number: '998901112233', first_name: 'Yangi' } },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  const p = await (await pollLogin(nonce)).json();
+  assert.equal(p.status, 'ready');
+  assert.equal(p.phone, '+998901112233');
+  assert.equal(tableOf('test_users').get('9099').pending_login_nonce, undefined, 'nonce iste\'mol qilinadi');
+});
+
+await test('auth-start faqat GET/POST qabul qiladi', async () => {
+  const res = await call(authStart, 'https://dimed.uz/api/auth-start', { method: 'DELETE' });
+  assert.equal(res.status, 405);
 });
 
 console.log('\nKirish kodini himoyalash:');
@@ -855,6 +928,28 @@ await test('natija ro\'yxatida tahlil nomi, holati va shifokor bor (C2)', async 
 
   const bio = data.results.find((r) => r.id === 'doc-bio');
   assert.equal(bio.title, 'Qon tahlili', 'panel tanilmasa biomaterial bo\'yicha');
+});
+
+await test('1C ruscha nom va ko\'rsatkichlarni o\'zbekchaga o\'giradi (I1)', async () => {
+  seed('test_analysis_results', '+998901234567|doc-ru', {
+    phone: '+998901234567', sort_key: 'doc-ru', Date: '10.03.2026 10:00:00',
+    AnalysisName: 'Общий анализ крови', Doctor: 'Ivanova R.',
+    AnalysisResults: [
+      { Analyte: 'Гемоглобин', Result: '132', AnalyteUnit: 'g/L' },
+      { Analyte: 'Билирубин общий', Result: '12', AnalyteUnit: 'mkmol/l' },
+    ],
+  });
+
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=results', {
+    headers: { cookie: sessionCookie },
+  })).json();
+
+  const ru = data.results.find((r) => r.id === 'doc-ru');
+  assert.equal(ru.title, 'Umumiy qon tahlili', 'ruscha panel nomi o\'zbekchaga');
+  assert.equal(ru.titleKey, 'panel.cbc', 'ko\'p tilli sarlavha kaliti qo\'yiladi');
+  const nomlar = ru.items.map((i) => i.title);
+  assert.ok(nomlar.includes('Gemoglobin'), 'Гемоглобин → Gemoglobin');
+  assert.ok(nomlar.includes('Umumiy bilirubin'), 'Билирубин общий → Umumiy bilirubin');
 });
 
 console.log('\nNatija sahifasi (D1) va ulashish:');
@@ -1802,6 +1897,65 @@ await test('admin-prices: shifokor qabuli narxi', async () => {
     headers: { 'content-type': 'application/json', cookie: adminCookie },
     body: JSON.stringify({ kind: 'doctor', id: 'ashurov', price: 70000 }),
   });
+});
+
+console.log('\nAdmin — referens (me\'yoriy) oraliqlari (F4):');
+const postRef = (body, cookie = adminCookie) =>
+  call(adminReferences, 'https://dimed.uz/api/admin-references', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie },
+    body: JSON.stringify(body),
+  });
+
+await test('admin-references: ruxsat va tekshiruv', async () => {
+  assert.equal((await call(adminReferences, 'https://dimed.uz/api/admin-references')).status, 401);
+  assert.equal(
+    (await call(adminReferences, 'https://dimed.uz/api/admin-references', { headers: { cookie: sessionCookie } })).status,
+    403,
+  );
+  assert.equal((await postRef({ gender: 'male', low: 1, high: 2 })).status, 400, 'nomsiz');
+  assert.equal((await postRef({ name: 'X' })).status, 400, 'chegarasiz');
+  assert.equal((await postRef({ name: 'X', low: 9, high: 1 })).status, 400, 'past > yuqori');
+});
+
+await test('admin-references: qo\'shish, ro\'yxat, ommaviyga chiqmaydi', async () => {
+  const res = await postRef({ name: 'Gemoglobin', gender: 'male', low: 130, high: 170, unit: 'g/L' });
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_prices').get('reference#gemoglobin#male').low, 130);
+
+  const list = await (await call(adminReferences, 'https://dimed.uz/api/admin-references', {
+    headers: { cookie: adminCookie },
+  })).json();
+  assert.ok(list.references.some((r) => r.name === 'Gemoglobin' && r.gender === 'male' && r.high === 170));
+
+  // Ommaviy /api/prices referenslarni bermaydi (faqat kind=analysis).
+  const pub = await (await call(pricesApi, 'https://dimed.uz/api/prices')).json();
+  assert.ok(!pub.analyses.some((a) => a.code === undefined || String(a.title) === 'Gemoglobin' && a.group === ''), 'referens ommaviyga chiqmasin');
+});
+
+await test('admin referens 1C bermagan oraliqni to\'ldiradi (natijada holat)', async () => {
+  // 1C oraliqsiz Gemoglobin (erkak bemor). Admin referensi: 130–170.
+  seed('test_analysis_results', '+998901234567|doc-ref', {
+    phone: '+998901234567', sort_key: 'doc-ref', Date: '12.03.2026 09:00:00',
+    PatientIsMale: true,
+    AnalysisResults: [{ Analyte: 'Gemoglobin', Result: '118', AnalyteUnit: 'g/L' }],
+  });
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=results', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  const doc = data.results.find((r) => r.id === 'doc-ref');
+  const hgb = doc.items[0];
+  assert.equal(hgb.reference, '130 — 170', 'admin referensi qo\'yiladi');
+  assert.equal(hgb.status, 'low', '118 < 130 → past');
+
+  // Tozalash: keyingi testlarga ta'sir qilmasin.
+  const del = await call(adminReferences, 'https://dimed.uz/api/admin-references', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ id: 'reference#gemoglobin#male' }),
+  });
+  assert.equal(del.status, 200);
+  assert.equal(tableOf('test_prices').has('reference#gemoglobin#male'), false);
 });
 
 console.log('\nBaho (G2/F3):');

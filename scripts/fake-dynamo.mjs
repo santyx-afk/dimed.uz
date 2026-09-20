@@ -23,6 +23,7 @@ const keySchema = {
   test_prices: ['item_id'],
   test_ratings: ['doctor_id', 'created_at'],
   test_rate_limits: ['bucket'],
+  test_login_sessions: ['nonce'],
 };
 for (const t of Object.keys(keySchema)) tables.set(t, new Map());
 
@@ -230,11 +231,12 @@ const server = createServer((req, res) => {
       if (!evalCondition(payload.ConditionExpression, existing, names, values)) {
         return fail('ConditionalCheckFailedException');
       }
+      const before = existing ? { ...existing } : undefined;
       const updated = applyUpdate(existing ?? key, payload.UpdateExpression, names, values);
       store.set(id, updated);
-      if (payload.ReturnValues === 'ALL_NEW') {
-        return send({ Attributes: Object.fromEntries(Object.entries(updated).map(([k, v]) => [k, marshal(v)])) });
-      }
+      const asAttrs = (obj) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, marshal(v)]));
+      if (payload.ReturnValues === 'ALL_NEW') return send({ Attributes: asAttrs(updated) });
+      if (payload.ReturnValues === 'ALL_OLD') return send(before ? { Attributes: asAttrs(before) } : {});
       return send({});
     }
 
