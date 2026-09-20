@@ -8,6 +8,7 @@ import { mergeIndividualProfile } from './lib/patients.ts';
 import { handleRatingCallback, handleRatingComment, type CallbackQuery } from './lib/ratings.ts';
 import { json } from './lib/http.ts';
 import { normalizePhone } from './lib/phone.ts';
+import { loginNonceFromStart, markLoginReady, LOGIN_TTL_SECONDS } from './lib/login.ts';
 
 const OTP_TTL_SECONDS = 5 * 60;
 
@@ -80,7 +81,13 @@ export default async (request: Request, _context: Context): Promise<Response> =>
         Kontakt bir marta so'raladi. Telefon allaqachon bog'langan
         bo'lsa — darhol yangi kod yuboriladi: har /start da tugma
         bosishga majburlash bemorni charchatadi.
+
+        `/start kirish_<nonce>` — saytdagi "Kodni olish" havolasi. nonce
+        kirish sessiyasiga bog'lanadi: telefon ma'lum bo'lsa darhol,
+        aks holda kontakt ulashilgach (handleContact) yoziladi. Sayt uni
+        poll qilib kod maydonini avtomatik ochadi (lib/login.ts).
       */
+      const nonce = loginNonceFromStart(message.text);
       const existing = await db.send(
         new GetCommand({
           TableName: TABLES.users,
@@ -90,8 +97,24 @@ export default async (request: Request, _context: Context): Promise<Response> =>
       const phone = (existing.Item as { phone?: string } | undefined)?.phone;
 
       if (phone) {
+        if (nonce) await markLoginReady(nonce, phone, String(message.chat.id));
         await sendOtp(message.chat.id, phone);
       } else {
+        // Telefon hali yo'q: nonce'ni eslab qolamiz — kontakt kelgach
+        // shu kirish sessiyasi "ready" bo'ladi.
+        if (nonce) {
+          await db.send(
+            new UpdateCommand({
+              TableName: TABLES.users,
+              Key: { telegram_id: String(message.chat.id) },
+              UpdateExpression: 'SET pending_login_nonce = :n, pending_login_at = :t',
+              ExpressionAttributeValues: {
+                ':n': nonce,
+                ':t': Math.floor(Date.now() / 1000),
+              },
+            }),
+          );
+        }
         await sendMessage(
           message.chat.id,
           'Assalomu alaykum! <b>Dimed</b> klinikasiga xush kelibsiz.\n\n' +
@@ -142,13 +165,15 @@ async function handleContact(
     yagona joy: qolgan ism maydonlarini 1C profili qayta yozadi. U
     bir telefon ostidagi oila a'zolaridan kimligini aniqlashga kerak.
   */
-  await db.send(
+  const updated = await db.send(
     new UpdateCommand({
       TableName: TABLES.users,
       Key: { telegram_id: String(chatId) },
       UpdateExpression:
         'SET phone = :p, first_name = :f, last_name = :l, full_name = :fn, ' +
-        '#name = :n, telegram_name = :tn, updated_at = :u',
+        '#name = :n, telegram_name = :tn, updated_at = :u ' +
+        // Kutayotgan kirish nonce'si bo'lsa — bir yo'la iste'mol qilamiz.
+        'REMOVE pending_login_nonce, pending_login_at',
       ExpressionAttributeNames: { '#name': 'name' },
       ExpressionAttributeValues: {
         ':p': phone,
@@ -159,8 +184,22 @@ async function handleContact(
         ':tn': fullName || firstName,
         ':u': now,
       },
+      // Eski qiymatlar — "Kodni olish" orqali kelgan nonce shu yerda.
+      ReturnValues: 'ALL_OLD',
     }),
   );
+
+  /*
+    Bemor "Kodni olish" havolasi orqali kelib, endi kontakt ulashdi.
+    Kirish sessiyasini "ready" qilamiz — sayt poll qilib kod maydonini
+    ochadi. Eskirgan nonce (10 daqiqadan oshgan) e'tiborga olinmaydi.
+  */
+  const old = updated.Attributes as { pending_login_nonce?: string; pending_login_at?: number } | undefined;
+  const pendingNonce = old?.pending_login_nonce;
+  const pendingAt = Number(old?.pending_login_at ?? 0);
+  if (pendingNonce && Math.floor(Date.now() / 1000) - pendingAt < LOGIN_TTL_SECONDS) {
+    await markLoginReady(pendingNonce, phone, String(chatId));
+  }
 
   /*
     1C bemorlar jadvalida bo'lsa, F.I.Sh. va kodini shu yerda olamiz.

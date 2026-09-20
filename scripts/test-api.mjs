@@ -51,6 +51,7 @@ const { createSessionCookie } = await import(
 
 const telegramWebhook = await load('telegram-webhook.ts');
 const authVerify = await load('auth-verify.ts');
+const authStart = await load('auth-start.ts');
 const slots = await load('slots.ts');
 const book = await load('book.ts');
 const me = await load('me.ts');
@@ -239,6 +240,77 @@ await test('kirishda 1C profili yangilanadi', async () => {
   assert.equal(res.status, 200);
   assert.equal(tableOf('test_users').get('777').code, '555A');
   assert.equal(tableOf('test_users').get('777').last_name, 'Azizova');
+});
+
+console.log('\n"Kodni olish" (deep-link kirish, A-auth):');
+const startLogin = async () => {
+  const res = await call(authStart, 'https://dimed.uz/api/auth-start', { method: 'POST' });
+  assert.equal(res.status, 200);
+  return res.json();
+};
+const pollLogin = (nonce) =>
+  call(authStart, `https://dimed.uz/api/auth-start?nonce=${encodeURIComponent(nonce)}`, { method: 'GET' });
+const startCmd = (chatId, nonce) =>
+  call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({ message: { chat: { id: chatId }, text: `/start kirish_${nonce}` } }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+
+await test('auth-start nonce va bot deep-link havolasini beradi', async () => {
+  const { nonce, deepLink } = await startLogin();
+  assert.match(nonce, /^[A-Za-z0-9_-]{16,64}$/);
+  assert.ok(deepLink.includes(`start=kirish_${nonce}`), 'deep-link nonce bilan bo\'lishi kerak');
+  assert.equal(tableOf('test_login_sessions').get(nonce).status, 'pending');
+});
+
+await test('poll: boshda pending, noma\'lum nonce expired, buzuq nonce 400', async () => {
+  const { nonce } = await startLogin();
+  assert.equal((await (await pollLogin(nonce)).json()).status, 'pending');
+  assert.equal((await (await pollLogin('yoq0123456789abcd')).json()).status, 'expired');
+  assert.equal((await pollLogin('qisqa')).status, 400);
+});
+
+await test('bog\'langan telefon: /start kirish_<nonce> → ready va kod keladi', async () => {
+  telegramCalls.length = 0;
+  const { nonce } = await startLogin();
+  // chat 777 telefoni allaqachon bog'langan (+998901234567).
+  const res = await startCmd(777, nonce);
+  assert.equal(res.status, 200);
+  const sess = tableOf('test_login_sessions').get(nonce);
+  assert.equal(sess.status, 'ready');
+  assert.equal(sess.phone, '+998901234567');
+  const p = await (await pollLogin(nonce)).json();
+  assert.equal(p.status, 'ready');
+  assert.equal(p.phone, '+998901234567');
+  assert.ok(
+    telegramCalls.some((c) => c.body.text?.includes('kirish kodingiz')),
+    'kod ham yuborilishi kerak',
+  );
+});
+
+await test('yangi bemor: nonce kontakt ulashilgach ready bo\'ladi', async () => {
+  const { nonce } = await startLogin();
+  // Telefoni yo'q chat — /start nonce bilan: nonce eslab qolinadi, ready emas.
+  await startCmd(9099, nonce);
+  assert.equal(tableOf('test_users').get('9099').pending_login_nonce, nonce);
+  assert.equal((await (await pollLogin(nonce)).json()).status, 'pending');
+
+  // Kontakt ulashildi → kirish sessiyasi ready bo'ladi, nonce iste'mol qilinadi.
+  await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: { chat: { id: 9099 }, contact: { phone_number: '998901112233', first_name: 'Yangi' } },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  const p = await (await pollLogin(nonce)).json();
+  assert.equal(p.status, 'ready');
+  assert.equal(p.phone, '+998901112233');
+  assert.equal(tableOf('test_users').get('9099').pending_login_nonce, undefined, 'nonce iste\'mol qilinadi');
+});
+
+await test('auth-start faqat GET/POST qabul qiladi', async () => {
+  const res = await call(authStart, 'https://dimed.uz/api/auth-start', { method: 'DELETE' });
+  assert.equal(res.status, 405);
 });
 
 console.log('\nKirish kodini himoyalash:');
