@@ -1,5 +1,6 @@
 import type { Context } from '@netlify/functions';
 import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { db, TABLES } from './lib/db.ts';
 import { required } from './lib/env.ts';
 import { sendMessage, logToAdmin } from './lib/telegram.ts';
@@ -7,7 +8,7 @@ import { generateOtp } from './lib/session.ts';
 import { mergeIndividualProfile } from './lib/patients.ts';
 import { handleRatingCallback, handleRatingComment, type CallbackQuery } from './lib/ratings.ts';
 import { json } from './lib/http.ts';
-import { normalizePhone } from './lib/phone.ts';
+import { parsePhone, COUNTRY_CODE } from './lib/phone.ts';
 import { loginNonceFromStart, markLoginReady, LOGIN_TTL_SECONDS } from './lib/login.ts';
 
 const OTP_TTL_SECONDS = 5 * 60;
@@ -113,7 +114,15 @@ export default async (request: Request, _context: Context): Promise<Response> =>
           Key: { telegram_id: String(message.chat.id) },
         }),
       );
-      const phone = (existing.Item as { phone?: string } | undefined)?.phone;
+      const user = existing.Item as { phone?: string; contact_verified_at?: string } | undefined;
+      /*
+        Saqlangan telefon faqat qat'iy tekshiruvdan o'tgan kontaktdan
+        olingan bo'lsa ishlatiladi (`contact_verified_at`). Oldingi
+        yozuvlarda chet el raqami begona O'zbek raqamiga aylangan bo'lishi
+        mumkin (handleContact izohiga qarang) — bunday bemor kontaktini
+        bir marta qayta ulashadi.
+      */
+      const phone = user?.contact_verified_at ? user.phone : undefined;
 
       if (phone) {
         if (nonce) await markLoginReady(nonce, phone, String(message.chat.id));
@@ -136,8 +145,11 @@ export default async (request: Request, _context: Context): Promise<Response> =>
         }
         await sendMessage(
           message.chat.id,
-          'Assalomu alaykum! <b>Dimed</b> klinikasiga xush kelibsiz.\n\n' +
-            'Saytga kirish uchun pastdagi tugma orqali kontaktingizni ulashing.',
+          user?.phone
+            ? 'Xavfsizlik uchun raqamingizni bir marta qayta tasdiqlang — ' +
+                'pastdagi tugma orqali kontaktingizni ulashing.'
+            : 'Assalomu alaykum! <b>Dimed</b> klinikasiga xush kelibsiz.\n\n' +
+                'Saytga kirish uchun pastdagi tugma orqali kontaktingizni ulashing.',
           shareContactKeyboard,
         );
       }
@@ -164,11 +176,57 @@ export default async (request: Request, _context: Context): Promise<Response> =>
   return json({ ok: true });
 };
 
+/**
+ * Telegram kontaktidagi raqam — faqat to'liq O'zbekiston raqami
+ * (998 + 9 xona); boshqasi — null.
+ *
+ * Telegram raqamni doim mamlakat kodi bilan yuboradi. Avval tanilmagan
+ * raqam "tuzatib" olinardi (`normalizePhone`: oxirgi 9 xona + 998):
+ * +7 999 123 45 67 → +998 99 123 45 67 — bu boshqa, begona odamning
+ * raqami. Chet el raqamli foydalanuvchi o'sha bemor uchun kod olib, uning
+ * hisobiga va tahlil natijalariga kirib qolardi. 9 xonali chet el
+ * raqamlari esa hatto `parsePhone` dan ham o'tadi — shuning uchun
+ * mamlakat kodi aniq talab qilinadi.
+ */
+function uzPhoneFromContact(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length !== COUNTRY_CODE.length + 9 || !digits.startsWith(COUNTRY_CODE)) return null;
+  const checked = parsePhone(digits);
+  return checked.ok ? checked.value : null;
+}
+
 async function handleContact(
   chatId: number,
   contact: NonNullable<NonNullable<TelegramUpdate['message']>['contact']>,
 ): Promise<void> {
-  const phone = normalizePhone(contact.phone_number);
+  const phone = uzPhoneFromContact(contact.phone_number);
+  if (!phone) {
+    /*
+      Oldingi kod shu hisobga chet el raqamidan "yasalgan" begona O'zbek
+      raqamini yozgan bo'lishi mumkin — endi bu ma'lum bo'ldi, uni olib
+      tashlaymiz: aks holda o'sha bemorning natija xabarlari (va ulashish
+      havolalari) bu hisobga ketaverardi. Yozuv yo'q bo'lsa — yaratilmaydi.
+    */
+    await db
+      .send(
+        new UpdateCommand({
+          TableName: TABLES.users,
+          Key: { telegram_id: String(chatId) },
+          UpdateExpression: 'REMOVE phone, contact_verified_at',
+          ConditionExpression: 'attribute_exists(telegram_id)',
+        }),
+      )
+      .catch((err) => {
+        if (!(err instanceof ConditionalCheckFailedException)) throw err;
+      });
+    await sendMessage(
+      chatId,
+      'Kechirasiz, saytga faqat O‘zbekiston raqami (+998) bilan kirish mumkin.\n\n' +
+        'Savollar uchun: +998 55 9009 103',
+      { remove_keyboard: true },
+    );
+    return;
+  }
   const firstName = contact.first_name ?? '';
   const lastName = contact.last_name ?? '';
   const fullName = [lastName, firstName].filter(Boolean).join(' ');
@@ -190,7 +248,9 @@ async function handleContact(
       Key: { telegram_id: String(chatId) },
       UpdateExpression:
         'SET phone = :p, first_name = :f, last_name = :l, full_name = :fn, ' +
-        '#name = :n, telegram_name = :tn, updated_at = :u ' +
+        // contact_verified_at — telefon qat'iy tekshirilgan kontaktdan
+        // olingani; /start faqat shunday telefonga kod yuboradi.
+        '#name = :n, telegram_name = :tn, updated_at = :u, contact_verified_at = :u ' +
         // Kutayotgan kirish nonce'si bo'lsa — bir yo'la iste'mol qilamiz.
         'REMOVE pending_login_nonce, pending_login_at',
       ExpressionAttributeNames: { '#name': 'name' },

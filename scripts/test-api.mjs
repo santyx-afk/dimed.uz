@@ -191,6 +191,64 @@ await test('begona kontakt (user_id yuboruvchiga mos kelmaydi) rad etiladi', asy
   assert.equal(tableOf('test_otp_codes').get('+998900000002'), undefined, 'user_id\'siz kontakt ham rad etilishi kerak');
 });
 
+const tgMessage = (message) =>
+  call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({ message }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+
+await test('chet el raqami begona O\'zbek raqamiga aylanmaydi — rad etiladi', async () => {
+  // Avval +7 999 123 45 67 "oxirgi 9 xona + 998" qilib +998 99 123 45 67
+  // ga aylanardi — bu begona bemorning raqami. 9 xonali chet el raqami
+  // (688901234) esa hatto parsePhone'dan o'tib ketardi.
+  telegramCalls.length = 0;
+  for (const [chatId, phone] of [[66603, '79991234567'], [66604, '688901234']]) {
+    await tgMessage({ chat: { id: chatId }, contact: { phone_number: phone, user_id: chatId, first_name: 'Chet' } });
+    assert.equal(tableOf('test_users').get(String(chatId)), undefined, `${phone}: hisob yaratilmasligi kerak`);
+  }
+  assert.equal(tableOf('test_otp_codes').get('+998991234567'), undefined, 'begona O\'zbek raqamiga kod yaratilmasligi kerak');
+  assert.equal(tableOf('test_otp_codes').get('+998688901234'), undefined);
+  assert.ok(telegramCalls.every((c) => !/kirish kodingiz/.test(c.body.text ?? '')), 'kod yuborilmasligi kerak');
+  assert.ok(telegramCalls.some((c) => /O‘zbekiston raqami/.test(c.body.text ?? '')), 'sababi aytilishi kerak');
+});
+
+await test('chet el raqami ulashilsa, eski yozuvdagi begona raqam olib tashlanadi', async () => {
+  // Oldingi kod +7 999 555 00 40 ni +998 99 555 00 40 qilib saqlagan bo'lishi
+  // mumkin — o'sha bemorning natija xabarlari bu hisobga ketmasligi kerak.
+  seed('test_users', '66607', { telegram_id: '66607', phone: '+998995550040', lang: 'ru' });
+  await tgMessage({ chat: { id: 66607 }, contact: { phone_number: '79995550040', user_id: 66607, first_name: 'Chet' } });
+  const user = tableOf('test_users').get('66607');
+  assert.equal(user.phone, undefined, 'begona raqam yozuvdan olib tashlanishi kerak');
+  assert.equal(user.lang, 'ru', 'qolgan sozlamalar saqlanadi');
+  assert.equal(tableOf('test_otp_codes').get('+998995550040'), undefined);
+});
+
+await test('"+" bilan kelgan O\'zbek raqami qabul qilinadi', async () => {
+  await tgMessage({ chat: { id: 66605 }, contact: { phone_number: '+998905550002', user_id: 66605, first_name: 'Plus' } });
+  assert.equal(tableOf('test_users').get('66605').phone, '+998905550002');
+  assert.match(tableOf('test_otp_codes').get('+998905550002').code, /^\d{6}$/);
+});
+
+await test('tasdiq belgisiz eski yozuv /start da kontaktni qayta ulashadi', async () => {
+  // Avvalgi kod chet el raqamini begona O'zbek raqamiga aylantirib
+  // saqlagan bo'lishi mumkin — bunday (tekshirilmagan) telefonga kod ketmaydi.
+  seed('test_users', '66606', { telegram_id: '66606', phone: '+998905550003' });
+  telegramCalls.length = 0;
+  await tgMessage({ chat: { id: 66606 }, text: '/start' });
+  assert.equal(tableOf('test_otp_codes').get('+998905550003'), undefined, 'tekshirilmagan telefonga kod ketmasligi kerak');
+  assert.ok(
+    telegramCalls.some((c) => c.body.reply_markup?.keyboard && /qayta tasdiqlang/.test(c.body.text ?? '')),
+    'raqamni qayta tasdiqlash so\'ralishi kerak',
+  );
+
+  // Kontakt ulashilgach belgi qo'yiladi va keyingi /start darhol kod beradi.
+  await tgMessage({ chat: { id: 66606 }, contact: { phone_number: '998905550003', user_id: 66606, first_name: 'Eski' } });
+  assert.ok(tableOf('test_users').get('66606').contact_verified_at, 'tasdiq belgisi qo\'yilishi kerak');
+  telegramCalls.length = 0;
+  await tgMessage({ chat: { id: 66606 }, text: '/start' });
+  assert.ok(telegramCalls.some((c) => /kirish kodingiz/.test(c.body.text ?? '')), 'endi kod darhol kelishi kerak');
+});
+
 await test('kontaktda 1C profili birlashadi (individuals jadvalidan)', async () => {
   seed('test_individuals', '+998907777777|1146', {
     phone: '+998907777777', sort_key: '1146',
