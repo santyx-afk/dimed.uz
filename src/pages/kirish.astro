@@ -115,6 +115,7 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
 
 <script>
   import { parsePhone, formatPhone } from '../lib/phone';
+  import { safeNext } from '../lib/safe-next';
   import { birthDateSelectsHtml, readBirthDate } from '../lib/birthdate';
   import { getLang, applyPageLang } from '../lib/lang';
   import { t } from '../data/i18n';
@@ -131,15 +132,6 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
   const setMsg = (text: string, kind: 'error' | 'ok' | '' = '') => {
     msg.textContent = text;
     msg.className = `msg${kind ? ` ${kind}` : ''}`;
-  };
-
-  /**
-   * Kirgandan keyin qaytadigan manzil. Faqat shu saytdagi yo'l
-   * qabul qilinadi — begona saytga yo'naltirishning oldini olamiz.
-   */
-  const safeNext = (): string => {
-    const next = new URLSearchParams(location.search).get('next');
-    return next && next.startsWith('/') && !next.startsWith('//') ? next : '/kabinet';
   };
 
   otpInputs.forEach((input, i) => {
@@ -315,7 +307,8 @@ const uz = (key: Parameters<typeof t>[0]) => t(key, 'uz');
     } catch {
       /* bo'sh */
     }
-    window.location.href = safeNext();
+    // Faqat shu saytdagi manzil — begona saytga yo'naltirish yo'q (lib/safe-next).
+    window.location.href = safeNext(new URLSearchParams(location.search).get('next'), location.origin);
   };
 
   /**
