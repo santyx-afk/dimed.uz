@@ -593,6 +593,29 @@ await test('bemor o\'z qabulini ko\'radi', async () => {
   assert.equal(data.appointments[0].upcoming, true);
 });
 
+await test('ko\'p yozuvli bemor hamma qabulini ko\'radi (50 tadan ko\'p — sahifalab)', async () => {
+  // Avval bitta sahifa `Limit: 50` bilan o'qilardi va filtr undan keyin
+  // qo'llanardi: yangi ko'chirilgan yozuvlar 50 talikni egallab, eski
+  // qabullar tarixdan jimgina yo'qolardi.
+  const phone = '+998905550001';
+  for (let i = 0; i < 70; i++) {
+    const date = addDays('2019-01-01', i);
+    seed('test_appointments', `ashurov#${date}|09:00`, {
+      doctor_day: `ashurov#${date}`, time: '09:00', doctor_id: 'ashurov', date,
+      phone, telegram_id: '5550001', starts_at: toInstant(date, '09:00').toISOString(),
+      // 60 tasi o'tgan qabul; eng yangi 10 tasi ko'chirilgan (ro'yxatda ko'rinmaydi).
+      status: i < 60 ? 'done' : 'moved',
+      price: 70000, created_at: new Date().toISOString(),
+    });
+  }
+  const cookie = createSessionCookie({ phone, userId: '5550001' }).split(';')[0];
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=appointments', {
+    headers: { cookie },
+  })).json();
+  assert.equal(data.appointments.length, 60, 'barcha o\'tgan qabullar ko\'rinishi kerak');
+  assert.ok(data.appointments.every((a) => a.status === 'done'), 'ko\'chirilganlar ko\'rinmasligi kerak');
+});
+
 await test('1C natijasi kabinetda ko\'rinadi', async () => {
   telegramCalls.length = 0;
   const res = await call(lcResults, 'https://dimed.uz/api/lc-results', {
