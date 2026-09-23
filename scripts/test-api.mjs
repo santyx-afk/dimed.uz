@@ -1780,6 +1780,26 @@ await test('kun yopiladi va bemorlarga xabar boradi', async () => {
   assert.ok(telegramCalls.some((c) => c.body.text.includes('Kasal bo\'lib qoldim')));
 });
 
+await test('sabab matni Telegram HTML uchun ekranlanadi', async () => {
+  // `<` yoki `&` bo'lsa Telegram xabarni butunlay rad etardi ("can't parse
+  // entities") — bemor qabuli bekor qilinganini bilmay qolardi.
+  const day = addDays(toTashkent(new Date()).dateKey, 45);
+  seed('test_appointments', `ashurov#${day}|11:00`, {
+    doctor_day: `ashurov#${day}`, time: '11:00', doctor_id: 'ashurov', date: day,
+    phone: '+998905550005', telegram_id: '66608', starts_at: toInstant(day, '11:00').toISOString(),
+    status: 'booked', price: 70000, created_at: new Date().toISOString(),
+  });
+  telegramCalls.length = 0;
+  const res = await call(doctorOff, 'https://dimed.uz/api/doctor-off', {
+    ...jsonBody({ date: day, reason: 'Isitma <38> & yo\'tal' }),
+    headers: { 'content-type': 'application/json', cookie: doctorCookie },
+  });
+  assert.equal(res.status, 200);
+  const sent = telegramCalls.find((c) => c.body.chat_id === '66608');
+  assert.ok(sent, 'bemorga xabar ketishi kerak');
+  assert.ok(sent.body.text.includes('Sabab: Isitma &lt;38&gt; &amp; yo\'tal'), sent.body.text);
+});
+
 await test('bemor kabinetda bekor qilinganini ko\'radi', async () => {
   const data = await (await call(me, 'https://dimed.uz/api/me', { headers: { cookie: sessionCookie } })).json();
   const cancelled = data.appointments.find((a) => a.date === BOOK_DATE);

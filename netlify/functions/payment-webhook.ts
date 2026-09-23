@@ -7,7 +7,7 @@ import { optional } from './lib/env.ts';
 import { toTiyin } from './lib/payment.ts';
 import { doctorDayKey } from './lib/slots.ts';
 import { getDoctor } from './lib/auth.ts';
-import { sendMessage, logToAdmin } from './lib/telegram.ts';
+import { sendMessage, logToAdmin, escapeHtml } from './lib/telegram.ts';
 import { json } from './lib/http.ts';
 
 /**
@@ -462,7 +462,7 @@ async function notify(order: Order): Promise<void> {
     await sendMessage(
       telegramId,
       `✅ <b>Broningiz tasdiqlandi!</b>\n\n` +
-        `Shifokor: ${doctor?.name ?? order.doctor_id}\n` +
+        `Shifokor: ${escapeHtml(doctor?.name ?? order.doctor_id)}\n` +
         `Sana: ${order.date}, soat ${order.time}\n` +
         `To'lov: ${order.amount.toLocaleString('ru-RU')} so'm qabul qilindi (Payme)\n\n` +
         `Qabulga 1 soat qolganda eslatma yuboramiz.`,
