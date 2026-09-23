@@ -75,7 +75,26 @@ export default async (request: Request, _context: Context): Promise<Response> =>
 
   try {
     if (message.contact) {
-      await handleContact(message.chat.id, message.contact);
+      /*
+        Telegram foydalanuvchi ISTALGAN kontaktni yuborishi mumkin
+        (attachment → Contact), nafaqat o'zinikini. Faqat o'z raqamini
+        ulashgan bo'lsa qabul qilamiz: aks holda birov begona raqamni
+        yuborib, o'sha telefon uchun kod olib, begona hisobga (va uning
+        tahlil natijalariga) kira olardi. `request_contact` tugmasi
+        ulashilgan kontaktning `user_id` sini yuboruvchining o'ziga teng
+        qilib beradi; qo'lda tanlangan begona kontaktda esa mos kelmaydi
+        yoki umuman bo'lmaydi.
+      */
+      const fromId = message.from?.id ?? message.chat.id;
+      if (message.contact.user_id === fromId) {
+        await handleContact(message.chat.id, message.contact);
+      } else {
+        await sendMessage(
+          message.chat.id,
+          'Iltimos, faqat <b>o‘zingizning</b> raqamingizni pastdagi tugma orqali ulashing.',
+          shareContactKeyboard,
+        );
+      }
     } else if (message.text?.startsWith('/start')) {
       /*
         Kontakt bir marta so'raladi. Telefon allaqachon bog'langan

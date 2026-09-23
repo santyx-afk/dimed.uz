@@ -138,7 +138,7 @@ await test('kontakt yuborilganda foydalanuvchi va OTP yaratiladi', async () => {
   telegramCalls.length = 0;
   const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({
-      message: { chat: { id: 777 }, contact: { phone_number: '998901234567', first_name: 'Aziza' } },
+      message: { chat: { id: 777 }, contact: { phone_number: '998901234567', user_id: 777, first_name: 'Aziza' } },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
   });
@@ -149,6 +149,48 @@ await test('kontakt yuborilganda foydalanuvchi va OTP yaratiladi', async () => {
   assert.ok(telegramCalls.some((c) => c.body.text.includes(otp.code)), 'kod botga yuborilishi kerak');
 });
 
+await test('begona kontakt (user_id yuboruvchiga mos kelmaydi) rad etiladi', async () => {
+  // Hujum: birov botga BEGONA raqamli kontaktni yuboradi (attachment →
+  // Contact). Agar qabul qilinsa, o'sha telefon uchun kod olib, begona
+  // hisobga kirib bo'lardi. user_id mos kelmagani uchun rad etilishi kerak.
+  telegramCalls.length = 0;
+  const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: {
+        chat: { id: 66601 },
+        from: { id: 66601 },
+        contact: { phone_number: '998900000001', user_id: 424243, first_name: 'Begona' },
+      },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(tableOf('test_users').get('66601'), undefined, 'begona hisob yaratilmasligi kerak');
+  assert.equal(tableOf('test_otp_codes').get('+998900000001'), undefined, 'begona raqamga kod yaratilmasligi kerak');
+  assert.ok(
+    !telegramCalls.some((c) => /kirish kodingiz/.test(c.body.text ?? '')),
+    'kod yuborilmasligi kerak',
+  );
+  assert.ok(
+    telegramCalls.some((c) => c.body.reply_markup?.keyboard),
+    'o\'z raqamini ulashish tugmasi qaytishi kerak',
+  );
+
+  // user_id umuman bo'lmagan kontakt ham rad etiladi (Telegram'da yo'q raqam).
+  telegramCalls.length = 0;
+  await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+    ...jsonBody({
+      message: {
+        chat: { id: 66602 },
+        from: { id: 66602 },
+        contact: { phone_number: '998900000002', first_name: 'Begona2' },
+      },
+    }),
+    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
+  });
+  assert.equal(tableOf('test_otp_codes').get('+998900000002'), undefined, 'user_id\'siz kontakt ham rad etilishi kerak');
+});
+
 await test('kontaktda 1C profili birlashadi (individuals jadvalidan)', async () => {
   seed('test_individuals', '+998907777777|1146', {
     phone: '+998907777777', sort_key: '1146',
@@ -157,7 +199,7 @@ await test('kontaktda 1C profili birlashadi (individuals jadvalidan)', async () 
   });
   const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({
-      message: { chat: { id: 888 }, contact: { phone_number: '998907777777', first_name: 'Rozi' } },
+      message: { chat: { id: 888 }, contact: { phone_number: '998907777777', user_id: 888, first_name: 'Rozi' } },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
   });
@@ -299,7 +341,7 @@ await test('yangi bemor: nonce kontakt ulashilgach ready bo\'ladi', async () => 
   // Kontakt ulashildi → kirish sessiyasi ready bo'ladi, nonce iste'mol qilinadi.
   await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({
-      message: { chat: { id: 9099 }, contact: { phone_number: '998901112233', first_name: 'Yangi' } },
+      message: { chat: { id: 9099 }, contact: { phone_number: '998901112233', user_id: 9099, first_name: 'Yangi' } },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
   });
@@ -740,7 +782,7 @@ await test('bir telefondagi oiladan Telegram egasi tanlanadi', async () => {
     ...jsonBody({
       message: {
         chat: { id: 555 },
-        contact: { phone_number: '998909999999', first_name: 'Nilufar', last_name: 'Yoldosheva' },
+        contact: { phone_number: '998909999999', user_id: 555, first_name: 'Nilufar', last_name: 'Yoldosheva' },
       },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
@@ -764,7 +806,7 @@ await test('o\'chirishga belgilangan bemor profil sifatida olinmaydi', async () 
 
   await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({
-      message: { chat: { id: 557 }, contact: { phone_number: '998907777770', first_name: 'Yozuv' } },
+      message: { chat: { id: 557 }, contact: { phone_number: '998907777770', user_id: 557, first_name: 'Yozuv' } },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
   });
@@ -782,7 +824,7 @@ await test('1C kodidagi guruh ajratkichi tozalanadi', async () => {
 
   await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
     ...jsonBody({
-      message: { chat: { id: 556 }, contact: { phone_number: '998908888888', first_name: 'Sardor' } },
+      message: { chat: { id: 556 }, contact: { phone_number: '998908888888', user_id: 556, first_name: 'Sardor' } },
     }),
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'webhook-secret' },
   });
