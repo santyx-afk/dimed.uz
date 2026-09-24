@@ -1,4 +1,5 @@
 import type { Context } from '@netlify/functions';
+import { timingSafeEqual } from 'node:crypto';
 import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { db, TABLES } from './lib/db.ts';
@@ -45,7 +46,11 @@ export default async (request: Request, _context: Context): Promise<Response> =>
   */
   const secret = (request.headers.get('x-telegram-bot-api-secret-token') ?? '').trim();
   const expected = required('TELEGRAM_WEBHOOK_SECRET').trim();
-  if (secret !== expected) {
+  // Vaqtga chidamli taqqoslash (lc-results va Payme kabi): `!==` birinchi
+  // farq qilgan belgida to'xtaydi va javob vaqti sirni sezdirishi mumkin.
+  const given = Buffer.from(secret);
+  const want = Buffer.from(expected);
+  if (given.length !== want.length || !timingSafeEqual(given, want)) {
     // Netlify function logida ko'rinadi. Qiymat emas, faqat uzunlik —
     // sir oshkor bo'lmaydi, lekin qaysi tomon xato ekani darhol ayon.
     console.log(

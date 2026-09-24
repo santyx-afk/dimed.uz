@@ -127,11 +127,18 @@ seed('test_doctors', 'ashurov', {
 
 console.log('Telegram bot va OTP:');
 await test('webhook noto\'g\'ri secret bilan rad etiladi', async () => {
-  const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
-    ...jsonBody({ message: { chat: { id: 1 }, text: '/start' } }),
-    headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'yolgon' },
-  });
-  assert.equal(res.status, 401);
+  // 'webhook-secreX' — to'g'risi bilan bir xil uzunlikda (taqqoslash
+  // oxirigacha boradi); sarlavhasiz so'rov ham 500 emas, 401 olishi kerak.
+  for (const given of ['yolgon', 'webhook-secreX', undefined]) {
+    const res = await call(telegramWebhook, 'https://dimed.uz/api/telegram-webhook', {
+      ...jsonBody({ message: { chat: { id: 1 }, text: '/start' } }),
+      headers: {
+        'content-type': 'application/json',
+        ...(given === undefined ? {} : { 'x-telegram-bot-api-secret-token': given }),
+      },
+    });
+    assert.equal(res.status, 401, String(given));
+  }
 });
 
 await test('kontakt yuborilganda foydalanuvchi va OTP yaratiladi', async () => {
@@ -468,6 +475,43 @@ await test('noto\'g\'ri formatdagi raqam bazaga umuman bormaydi', async () => {
     const res = await tryCode(bad, '111111');
     assert.equal(res.status, 400, `${bad} rad etilishi kerak`);
   }
+});
+
+// Har test o'z IP sidan: umumiy '-' savatchasi (soatiga 30) boshqa testlarga ulashilgan.
+const tryCodeFrom = (ip, phone, code) =>
+  call(authVerify, 'https://dimed.uz/api/auth-verify', {
+    ...jsonBody({ phone, code }),
+    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': ip },
+  });
+
+await test('bir vaqtdagi so\'rovlar urinish chegarasidan o\'tolmaydi', async () => {
+  /*
+    Avval kod o'qilib, urinish taqqoslashdan keyin sanalardi: bir vaqtda
+    kelgan so'rovlarning hammasi eski hisobni ko'rib, har biri o'z
+    taxminini tekshirtirardi. Bitta urinishi qolgan kodni 5 ta so'rov
+    birdan sinaydi — to'g'ri kod bilan, shunda nechtasi tekshirilgani
+    o'tganlar sonidan ko'rinadi.
+  */
+  const phone = '+998900000104';
+  seed('test_otp_codes', phone, {
+    phone, code: '444444', telegram_id: '999', expires_at: Math.floor(Date.now() / 1000) + 300, attempts: 4,
+  });
+  const results = await Promise.all(
+    Array.from({ length: 5 }, () => tryCodeFrom('10.0.0.104', phone, '444444')),
+  );
+  const passedCount = results.filter((r) => r.status === 200).length;
+  assert.equal(passedCount, 1, `bitta urinish — bitta tekshiruv, o'tdi: ${passedCount}`);
+});
+
+await test('urinishlari tugagan kod to\'g\'ri bo\'lsa ham o\'tmaydi', async () => {
+  // Beshinchi noto'g'ri urinish sanalgan, lekin yozuv hali o'chmagan payt.
+  const phone = '+998900000105';
+  seed('test_otp_codes', phone, {
+    phone, code: '555555', telegram_id: '999', expires_at: Math.floor(Date.now() / 1000) + 300, attempts: 5,
+  });
+  const res = await tryCodeFrom('10.0.0.105', phone, '555555');
+  assert.equal(res.status, 401);
+  assert.equal(res.headers.get('set-cookie'), null, 'sessiya berilmasligi kerak');
 });
 
 console.log('\nSlotlar:');
