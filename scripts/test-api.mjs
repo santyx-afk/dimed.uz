@@ -27,7 +27,7 @@ process.env.PAYME_MERCHANT_ID = 'test-kassa';
 process.env.PAYME_KEY = 'payme-secret';
 process.env.ADMIN_TELEGRAM_IDS = '424242';
 
-import { startFakeDynamo, stopFakeDynamo, seed, tableOf } from './fake-dynamo.mjs';
+import { startFakeDynamo, stopFakeDynamo, seed, tableOf, callCount } from './fake-dynamo.mjs';
 
 process.env.DIMED_DYNAMO_ENDPOINT = await startFakeDynamo();
 
@@ -1247,6 +1247,33 @@ await test('tez yugurish navbati yo\'q bemorni qaraydi, oldindagisini o\'tkazmay
   );
 });
 
+await test('bemorlar 25 tadan ko\'p bo\'lsa ham hammasiga xabar boradi', async () => {
+  // Scan javobi 1 MB da kesiladi (soxta jadvalda — 25 tada). Avval bitta
+  // sahifa o'qilardi: undan keyingi bemorlar natija xabarini olmasdi.
+  const chats = [];
+  for (let i = 0; i < 30; i++) {
+    const chat = String(70000 + i);
+    const phone = `+99893${7000000 + i}`;
+    chats.push(chat);
+    seed('test_users', chat, { telegram_id: chat, phone, results_notified: [] });
+    seed('test_analysis_results', `${phone}|sahifa-${i}`, {
+      phone, sort_key: `sahifa-${i}`, Date: '10.03.2026 09:00:00',
+      AnalysisResults: [{ Analyte: 'Gemoglobin', Result: '131', AnalyteUnit: 'g/L' }],
+    });
+  }
+
+  telegramCalls.length = 0;
+  const pricesBefore = callCount('Scan', 'test_prices');
+  const res = await call(notifyResults, 'https://dimed.uz/api/notify-results?mode=full');
+  assert.equal(res.status, 200);
+  const pricesScans = callCount('Scan', 'test_prices') - pricesBefore;
+
+  const missed = chats.filter((chat) => !telegramCalls.some((c) => c.body.chat_id === chat));
+  assert.deepEqual(missed, [], 'hamma bemorga xabar borishi kerak');
+  // Referenslar hamma uchun bir xil: ilgari har bemorda qayta o'qilardi.
+  assert.equal(pricesScans, 1, `prices jadvali ${pricesScans} marta o'qildi`);
+});
+
 console.log('\nBemorni tanlash (bir telefon — bir oila):');
 
 await test('sessiyasiz /api/patients 401 qaytaradi', async () => {
@@ -2294,6 +2321,21 @@ await test('admin baholar ro\'yxati va yashirish (F3)', async () => {
   assert.equal(tableOf('test_doctors').get('ashurov').rating_sum, 5);
 });
 
+await test('baholar 25 tadan ko\'p bo\'lsa ham admin ro\'yxatida hammasi bor', async () => {
+  // Bitta Scan 1 MB da kesiladi (soxta jadvalda — 25 tada): qolgan
+  // baholar admin ro'yxatidan jimgina tushib qolardi.
+  for (let i = 0; i < 30; i++) {
+    const created = `2025-01-01T09:00:${String(i).padStart(2, '0')}.000Z`;
+    seed('test_ratings', `sahifa|${created}`, {
+      doctor_id: 'sahifa', created_at: created, rating: 4, date: '2025-01-01', time: '09:00',
+    });
+  }
+  const list = await (await call(adminRatings, 'https://dimed.uz/api/admin-ratings', {
+    headers: { cookie: adminRateCookie },
+  })).json();
+  assert.equal(list.ratings.filter((r) => r.doctorId === 'sahifa').length, 30);
+});
+
 console.log('\nBemor ro\'yxati to\'liq keladi:');
 await test('25 tadan ko\'p 1C yozuvi bo\'lsa ham hammasi ko\'rinadi', async () => {
   // Avval Limit: 25 turardi va sahifalanmasdi — oilaning bir qismi yo'qolardi.
@@ -2586,6 +2628,21 @@ await test('PAYMENT_ENABLED o\'chiq bo\'lsa bron yana kassada to\'lash rejimida'
   const data = await res.json();
   assert.equal(data.mode, 'at_clinic');
   assert.equal(data.redirectUrl, undefined, 'to\'lov havolasi bo\'lmasligi kerak');
+});
+
+await test('GetStatement 25 tadan ko\'p tranzaksiyani to\'liq qaytaradi', async () => {
+  // Sverka to'lovlar jadvalini Scan qiladi: bitta sahifada qolsa, Payme
+  // bilan hisob-kitobda tranzaksiyalar yetishmasdi.
+  const base = 1_700_000_000_000;
+  for (let i = 0; i < 30; i++) {
+    seed('test_payments', `payme#sverka-${i}`, {
+      payment_id: `payme#sverka-${i}`, ref: `buyurtma-${i}`, state: 2,
+      create_time: base + i, created_at_ms: base + i, perform_time: base + i + 1000,
+    });
+  }
+  const res = await rpc('GetStatement', { from: base, to: base + 29 });
+  assert.equal(res.result.transactions.length, 30);
+  assert.ok(res.result.transactions.some((t) => t.id === 'sverka-29'), 'oxirgisi ham bor');
 });
 
 // ================= Admin: navbatlar va hisobot =================

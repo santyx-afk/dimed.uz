@@ -2,7 +2,7 @@ import type { Context } from '@netlify/functions';
 import { timingSafeEqual } from 'node:crypto';
 import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
-import { db, TABLES } from './lib/db.ts';
+import { db, TABLES, scanAllPages } from './lib/db.ts';
 import { optional } from './lib/env.ts';
 import { toTiyin } from './lib/payment.ts';
 import { doctorDayKey } from './lib/slots.ts';
@@ -385,13 +385,14 @@ async function statement(
   id: RpcRequest['id'],
   params: NonNullable<RpcRequest['params']>,
 ): Promise<Response> {
-  const { ScanCommand } = await import('@aws-sdk/lib-dynamodb');
-  const found = await db.send(new ScanCommand({ TableName: TABLES.payments }));
+  // To'lovlar jadvali o'sib boradi — bitta Scan 1 MB da kesilib,
+  // sverkada tranzaksiyalar yetishmay qolardi.
+  const found = (await scanAllPages({ TableName: TABLES.payments })) as PaymeTx[];
 
   const from = params.from ?? 0;
   const to = params.to ?? Number.MAX_SAFE_INTEGER;
 
-  const transactions = ((found.Items ?? []) as PaymeTx[])
+  const transactions = found
     .filter((item) => item.payment_id.startsWith('payme#'))
     .filter((item) => item.create_time >= from && item.create_time <= to)
     .map((item) => ({

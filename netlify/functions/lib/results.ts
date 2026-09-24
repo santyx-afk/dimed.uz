@@ -321,7 +321,15 @@ function titleOf(
 const groupStatus = (items: { value: string | null }[]): 'ready' | 'pending' =>
   items.some((i) => i.value) ? 'ready' : 'pending';
 
-export async function loadResults(phone: string): Promise<ResultGroup[]> {
+/**
+ * `references` — oldindan o'qilgan admin referenslari. Ko'p bemorni
+ * aylanib chiqadigan cron (notify-results) ularni bir marta o'qib
+ * beradi; berilmasa shu yerda o'qiladi.
+ */
+export async function loadResults(
+  phone: string,
+  references?: readonly ReferenceRow[],
+): Promise<ResultGroup[]> {
   const [manual, oneC] = await Promise.all([
     queryAll(
       {
@@ -455,21 +463,31 @@ export async function loadResults(phone: string): Promise<ResultGroup[]> {
   }
 
   const groups = [...byDate.values(), ...fromDocs];
-  await applyAdminReferences(groups);
+  await applyAdminReferences(groups, references);
   return groups.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
+
+/**
+ * Admin kiritgan referenslar. O'qib bo'lmasa — bo'sh ro'yxat: natija
+ * referenssiz ko'rinadi, sahifa yiqilmaydi.
+ */
+export const loadAdminReferences = (): Promise<ReferenceRow[]> =>
+  loadReferenceRows().catch(async (err) => {
+    await logToAdmin('me/referenslar', err);
+    return [] as ReferenceRow[];
+  });
 
 /**
  * 1C me'yoriy oraliq bermagan ko'rsatkichlarga admin kiritgan referensni
  * qo'yadi (F4). 1C oralig'i bo'lsa unga tegilmaydi — u har doim ustun.
  * Jins bo'yicha mos referens ustun, bo'lmasa umumiy ("all").
  */
-async function applyAdminReferences(groups: ResultGroup[]): Promise<void> {
+async function applyAdminReferences(
+  groups: ResultGroup[],
+  preloaded?: readonly ReferenceRow[],
+): Promise<void> {
   if (!groups.length) return;
-  const rows = await loadReferenceRows().catch(async (err) => {
-    await logToAdmin('me/referenslar', err);
-    return [] as ReferenceRow[];
-  });
+  const rows = preloaded ?? (await loadAdminReferences());
   if (!rows.length) return;
 
   const lookup = buildReferenceLookup(rows);
