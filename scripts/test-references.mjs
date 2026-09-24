@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const libDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'netlify', 'functions', 'lib');
-const { referenceId, buildReferenceLookup, isGender } = await import(
+const { referenceId, buildReferenceLookup, isGender, unitKey } = await import(
   pathToFileURL(join(libDir, 'references.ts')).href
 );
 
@@ -61,6 +61,58 @@ test('topilmasa null', () => {
   const lookup = buildReferenceLookup([row('Glyukoza', 'all', 3.9, 6.1)]);
   assert.equal(lookup('Kreatinin', 'male'), null);
   assert.equal(lookup('', null), null);
+});
+
+console.log('\nBirlik:');
+
+test('boshqa birlikdagi referens qo\'llanmaydi', () => {
+  // 130–170 g/L bilan taqqoslansa 13.5 g/dL (me'yorda) "past" chiqardi.
+  const lookup = buildReferenceLookup([
+    row('Gemoglobin', 'male', 130, 170, 'g/L'),
+    row('Glyukoza', 'all', 3.9, 6.1, 'mmol/L'),
+  ]);
+  assert.equal(lookup('Gemoglobin', 'male', 'g/dL'), null);
+  assert.equal(lookup('Glyukoza', null, 'mg/dL'), null);
+});
+
+test('bir birlikning turli yozilishi mos keladi', () => {
+  for (const [a, b] of [
+    ['g/L', 'g/l'],
+    ['г/л', 'g/L'],
+    ['ммоль/л', 'mmol/L'],
+    ['мкмоль/л', 'mkmol/l'],
+    ['µmol/L', 'mkmol/l'],
+    ['mcg/L', 'mkg/l'],
+    ['10⁹/л', '10^9/L'],
+    ['10*9/л', '10^9/L'],
+  ]) {
+    assert.equal(unitKey(a), unitKey(b), `${a} = ${b}`);
+  }
+  assert.notEqual(unitKey('mg/dL'), unitKey('mmol/L'));
+  assert.notEqual(unitKey('mkg/l'), unitKey('mg/l'));
+
+  const lookup = buildReferenceLookup([row('Kreatinin', 'all', 62, 106, 'мкмоль/л')]);
+  assert.deepEqual(lookup('Kreatinin', null, 'mkmol/l'), { low: 62, high: 106, unit: 'мкмоль/л' });
+});
+
+test('birliklardan biri bo\'lmasa — avvalgidek qo\'llanadi', () => {
+  const lookup = buildReferenceLookup([
+    row('Gemoglobin', 'all', 120, 160, 'g/L'),
+    row('Glyukoza', 'all', 3.9, 6.1),
+  ]);
+  assert.ok(lookup('Gemoglobin', null), 'natija birligi berilmagan');
+  assert.ok(lookup('Gemoglobin', null, null));
+  assert.ok(lookup('Gemoglobin', null, '  '));
+  assert.ok(lookup('Glyukoza', null, 'mmol/L'), 'referens birligi kiritilmagan');
+});
+
+test('jinsga xos referens boshqa birlikda bo\'lsa, umumiysi olinadi', () => {
+  const lookup = buildReferenceLookup([
+    row('Gemoglobin', 'male', 130, 170, 'g/L'),
+    row('Gemoglobin', 'all', 12, 16, 'g/dL'),
+  ]);
+  assert.deepEqual(lookup('Gemoglobin', 'male', 'g/dL'), { low: 12, high: 16, unit: 'g/dL' });
+  assert.deepEqual(lookup('Gemoglobin', 'male', 'g/L'), { low: 130, high: 170, unit: 'g/L' });
 });
 
 console.log(`\n${passed} ta tekshiruv o'tdi.`);

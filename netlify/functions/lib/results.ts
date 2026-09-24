@@ -495,7 +495,7 @@ async function applyAdminReferences(
     for (const item of group.items) {
       // 1C oralig'i (yoki matni) bor — tegmaymiz.
       if (item.refLow !== null || item.refHigh !== null || item.reference) continue;
-      const hit = lookup(item.title, group.patientGender);
+      const hit = lookup(item.title, group.patientGender, item.unit);
       if (!hit || (hit.low === null && hit.high === null)) continue;
 
       item.refLow = hit.low;

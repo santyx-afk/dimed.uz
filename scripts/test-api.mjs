@@ -2128,6 +2128,39 @@ await test('admin referens 1C bermagan oraliqni to\'ldiradi (natijada holat)', a
   assert.equal(tableOf('test_prices').has('reference#gemoglobin#male'), false);
 });
 
+await test('admin referensi boshqa birlikdagi natijaga qo\'llanmaydi', async () => {
+  // Admin oralig'i g/L da, 1C natijasi g/dL da: 13.5 g/dL me'yorda, lekin
+  // 130–170 bilan taqqoslansa bemor "past" belgisini ko'rardi.
+  assert.equal((await postRef({ name: 'Gemoglobin', gender: 'male', low: 130, high: 170, unit: 'g/L' })).status, 200);
+  // Birlik kirillcha yozilgan — natijadagi "mmol/L" bilan bir xil.
+  assert.equal((await postRef({ name: 'Glyukoza', gender: 'all', low: 3.9, high: 6.1, unit: 'ммоль/л' })).status, 200);
+  seed('test_analysis_results', '+998901234567|doc-birlik', {
+    phone: '+998901234567', sort_key: 'doc-birlik', Date: '13.03.2026 09:00:00',
+    PatientIsMale: true,
+    AnalysisResults: [
+      { Analyte: 'Gemoglobin', Result: '13.5', AnalyteUnit: 'g/dL' },
+      { Analyte: 'Glyukoza', Result: '7.2', AnalyteUnit: 'mmol/L' },
+    ],
+  });
+  const data = await (await call(me, 'https://dimed.uz/api/me?include=results', {
+    headers: { cookie: sessionCookie },
+  })).json();
+  const [hgb, glu] = data.results.find((r) => r.id === 'doc-birlik').items;
+  assert.equal(hgb.reference, null, 'boshqa birlikdagi oraliq qo\'yilmaydi');
+  assert.equal(hgb.status, null, 'noto\'g\'ri "past" chiqmasligi kerak');
+  assert.equal(glu.reference, '3.9 — 6.1', 'bir xil birlik — turlicha yozilgan');
+  assert.equal(glu.status, 'high');
+
+  for (const id of ['reference#gemoglobin#male', 'reference#glyukoza#all']) {
+    const del = await call(adminReferences, 'https://dimed.uz/api/admin-references', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ id }),
+    });
+    assert.equal(del.status, 200);
+  }
+});
+
 console.log('\nBaho (G2/F3):');
 const RATE_DATE = addDays(BOOK_DATE, 1);
 const YESTERDAY = addDays(toTashkent(new Date()).dateKey, -1);

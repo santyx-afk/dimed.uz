@@ -53,22 +53,56 @@ export async function loadReferenceRows(): Promise<ReferenceRow[]> {
 
 export type ReferenceHit = { low: number | null; high: number | null; unit?: string };
 
+/** Birliklarda uchraydigan kirillcha harflar → lotincha ("ммоль/л" → "mmol/l"). */
+const CYRILLIC: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y',
+  к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+  х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+};
+
+/**
+ * Birlikni taqqoslash uchun bir ko'rinishga keltiradi. 1C va admin bitta
+ * birlikni turlicha yozadi — "g/L" va "г/л", "mkmol/l" va "µmol/L",
+ * "10^9/L" va "10⁹/л" bir xil hisoblanadi.
+ */
+export const unitKey = (unit: string): string =>
+  unit
+    .normalize('NFKC') // "10⁹" → "109", "µ" (mikro belgisi) → "μ"
+    .toLowerCase()
+    .replace(/[\s^*×·]/g, '')
+    .replace(/[а-яё]/g, (c) => CYRILLIC[c] ?? c)
+    .replace(/μ|mc/g, 'mk');
+
+/**
+ * Referens natijaga qo'llanadimi: ikkala birlik ham berilgan va farq
+ * qilsa — yo'q. 130–170 g/L oraliq 13.5 g/dL natijani "past" deb
+ * ko'rsatardi, holbuki u me'yorda. Birliklardan biri yo'q bo'lsa
+ * tekshirib bo'lmaydi — avvalgidek qo'llanadi.
+ */
+const unitFits = (ref: ReferenceRow, unit: string | null | undefined): boolean =>
+  !unit?.trim() || !ref.unit?.trim() || unitKey(ref.unit) === unitKey(unit);
+
 /**
  * Referens qatorlaridan tez qidiruv funksiyasi.
  *
  * Nom + jins bo'yicha eng mos oraliqni beradi: avval jinsga xos
- * ("male"/"female"), topilmasa umumiy ("all"). Hech biri bo'lmasa null.
+ * ("male"/"female"), topilmasa umumiy ("all"). Natija birligi berilsa,
+ * boshqa birlikdagi referens tashlab ketiladi. Hech biri bo'lmasa null.
  */
 export function buildReferenceLookup(
   rows: readonly ReferenceRow[],
-): (name: string, gender: 'male' | 'female' | null) => ReferenceHit | null {
+): (name: string, gender: 'male' | 'female' | null, unit?: string | null) => ReferenceHit | null {
   const map = new Map<string, ReferenceRow>();
   for (const r of rows) map.set(`${norm(r.name)}#${r.gender}`, r);
 
-  return (name, gender) => {
+  return (name, gender, unit) => {
     const n = norm(name);
     if (!n) return null;
-    const hit = (gender && map.get(`${n}#${gender}`)) || map.get(`${n}#all`);
+    const fitting = (key: string) => {
+      const row = map.get(key);
+      return row && unitFits(row, unit) ? row : undefined;
+    };
+    const hit = (gender && fitting(`${n}#${gender}`)) || fitting(`${n}#all`);
     if (!hit) return null;
     return { low: hit.low ?? null, high: hit.high ?? null, unit: hit.unit };
   };
